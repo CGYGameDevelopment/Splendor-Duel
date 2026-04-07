@@ -83,6 +83,8 @@ You must perform one of the following three actions:
 
 Special case: If you cannot perform any of the mandatory actions, you must perform the
 "Replenish the Game Board" optional action before choosing your mandatory action.
+"Purchase 1 Jewel card" is considered impossible if you cannot afford any card in the
+pyramid or your reserve, as well as when no such cards exist.
 
 
 Take up to 3 Tokens
@@ -147,20 +149,23 @@ CARD ABILITIES
 
 If the card you just purchased has an ability, resolve that effect now.
 
-  Turn:      Take another turn immediately after this one ends.
+  Turn:      Take another turn immediately after this one ends. If you purchase another
+             Turn card during that extra turn, you take yet another turn, and so on.
 
   Bonus:     Place this card so that it overlaps a Jewel card with a bonus. Treat this
              card's bonus as though it were the same color of the card it is overlapping.
              This color assignment is permanent and cannot be changed. If you do not have
-             a card with a bonus, you cannot purchase this card.
+             a card with a bonus, you cannot purchase this card. A Bonus card cannot be
+             placed overlapping another Bonus card.
 
   Token:     Take 1 token matching the color of this card from the board. If there are no
              such tokens left, ignore this effect.
 
   Privilege: Take 1 Privilege. If none are available, take 1 from your opponent.
 
-  Take:      Take 1 Gem or Pearl token from your opponent. If your opponent has no such
-             tokens, ignore this effect. You cannot take a Gold token from your opponent.
+  Take:      Take 1 Gem or Pearl token from your opponent. This is mandatory if your
+             opponent has any eligible tokens. If your opponent has no such tokens, ignore
+             this effect. You cannot take a Gold token from your opponent.
 
 
 CROWNS
@@ -168,7 +173,8 @@ CROWNS
 The top of some Jewel cards depict 1 or more Crowns. Upon acquiring your 3rd Crown, take
 1 of the available Royal cards and resolve its ability. Upon acquiring your 6th Crown, take
 1 of the available Royal cards and resolve its ability. Taking a Royal card is not an action.
-Place your Royal cards next to your Jewel cards.
+Place your Royal cards next to your Jewel cards. No further Royal cards are awarded beyond
+the 6th Crown milestone.
 
 Example: By purchasing the white card, Julie acquires her 3rd Crown, which allows her to
 take one of the available Royal cards. The card she takes grants her 1 Privilege and 2
