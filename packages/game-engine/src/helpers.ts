@@ -1,0 +1,173 @@
+import type { TokenPool, TokenColor, GemColor, PlayerState, Card, GameState, PlayerId } from './types';
+
+export const GEM_COLORS: GemColor[] = ['black', 'red', 'green', 'blue', 'white'];
+export const TOKEN_COLORS: TokenColor[] = ['black', 'red', 'green', 'blue', 'white', 'pearl', 'gold'];
+
+export const MAX_TOKENS = 10;
+export const MAX_RESERVED = 3;
+export const MAX_PRIVILEGES = 3;
+export const PRESTIGE_WIN = 20;
+export const CROWNS_WIN = 10;
+export const COLOR_PRESTIGE_WIN = 10;
+
+// ─── Token pool helpers ───────────────────────────────────────────────────────
+
+export function emptyPool(): TokenPool {
+  return { black: 0, red: 0, green: 0, blue: 0, white: 0, pearl: 0, gold: 0 };
+}
+
+export function totalTokens(pool: TokenPool): number {
+  return TOKEN_COLORS.reduce((sum, c) => sum + pool[c], 0);
+}
+
+export function addTokens(pool: TokenPool, color: TokenColor, amount: number): TokenPool {
+  return { ...pool, [color]: pool[color] + amount };
+}
+
+export function subtractTokens(pool: TokenPool, color: TokenColor, amount: number): TokenPool {
+  return { ...pool, [color]: pool[color] - amount };
+}
+
+export function poolFromPartial(partial: Partial<Record<TokenColor, number>>): TokenPool {
+  const pool = emptyPool();
+  for (const [color, amount] of Object.entries(partial) as [TokenColor, number][]) {
+    pool[color] = amount;
+  }
+  return pool;
+}
+
+// ─── Bonus helpers ────────────────────────────────────────────────────────────
+
+/**
+ * Returns the total gem bonuses a player has by color.
+ * Joker/Bonus cards contribute as their assignedColor.
+ */
+export function playerBonuses(player: PlayerState): Record<GemColor, number> {
+  const bonuses: Record<GemColor, number> = { black: 0, red: 0, green: 0, blue: 0, white: 0 };
+
+  for (const card of player.purchasedCards) {
+    const color = effectiveCardColor(card);
+    if (color) {
+      bonuses[color] += card.bonus;
+    }
+  }
+
+  return bonuses;
+}
+
+/**
+ * Returns the effective gem color of a card for bonus purposes.
+ * Joker cards use assignedColor; Points cards have no gem color.
+ */
+export function effectiveCardColor(card: Card): GemColor | null {
+  if (card.color === 'joker') return card.assignedColor;
+  if (card.color === 'points') return null;
+  return card.color as GemColor;
+}
+
+/**
+ * Returns the effective card color for the "10 prestige of same color" victory condition.
+ * Joker cards use assignedColor; Points cards are excluded.
+ */
+export function cardColorForVictory(card: Card): GemColor | null {
+  return effectiveCardColor(card);
+}
+
+// ─── Cost calculation ─────────────────────────────────────────────────────────
+
+/**
+ * Returns the net token cost after applying player bonuses.
+ * Result is always >= 0 per color.
+ */
+export function netCost(card: Card, player: PlayerState): Partial<Record<TokenColor, number>> {
+  const bonuses = playerBonuses(player);
+  const result: Partial<Record<TokenColor, number>> = {};
+
+  for (const [colorStr, amount] of Object.entries(card.cost) as [TokenColor, number][]) {
+    const bonus = GEM_COLORS.includes(colorStr as GemColor) ? (bonuses[colorStr as GemColor] ?? 0) : 0;
+    const net = Math.max(0, amount - bonus);
+    if (net > 0) result[colorStr] = net;
+  }
+
+  return result;
+}
+
+/**
+ * Returns true if the player can afford the card (with given gold substitutions).
+ * goldUsage maps each color to how many gold tokens are used for that color.
+ */
+export function canAfford(
+  card: Card,
+  player: PlayerState,
+  goldUsage: Partial<Record<GemColor | 'pearl', number>> = {}
+): boolean {
+  const cost = netCost(card, player);
+
+  let goldUsed = 0;
+  for (const [colorStr, needed] of Object.entries(cost) as [TokenColor, number][]) {
+    const have = player.tokens[colorStr] ?? 0;
+    const gold = (goldUsage[colorStr as GemColor | 'pearl']) ?? 0;
+    if (have + gold < needed) return false;
+    goldUsed += gold;
+  }
+
+  return goldUsed <= player.tokens.gold;
+}
+
+// ─── Privilege helpers ────────────────────────────────────────────────────────
+
+/**
+ * Transfer up to `amount` privileges to `to`, taking from table first,
+ * then from opponent if table is exhausted.
+ * Returns updated [tablePrivileges, players] without mutating.
+ */
+export function grantPrivileges(
+  state: GameState,
+  to: PlayerId,
+  amount: number
+): { privileges: number; players: [PlayerState, PlayerState] } {
+  let tablePrivileges = state.privileges;
+  const players: [PlayerState, PlayerState] = [
+    { ...state.players[0] },
+    { ...state.players[1] },
+  ];
+
+  for (let i = 0; i < amount; i++) {
+    if (players[to].privileges >= MAX_PRIVILEGES) break; // already maxed
+
+    if (tablePrivileges > 0) {
+      tablePrivileges--;
+      players[to] = { ...players[to], privileges: players[to].privileges + 1 };
+    } else {
+      const opp = (1 - to) as PlayerId;
+      if (players[opp].privileges > 0) {
+        players[opp] = { ...players[opp], privileges: players[opp].privileges - 1 };
+        players[to] = { ...players[to], privileges: players[to].privileges + 1 };
+      }
+      // If neither table nor opponent has privileges, nothing happens
+    }
+  }
+
+  return { privileges: tablePrivileges, players };
+}
+
+// ─── Victory helpers ──────────────────────────────────────────────────────────
+
+export function checkVictory(player: PlayerState): 'prestige' | 'crowns' | 'color_prestige' | null {
+  if (player.prestige >= PRESTIGE_WIN) return 'prestige';
+  if (player.crowns >= CROWNS_WIN) return 'crowns';
+
+  // Check prestige by color
+  const byColor: Partial<Record<GemColor, number>> = {};
+  for (const card of player.purchasedCards) {
+    const color = cardColorForVictory(card);
+    if (color) {
+      byColor[color] = (byColor[color] ?? 0) + card.points;
+    }
+  }
+  for (const pts of Object.values(byColor)) {
+    if (pts >= COLOR_PRESTIGE_WIN) return 'color_prestige';
+  }
+
+  return null;
+}
