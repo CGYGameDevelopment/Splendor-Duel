@@ -10,6 +10,31 @@ export const PRESTIGE_WIN = 20;
 export const CROWNS_WIN = 10;
 export const COLOR_PRESTIGE_WIN = 10;
 
+// ─── Board dimensions ─────────────────────────────────────────────────────────
+export const BOARD_WIDTH = 5;
+export const BOARD_HEIGHT = 5;
+export const BOARD_SIZE = BOARD_WIDTH * BOARD_HEIGHT;
+
+// ─── Pyramid setup ───────────────────────────────────────────────────────────
+export const PYRAMID_LEVEL1_COUNT = 5;
+export const PYRAMID_LEVEL2_COUNT = 4;
+export const PYRAMID_LEVEL3_COUNT = 3;
+
+// ─── Starting tokens ─────────────────────────────────────────────────────────
+export const STARTING_GEM_COUNT = 4;
+export const STARTING_PEARL_COUNT = 2;
+export const STARTING_GOLD_COUNT = 3;
+
+// ─── Gameplay rules ──────────────────────────────────────────────────────────
+export const MAX_TOKENS_IN_LINE = 3;
+export const CROWN_MILESTONES = [3, 6] as const;
+export const CARD_LEVELS = [1, 2, 3] as const;
+export const INITIAL_SECOND_PLAYER_PRIVILEGES = 1;
+export const INITIAL_TABLE_PRIVILEGES_SECOND = 2;
+export const INITIAL_TABLE_PRIVILEGES_FIRST = 3;
+export const PENALTY_SAME_COLOR_COUNT = 3;
+export const PENALTY_PEARL_COUNT = 2;
+
 // ─── Token pool helpers ───────────────────────────────────────────────────────
 
 export function emptyPool(): TokenPool {
@@ -165,8 +190,8 @@ export function checkVictory(player: PlayerState): 'prestige' | 'crowns' | 'colo
       byColor[color] = (byColor[color] ?? 0) + card.points;
     }
   }
-  for (const pts of Object.values(byColor)) {
-    if (pts >= COLOR_PRESTIGE_WIN) return 'color_prestige';
+  for (const points of Object.values(byColor)) {
+    if (points >= COLOR_PRESTIGE_WIN) return 'color_prestige';
   }
 
   return null;

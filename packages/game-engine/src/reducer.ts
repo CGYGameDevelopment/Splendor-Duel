@@ -5,13 +5,14 @@ import { SPIRAL_ORDER, isValidTokenLine } from './board';
 import {
   emptyPool, totalTokens, netCost, canAfford, grantPrivileges,
   checkVictory, GEM_COLORS, TOKEN_COLORS, MAX_TOKENS, MAX_RESERVED, MAX_PRIVILEGES,
+  CROWN_MILESTONES, CARD_LEVELS, PENALTY_SAME_COLOR_COUNT, PENALTY_PEARL_COUNT,
 } from './helpers';
 
 // ─── Immutable player updater ─────────────────────────────────────────────────
 
-function updatePlayer(state: GameState, id: PlayerId, patch: Partial<PlayerState>): GameState {
+function updatePlayer(state: GameState, id: PlayerId, playerStateUpdate: Partial<PlayerState>): GameState {
   const players: [PlayerState, PlayerState] = [{ ...state.players[0] }, { ...state.players[1] }];
-  players[id] = { ...players[id], ...patch };
+  players[id] = { ...players[id], ...playerStateUpdate };
   return { ...state, players };
 }
 
@@ -21,14 +22,14 @@ function replenishBoard(state: GameState): GameState {
   let bag = { ...state.bag };
   const board = [...state.board];
 
-  for (const idx of SPIRAL_ORDER) {
-    if (board[idx] !== null) continue; // already occupied
+  for (const index of SPIRAL_ORDER) {
+    if (board[index] !== null) continue; // already occupied
     // Find a color available in bag
     const available = TOKEN_COLORS.filter(c => bag[c] > 0);
     if (available.length === 0) break;
     // Pick randomly (deterministic in tests; real game shuffles)
     const color = available[Math.floor(Math.random() * available.length)];
-    board[idx] = color;
+    board[index] = color;
     bag = { ...bag, [color]: bag[color] - 1 };
   }
 
@@ -227,9 +228,9 @@ export function reducer(state: GameState, action: Action): GameState {
         taken.push(color);
       }
 
-      // Penalty: 3 same color or 2 pearls → opponent gets 1 privilege
-      const allSame = taken.length === 3 && taken.every(c => c === taken[0]);
-      const twoPearls = taken.length === 2 && taken.every(c => c === 'pearl');
+      // Penalty: PENALTY_SAME_COLOR_COUNT same color or PENALTY_PEARL_COUNT pearls → opponent gets 1 privilege
+      const allSame = taken.length === PENALTY_SAME_COLOR_COUNT && taken.every(c => c === taken[0]);
+      const twoPearls = taken.length === PENALTY_PEARL_COUNT && taken.every(c => c === 'pearl');
       let newState = updatePlayer(state, cp, { tokens: playerTokens });
       newState = { ...newState, board };
 
@@ -253,10 +254,10 @@ export function reducer(state: GameState, action: Action): GameState {
       // Find card in pyramid
       let card: Card | undefined;
       let level: 1 | 2 | 3 | undefined;
-      for (const l of [1, 2, 3] as const) {
-        const key = `level${l}` as 'level1' | 'level2' | 'level3';
+      for (const lvl of CARD_LEVELS) {
+        const key = `level${lvl}` as 'level1' | 'level2' | 'level3';
         const found = state.pyramid[key].find(c => c.id === action.cardId);
-        if (found) { card = found; level = l; break; }
+        if (found) { card = found; level = lvl; break; }
       }
       if (!card || !level) return state;
 
@@ -304,10 +305,10 @@ export function reducer(state: GameState, action: Action): GameState {
       let fromReserve = false;
       let level: 1 | 2 | 3 | undefined;
 
-      for (const l of [1, 2, 3] as const) {
-        const key = `level${l}` as 'level1' | 'level2' | 'level3';
+      for (const lvl of CARD_LEVELS) {
+        const key = `level${lvl}` as 'level1' | 'level2' | 'level3';
         const found = state.pyramid[key].find(c => c.id === cardId);
-        if (found) { card = found; level = l; break; }
+        if (found) { card = found; level = lvl; break; }
       }
       if (!card) {
         const found = player.reservedCards.find(c => c.id === cardId);
@@ -463,8 +464,7 @@ function checkCrownMilestone(
 ): GameState {
   let current = state;
 
-  const milestones = [3, 6];
-  for (const milestone of milestones) {
+  for (const milestone of CROWN_MILESTONES) {
     if (prevCrowns < milestone && newCrowns >= milestone && current.royalDeck.length > 0) {
       const [royalCard, ...rest] = current.royalDeck;
       const player = current.players[playerId];

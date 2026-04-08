@@ -1,6 +1,6 @@
 import type { GameState, Action, TokenColor, GemColor, Card } from './types';
 import { isValidTokenLine } from './board';
-import { netCost, canAfford, GEM_COLORS, MAX_RESERVED, totalTokens, MAX_TOKENS } from './helpers';
+import { netCost, canAfford, GEM_COLORS, MAX_RESERVED, totalTokens, MAX_TOKENS, MAX_TOKENS_IN_LINE, TOKEN_COLORS, CARD_LEVELS } from './helpers';
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -29,13 +29,9 @@ function optionalPrivilegeMoves(state: GameState): Action[] {
     if (cell && cell !== 'gold') onBoard.add(cell);
   }
 
-  // For each combination of 1..privileges tokens from the board (non-gold)
-  const colors = Array.from(onBoard);
-  const maxUse = Math.min(player.privileges, colors.length);
-
-  // Generate all subsets of board tokens up to maxUse, with repetition
-  const combos = tokenCombinations(state, player.privileges);
-  for (const tokens of combos) {
+  // Generate all subsets of board tokens up to maxPrivileges, with repetition
+  const tokenCombinationsList = tokenCombinations(state, player.privileges);
+  for (const tokens of tokenCombinationsList) {
     moves.push({ type: 'USE_PRIVILEGE', tokens });
   }
 
@@ -61,23 +57,23 @@ function tokenCombinations(
   const colors = Object.keys(boardCounts) as TokenColor[];
 
   function recurse(
-    remaining: number,
-    current: Partial<Record<TokenColor, number>>,
-    startIdx: number
+    remainingPrivileges: number,
+    currentCombination: Partial<Record<TokenColor, number>>,
+    startIndex: number
   ) {
-    if (remaining === 0) { results.push({ ...current }); return; }
+    if (remainingPrivileges === 0) { results.push({ ...currentCombination }); return; }
     // Also allow using fewer than maxPrivileges
-    if (Object.keys(current).length > 0) results.push({ ...current });
+    if (Object.keys(currentCombination).length > 0) results.push({ ...currentCombination });
 
-    for (let i = startIdx; i < colors.length; i++) {
+    for (let i = startIndex; i < colors.length; i++) {
       const color = colors[i];
-      const used = current[color] ?? 0;
+      const used = currentCombination[color] ?? 0;
       const available = boardCounts[color] ?? 0;
       if (used < available) {
-        current[color] = used + 1;
-        recurse(remaining - 1, current, i); // allow same color again
-        current[color] = used;
-        if (current[color] === 0) delete current[color];
+        currentCombination[color] = used + 1;
+        recurse(remainingPrivileges - 1, currentCombination, i); // allow same color again
+        currentCombination[color] = used;
+        if (currentCombination[color] === 0) delete currentCombination[color];
       }
     }
   }
@@ -130,10 +126,10 @@ function takeTokenMoves(state: GameState): Action[] {
     .map((cell, i) => (cell && cell !== 'gold' ? i : -1))
     .filter(i => i !== -1);
 
-  // Generate all valid lines of 1, 2, or 3
+  // Generate all valid lines of 1 through MAX_TOKENS_IN_LINE
   const seen = new Set<string>();
 
-  for (let len = 1; len <= 3; len++) {
+  for (let len = 1; len <= MAX_TOKENS_IN_LINE; len++) {
     for (const combo of combinations(tokenIndices, len)) {
       if (isValidTokenLine(combo)) {
         const key = combo.join(',');
@@ -159,13 +155,13 @@ function reserveMoves(state: GameState): Action[] {
 
   const moves: Action[] = [];
 
-  for (const l of [1, 2, 3] as const) {
-    const key = `level${l}` as 'level1' | 'level2' | 'level3';
+  for (const level of CARD_LEVELS) {
+    const key = `level${level}` as 'level1' | 'level2' | 'level3';
     for (const card of state.pyramid[key]) {
       moves.push({ type: 'RESERVE_CARD_FROM_PYRAMID', cardId: card.id });
     }
     if (state.decks[key].length > 0) {
-      moves.push({ type: 'RESERVE_CARD', source: `deck_${l}` as Action['type'] extends 'RESERVE_CARD' ? never : any });
+      moves.push({ type: 'RESERVE_CARD', source: `deck_${level}` as Action['type'] extends 'RESERVE_CARD' ? never : any });
     }
   }
 
@@ -238,9 +234,9 @@ function discardMoves(state: GameState): Action[] {
     colorIdx: number
   ) {
     if (remaining === 0) { moves.push({ type: 'DISCARD_TOKENS', tokens: { ...current } }); return; }
-    if (colorIdx >= 7) return;
+    if (colorIdx >= TOKEN_COLORS.length) return;
 
-    const color = (['black', 'red', 'green', 'blue', 'white', 'pearl', 'gold'] as TokenColor[])[colorIdx];
+    const color = TOKEN_COLORS[colorIdx];
     const have = pool[color];
 
     for (let discard = 0; discard <= Math.min(have, remaining); discard++) {

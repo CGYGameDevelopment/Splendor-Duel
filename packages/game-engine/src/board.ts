@@ -1,3 +1,5 @@
+import { BOARD_WIDTH, BOARD_HEIGHT, MAX_TOKENS_IN_LINE } from './helpers';
+
 /**
  * Board topology for Splendor Duel.
  *
@@ -30,11 +32,11 @@ export const SPIRAL_ORDER: number[] = [
 // ─── Coordinate helpers ───────────────────────────────────────────────────────
 
 export function indexToCoord(index: number): [number, number] {
-  return [Math.floor(index / 5), index % 5];
+  return [Math.floor(index / BOARD_WIDTH), index % BOARD_WIDTH];
 }
 
 export function coordToIndex(row: number, col: number): number {
-  return row * 5 + col;
+  return row * BOARD_WIDTH + col;
 }
 
 // ─── Adjacency ────────────────────────────────────────────────────────────────
@@ -48,7 +50,7 @@ export function adjacentCells(index: number): number[] {
       if (dr === 0 && dc === 0) continue;
       const r = row + dr;
       const c = col + dc;
-      if (r >= 0 && r < 5 && c >= 0 && c < 5) {
+      if (r >= 0 && r < BOARD_HEIGHT && c >= 0 && c < BOARD_WIDTH) {
         neighbors.push(coordToIndex(r, c));
       }
     }
@@ -58,11 +60,11 @@ export function adjacentCells(index: number): number[] {
 
 /**
  * Returns true if the given indices form a valid straight line
- * (horizontal, vertical, or diagonal) of 1–3 cells, all adjacent in sequence,
+ * (horizontal, vertical, or diagonal) of 1–MAX_TOKENS_IN_LINE cells, all adjacent in sequence,
  * with no gaps.
  */
 export function isValidTokenLine(indices: number[]): boolean {
-  if (indices.length < 1 || indices.length > 3) return false;
+  if (indices.length < 1 || indices.length > MAX_TOKENS_IN_LINE) return false;
   if (indices.length === 1) return true;
 
   const coords = indices.map(indexToCoord);
