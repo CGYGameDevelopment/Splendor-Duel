@@ -296,7 +296,7 @@ function placeBonusMoves(state: GameState): Action[] {
   if (!bonusCard) return [];
 
   const eligible = player.purchasedCards.filter(
-    c => c.id !== bonusCard.id && c.color !== 'points' && c.bonus > 0 && c.overlappingCardId === null
+    c => c.id !== bonusCard.id && c.color !== 'joker' && c.color !== 'points' && c.bonus > 0 && c.overlappingCardId === null
   );
 
   return eligible.map(target => ({

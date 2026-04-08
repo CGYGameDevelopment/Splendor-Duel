@@ -1,0 +1,19 @@
+{
+  "name": "@splendor-duel/cli-client",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@splendor-duel/game-engine": "*",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/ws": "^8.5.11",
+    "tsx": "^4.16.0",
+    "typescript": "^5.4.5"
+  }
+}

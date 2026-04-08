@@ -1,0 +1,394 @@
+import WebSocket from 'ws';
+import * as readline from 'readline';
+import { legalMoves } from '@splendor-duel/game-engine';
+import type { GameState, Action, PlayerId, Card } from '@splendor-duel/game-engine';
+
+// ─── Protocol types (mirrored from server/src/protocol.ts) ───────────────────
+
+type ClientMessage =
+  | { type: 'CREATE_SESSION'; playerName: string }
+  | { type: 'JOIN_SESSION'; sessionId: string; playerName: string }
+  | { type: 'DISPATCH_ACTION'; action: Action }
+  | { type: 'PING' };
+
+type ServerMessage =
+  | { type: 'SESSION_CREATED'; sessionId: string; playerId: 0 }
+  | { type: 'SESSION_JOINED'; sessionId: string; playerId: 1; state: GameState }
+  | { type: 'GAME_STARTED'; state: GameState; opponentName: string }
+  | { type: 'STATE_UPDATE'; state: GameState }
+  | { type: 'OPPONENT_DISCONNECTED' }
+  | { type: 'ERROR'; message: string }
+  | { type: 'PONG' };
+
+// ─── Session state ────────────────────────────────────────────────────────────
+
+let myPlayerId: PlayerId | null = null;
+let gameState: GameState | null = null;
+let myName = '';
+let opponentName = '';
+let awaitingInput = false;
+
+const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+
+function question(q: string): Promise<string> {
+  return new Promise(resolve => rl.question(q, resolve));
+}
+
+function send(ws: WebSocket, msg: ClientMessage): void {
+  ws.send(JSON.stringify(msg));
+}
+
+// ─── Display helpers ──────────────────────────────────────────────────────────
+
+const TOKEN_ABBR: { [key: string]: string } = {
+  black: 'bk', red: 'rd', green: 'gn', blue: 'bl',
+  white: 'wh', pearl: 'pr', gold: 'gl',
+};
+
+const CARD_COLOR_ABBR: { [key: string]: string } = {
+  black: 'bk', red: 'rd', green: 'gn', blue: 'bl',
+  white: 'wh', joker: 'jk', points: 'pt',
+};
+
+const ALL_TOKEN_COLORS = ['black', 'red', 'green', 'blue', 'white', 'pearl', 'gold'];
+
+function abbr(color: string): string {
+  return TOKEN_ABBR[color] ?? color.slice(0, 2);
+}
+
+function cardColorAbbr(color: string): string {
+  return CARD_COLOR_ABBR[color] ?? color.slice(0, 2);
+}
+
+function formatPool(pool: { [key: string]: number | undefined }, showZero = false): string {
+  const parts = ALL_TOKEN_COLORS
+    .filter(c => showZero || (pool[c] ?? 0) > 0)
+    .map(c => `${abbr(c)}=${pool[c] ?? 0}`);
+  return parts.length > 0 ? parts.join(' ') : '(none)';
+}
+
+function formatCost(cost: { [key: string]: number | undefined }): string {
+  const parts = ALL_TOKEN_COLORS
+    .filter(c => (cost[c] ?? 0) > 0)
+    .map(c => `${abbr(c)}=${cost[c]}`);
+  return parts.length > 0 ? parts.join(' ') : 'free';
+}
+
+function describeCard(card: Card): string {
+  const level = card.level === 'royal' ? 'R ' : `L${card.level}`;
+  const abil = card.ability ? ` [${card.ability}]` : '';
+  const crowns = card.crowns > 0 ? ` cr:${card.crowns}` : '';
+  return `#${card.id} ${level} ${cardColorAbbr(card.color)} ${card.points}pt ${card.bonus}b${crowns}${abil}`;
+}
+
+function findCard(state: GameState, cardId: number): Card | undefined {
+  const candidates: (Card | null)[] = [
+    ...state.pyramid.level1,
+    ...state.pyramid.level2,
+    ...state.pyramid.level3,
+    ...state.royalDeck,
+    state.lastPurchasedCard,
+    ...state.players[0].reservedCards,
+    ...state.players[1].reservedCards,
+    ...state.players[0].purchasedCards,
+    ...state.players[1].purchasedCards,
+  ];
+  return candidates.filter((c): c is Card => c !== null).find(c => c.id === cardId);
+}
+
+function totalTokens(pool: { [key: string]: number | undefined }): number {
+  return ALL_TOKEN_COLORS.reduce((sum, c) => sum + (pool[c] ?? 0), 0);
+}
+
+// ─── State display ────────────────────────────────────────────────────────────
+
+function displayBoard(board: GameState['board']): void {
+  console.log('\nBOARD:');
+  console.log('     0    1    2    3    4');
+  for (let row = 0; row < 5; row++) {
+    const cells = [];
+    for (let col = 0; col < 5; col++) {
+      const cell = board[row * 5 + col];
+      cells.push(cell ? `[${abbr(cell).padEnd(2)}]` : '[ . ]');
+    }
+    console.log(`  ${row}: ${cells.join(' ')}`);
+  }
+}
+
+function displayPyramid(state: GameState): void {
+  console.log('\nPYRAMID:');
+  for (const level of [3, 2, 1] as const) {
+    const key = `level${level}` as 'level1' | 'level2' | 'level3';
+    const cards = state.pyramid[key];
+    const deckCount = state.decks[key].length;
+    const cardStrs = cards.map(c => `[${describeCard(c)} cost:${formatCost(c.cost)}]`).join(' ');
+    console.log(`  L${level} deck:${deckCount}: ${cardStrs || '(empty)'}`);
+  }
+  if (state.royalDeck.length > 0) {
+    const royalStrs = state.royalDeck.map(c => `[${describeCard(c)}]`).join(' ');
+    console.log(`  Royals: ${royalStrs}`);
+  }
+}
+
+function displayPlayers(state: GameState): void {
+  for (const pid of [0, 1] as PlayerId[]) {
+    const player = state.players[pid];
+    const isMe = pid === myPlayerId;
+    const name = isMe ? `YOU (${myName})` : `OPPONENT (${opponentName || `Player ${pid}`})`;
+    const turnMark = state.currentPlayer === pid ? ' ◄ TURN' : '';
+
+    console.log(`\n${name} — ${player.prestige}pt | crowns:${player.crowns} | priv:${player.privileges}${turnMark}`);
+
+    const total = totalTokens(player.tokens as { [key: string]: number });
+    if (isMe) {
+      console.log(`  Tokens (${total}): ${formatPool(player.tokens as { [key: string]: number }, true)}`);
+    } else {
+      console.log(`  Tokens: ${total} total`);
+    }
+
+    const gems: { [key: string]: number } = {};
+    for (const card of player.purchasedCards) {
+      if (card.color !== 'joker' && card.color !== 'points') {
+        gems[card.color] = (gems[card.color] ?? 0) + card.bonus;
+      }
+    }
+    console.log(`  Gems (${player.purchasedCards.length} cards): ${formatPool(gems)}`);
+
+    if (isMe && player.reservedCards.length > 0) {
+      const res = player.reservedCards.map(c => `[${describeCard(c)} cost:${formatCost(c.cost)}]`).join(' ');
+      console.log(`  Reserved: ${res}`);
+    } else if (!isMe) {
+      console.log(`  Reserved: ${player.reservedCards.length} (hidden)`);
+    }
+
+    if (player.royalCards.length > 0) {
+      console.log(`  Royals: ${player.royalCards.map(c => `[${describeCard(c)}]`).join(' ')}`);
+    }
+  }
+}
+
+function displayState(state: GameState): void {
+  console.log('\n' + '═'.repeat(70));
+  displayBoard(state.board);
+  displayPyramid(state);
+  displayPlayers(state);
+  const bagTotal = totalTokens(state.bag as { [key: string]: number });
+  const abil = state.pendingAbility ? ` (pending ability: ${state.pendingAbility})` : '';
+  console.log(`\nTable privileges: ${state.privileges} | Bag: ${bagTotal} tokens`);
+  console.log(`Phase: ${state.phase}${abil}`);
+  console.log('═'.repeat(70));
+}
+
+// ─── Move descriptions ────────────────────────────────────────────────────────
+
+function describeMove(action: Action, state: GameState): string {
+  switch (action.type) {
+    case 'END_OPTIONAL_PHASE':
+      return 'Skip optional phase';
+
+    case 'TAKE_TOKENS': {
+      const tokens = action.indices
+        .map(i => { const cell = state.board[i]; return cell ? abbr(cell) : '?'; })
+        .join(' ');
+      return `Take tokens: cells [${action.indices.join(',')}] → ${tokens}`;
+    }
+
+    case 'USE_PRIVILEGE': {
+      return `Use privilege(s): take ${formatPool(action.tokens as { [key: string]: number })}`;
+    }
+
+    case 'REPLENISH_BOARD':
+      return 'Replenish board from bag';
+
+    case 'PURCHASE_CARD': {
+      const card = findCard(state, action.cardId);
+      const goldStr = Object.values(action.goldUsage).some(v => v > 0)
+        ? ` (gold covers: ${formatPool(action.goldUsage as { [key: string]: number })})`
+        : '';
+      const info = card ? `${describeCard(card)} cost:${formatCost(card.cost)}` : `card #${action.cardId}`;
+      return `Purchase ${info}${goldStr}`;
+    }
+
+    case 'RESERVE_CARD':
+      return `Reserve top card from ${action.source}`;
+
+    case 'RESERVE_CARD_FROM_PYRAMID': {
+      const card = findCard(state, action.cardId);
+      return card ? `Reserve ${describeCard(card)}` : `Reserve card #${action.cardId} from pyramid`;
+    }
+
+    case 'DISCARD_TOKENS':
+      return `Discard: ${formatPool(action.tokens as { [key: string]: number })}`;
+
+    case 'PLACE_BONUS_CARD': {
+      const bonus = findCard(state, action.bonusCardId);
+      const target = findCard(state, action.targetCardId);
+      const bonusStr = bonus ? describeCard(bonus) : `#${action.bonusCardId}`;
+      const targetStr = target ? describeCard(target) : `#${action.targetCardId}`;
+      return `Place bonus card ${bonusStr} → on top of ${targetStr}`;
+    }
+
+    case 'TAKE_TOKEN_FROM_BOARD':
+      return `Take ${abbr(action.color)} token from board (Token ability)`;
+
+    case 'TAKE_TOKEN_FROM_OPPONENT':
+      return `Take ${abbr(action.color)} token from opponent (Take ability)`;
+
+    default:
+      return JSON.stringify(action);
+  }
+}
+
+// ─── Move prompt ──────────────────────────────────────────────────────────────
+
+async function promptMove(state: GameState, ws: WebSocket): Promise<void> {
+  if (awaitingInput) return;
+  awaitingInput = true;
+
+  const moves = legalMoves(state);
+  if (moves.length === 0) {
+    console.log('\nNo legal moves available.');
+    awaitingInput = false;
+    return;
+  }
+
+  console.log(`\n── YOUR TURN (${state.phase}) ──`);
+  console.log(`Legal moves (${moves.length}):`);
+  for (let i = 0; i < moves.length; i++) {
+    console.log(`  ${String(i + 1).padStart(3)}. ${describeMove(moves[i], state)}`);
+  }
+
+  let chosen = -1;
+  while (chosen < 0) {
+    const input = await question('\nMove number (or q to quit): ');
+    if (input.trim().toLowerCase() === 'q') {
+      ws.close();
+      rl.close();
+      process.exit(0);
+    }
+    const n = parseInt(input.trim(), 10);
+    if (!isNaN(n) && n >= 1 && n <= moves.length) {
+      chosen = n - 1;
+    } else {
+      console.log(`  Please enter a number between 1 and ${moves.length}.`);
+    }
+  }
+
+  awaitingInput = false;
+  send(ws, { type: 'DISPATCH_ACTION', action: moves[chosen] });
+}
+
+// ─── Message handler ──────────────────────────────────────────────────────────
+
+async function onStateUpdate(state: GameState, ws: WebSocket): Promise<void> {
+  displayState(state);
+  if (myPlayerId === null) return;
+  if (state.phase === 'game_over') {
+    const youWon = state.winner === myPlayerId;
+    console.log(`\nGame over! ${youWon ? 'You win!' : 'Opponent wins.'} Condition: ${state.winCondition}`);
+    rl.close();
+    ws.close();
+    return;
+  }
+  if (state.currentPlayer === myPlayerId) {
+    await promptMove(state, ws);
+  } else {
+    console.log("\nWaiting for opponent's move...");
+  }
+}
+
+async function handleMessage(msg: ServerMessage, ws: WebSocket): Promise<void> {
+  switch (msg.type) {
+    case 'SESSION_CREATED':
+      myPlayerId = msg.playerId;
+      console.log(`\nSession created! Share this ID with your opponent:\n  ${msg.sessionId}`);
+      console.log('Waiting for opponent to join...');
+      break;
+
+    case 'SESSION_JOINED':
+      myPlayerId = msg.playerId;
+      gameState = msg.state;
+      console.log(`\nJoined session as Player ${myPlayerId}.`);
+      await onStateUpdate(gameState, ws);
+      break;
+
+    case 'GAME_STARTED':
+      gameState = msg.state;
+      opponentName = msg.opponentName;
+      console.log(`\nGame started! Opponent: ${opponentName}`);
+      await onStateUpdate(gameState, ws);
+      break;
+
+    case 'STATE_UPDATE':
+      gameState = msg.state;
+      await onStateUpdate(gameState, ws);
+      break;
+
+    case 'OPPONENT_DISCONNECTED':
+      console.log('\nOpponent disconnected.');
+      rl.close();
+      ws.close();
+      break;
+
+    case 'ERROR':
+      console.log(`\n[Server] ${msg.message}`);
+      if (gameState && myPlayerId !== null && gameState.currentPlayer === myPlayerId && !awaitingInput) {
+        await promptMove(gameState, ws);
+      }
+      break;
+
+    case 'PONG':
+      break;
+  }
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
+
+async function main(): Promise<void> {
+  console.log('Splendor Duel — CLI Client');
+  console.log('==========================\n');
+
+  const urlInput = await question('Server URL [ws://localhost:3001]: ');
+  const url = urlInput.trim() || 'ws://localhost:3001';
+
+  myName = (await question('Your name: ')).trim() || 'Player';
+
+  const ws = new WebSocket(url);
+
+  ws.on('open', async () => {
+    console.log(`Connected.\n`);
+    const choice = await question('[c]reate new session or [j]oin existing? ');
+    if (choice.trim().toLowerCase().startsWith('j')) {
+      const sid = (await question('Session ID: ')).trim();
+      send(ws, { type: 'JOIN_SESSION', sessionId: sid, playerName: myName });
+    } else {
+      send(ws, { type: 'CREATE_SESSION', playerName: myName });
+    }
+  });
+
+  ws.on('message', async (data: WebSocket.RawData) => {
+    let msg: ServerMessage;
+    try {
+      msg = JSON.parse(data.toString()) as ServerMessage;
+    } catch {
+      console.error('Could not parse server message.');
+      return;
+    }
+    await handleMessage(msg, ws);
+  });
+
+  ws.on('close', () => {
+    console.log('\nDisconnected.');
+    process.exit(0);
+  });
+
+  ws.on('error', (err: Error) => {
+    console.error(`Connection error: ${err.message}`);
+    process.exit(1);
+  });
+}
+
+main().catch((err: unknown) => {
+  console.error(err);
+  process.exit(1);
+});

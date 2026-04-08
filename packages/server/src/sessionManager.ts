@@ -32,11 +32,25 @@ function broadcast(session: Session, msg: ServerMessage): void {
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
+const MAX_NAME_LENGTH = 50;
+
+function sanitizeName(name: string): string | null {
+  if (typeof name !== 'string') return null;
+  const trimmed = name.trim().slice(0, MAX_NAME_LENGTH);
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 /**
  * Creates a new session with player 0 already connected.
  * Returns the generated session ID.
  */
-export function createSession(playerName: string, ws: WebSocket): string {
+export function createSession(playerName: string, ws: WebSocket): string | null {
+  const sanitized = sanitizeName(playerName);
+  if (!sanitized) {
+    send(ws, { type: 'ERROR', message: 'Invalid player name' });
+    return null;
+  }
+  playerName = sanitized;
   const id = uuidv4();
   const session: Session = {
     id,
@@ -60,6 +74,12 @@ export function joinSession(
   playerName: string,
   ws: WebSocket
 ): PlayerId | null {
+  const sanitized = sanitizeName(playerName);
+  if (!sanitized) {
+    send(ws, { type: 'ERROR', message: 'Invalid player name' });
+    return null;
+  }
+  playerName = sanitized;
   const session = sessions.get(sessionId);
   if (!session) {
     send(ws, { type: 'ERROR', message: 'Session not found' });
@@ -145,8 +165,10 @@ export function handleDisconnect(sessionId: string, playerId: PlayerId): void {
     send(oppWs, { type: 'OPPONENT_DISCONNECTED' });
   }
 
-  // Remove sessions with no remaining connections
+  // Remove sessions with no remaining connections, or waiting sessions where the host left
   if (!session.connections[0] && !session.connections[1]) {
+    sessions.delete(sessionId);
+  } else if (session.status === 'waiting' && !session.connections[0]) {
     sessions.delete(sessionId);
   }
 }

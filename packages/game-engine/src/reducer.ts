@@ -76,12 +76,12 @@ function endTurn(state: GameState): GameState {
     return { ...state, phase: 'discard' };
   }
 
-  // Extra turns from Turn ability
+  // Extra turns from Turn ability — skip optional phases, go straight to mandatory
   if (state.extraTurns > 0) {
     return {
       ...state,
       extraTurns: state.extraTurns - 1,
-      phase: 'optional_privilege',
+      phase: 'mandatory',
       lastPurchasedCard: null,
     };
   }

@@ -35,11 +35,25 @@ app.get('/health', (_req, res) => {
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
+const RATE_LIMIT_WINDOW_MS = 1000;
+const RATE_LIMIT_MAX_MESSAGES = 20;
+
 wss.on('connection', (ws: WebSocket) => {
   let sessionId: string | null = null;
   let playerId: PlayerId | null = null;
 
+  // Per-connection rate limiting
+  let messageTimestamps: number[] = [];
+
   ws.on('message', (data) => {
+    const now = Date.now();
+    messageTimestamps = messageTimestamps.filter(t => now - t < RATE_LIMIT_WINDOW_MS);
+    if (messageTimestamps.length >= RATE_LIMIT_MAX_MESSAGES) {
+      ws.send(JSON.stringify({ type: 'ERROR', message: 'Rate limit exceeded' }));
+      return;
+    }
+    messageTimestamps.push(now);
+
     let msg: ClientMessage;
     try {
       msg = JSON.parse(data.toString()) as ClientMessage;
@@ -50,8 +64,11 @@ wss.on('connection', (ws: WebSocket) => {
 
     switch (msg.type) {
       case 'CREATE_SESSION': {
-        sessionId = createSession(msg.playerName, ws);
-        playerId = 0;
+        const newSessionId = createSession(msg.playerName, ws);
+        if (newSessionId !== null) {
+          sessionId = newSessionId;
+          playerId = 0;
+        }
         break;
       }
       case 'JOIN_SESSION': {
@@ -81,6 +98,10 @@ wss.on('connection', (ws: WebSocket) => {
     if (sessionId !== null && playerId !== null) {
       handleDisconnect(sessionId, playerId);
     }
+  });
+
+  ws.on('error', (err: Error) => {
+    console.error(`WebSocket error (session=${sessionId ?? 'none'}, player=${playerId ?? 'none'}): ${err.message}`);
   });
 });
 
