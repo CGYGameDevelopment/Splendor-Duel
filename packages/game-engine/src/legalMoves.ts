@@ -178,7 +178,7 @@ function purchaseMoves(state: GameState): Action[] {
     // Bonus cards require an eligible target card
     if (card.ability === 'Bonus' || card.ability === 'Bonus/Turn') {
       const eligible = player.purchasedCards.filter(
-        c => c.color !== 'points' && c.bonus > 0 && c.overlappingCardId === null
+        c => c.color !== 'joker' && c.color !== 'points' && c.bonus > 0 && c.overlappingCardId === null
       );
       if (eligible.length === 0) continue;
     }
