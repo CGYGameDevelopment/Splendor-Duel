@@ -76,12 +76,12 @@ function endTurn(state: GameState): GameState {
     return { ...state, phase: 'discard' };
   }
 
-  // Extra turns from Turn ability — skip optional phases, go straight to mandatory
+  // Extra turns banked from a Turn-ability card — give the player a full new turn
   if (state.extraTurns > 0) {
     return {
       ...state,
       extraTurns: state.extraTurns - 1,
-      phase: 'mandatory',
+      phase: 'optional_privilege',
       lastPurchasedCard: null,
     };
   }
@@ -104,7 +104,15 @@ function resolveAbility(state: GameState, card: Card): GameState {
 
   switch (card.ability) {
     case 'Turn': {
-      return endTurn({ ...state, extraTurns: state.extraTurns + 1, pendingAbility: null });
+      // Grant an extra turn by banking it in extraTurns, then jump directly to mandatory.
+      // Unlike other abilities, we don't call endTurn here — the player continues immediately.
+      return {
+        ...state,
+        extraTurns: state.extraTurns + 1,
+        phase: 'mandatory',
+        pendingAbility: null,
+        lastPurchasedCard: null,
+      };
     }
 
     case 'Privilege': {

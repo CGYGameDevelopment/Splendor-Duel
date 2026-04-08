@@ -131,6 +131,9 @@ describe('PURCHASE_CARD', () => {
     // Turn cards resolve immediately and grant another mandatory phase on same player's turn
     expect(next.currentPlayer).toBe(0);
     expect(next.phase).toBe('mandatory');
+    expect(next.extraTurns).toBe(1);
+    expect(next.pendingAbility).toBeNull();
+    expect(next.lastPurchasedCard).toBeNull();
   });
 
   test('crown milestone grants royal card at 3 crowns', () => {
