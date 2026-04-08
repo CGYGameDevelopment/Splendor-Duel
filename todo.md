@@ -48,16 +48,18 @@ Splendor Duel (monorepo)
 │   │   ├── legalMoves.ts     [Move validation]
 │   │   ├── board.ts          [Board logic & adjacency]
 │   │   ├── helpers.ts        [Game utilities]
-│   │   └── __tests__/        [62 passing tests]
+│   │   ├── initialState.ts   [Initial game state factory]
+│   │   ├── index.ts          [Package entry point]
+│   │   ├── data/cards.json   [Card definitions]
+│   │   └── __tests__/        [74 tests: all passing]
 │   │
 │   ├── server/               [Express + WebSocket, ~50% complete]
 │   │   ├── index.ts          [HTTP & WebSocket server]
 │   │   ├── sessionManager.ts [Game session handling]
 │   │   └── protocol.ts       [Message types]
 │   │
-│   └── client/               [React + Vite, 0% complete]
+│   └── client/               [React + Vite, 0% — not yet started]
 │       └── package.json      [Dependencies configured]
-└── README.md
 ```
 
 ---
@@ -66,8 +68,7 @@ Splendor Duel (monorepo)
 
 **Immediate (Next Task)**
 1. Verify server session persistence and cleanup
-2. Ensure sessions properly create/join/disconnect
-3. Test multi-player session handling
+2. Ensure sessions properly create/join/disconnect and test multi-player session handling
 
 **Short Term**
 1. Build client-side WebSocket integration
