@@ -141,6 +141,46 @@ export function canAfford(
 
 // ─── Privilege helpers ────────────────────────────────────────────────────────
 
+/** Returns the total privileges in circulation (table + both players). Should always equal 3. */
+export function totalPrivileges(state: GameState): number {
+  return state.privileges + state.players[0].privileges + state.players[1].privileges;
+}
+
+/**
+ * Returns total tokens of each color across all zones: bag + board + both player pools.
+ * Each color's count should remain constant throughout the game.
+ */
+export function totalTokensByColor(state: GameState): TokenPool {
+  const totals = emptyPool();
+  for (const color of TOKEN_COLORS) {
+    totals[color] += state.bag[color];
+    totals[color] += state.players[0].tokens[color];
+    totals[color] += state.players[1].tokens[color];
+  }
+  for (const cell of state.board) {
+    if (cell) totals[cell] += 1;
+  }
+  return totals;
+}
+
+/**
+ * Returns total card counts across all zones: decks + pyramid + both players'
+ * purchasedCards + reservedCards. Royal cards tracked separately via royalDeck + royalCards.
+ */
+export function totalCardCount(state: GameState): { jewel: number; royal: number } {
+  const jewel =
+    state.decks.level1.length + state.decks.level2.length + state.decks.level3.length +
+    state.pyramid.level1.length + state.pyramid.level2.length + state.pyramid.level3.length +
+    state.players[0].purchasedCards.length + state.players[0].reservedCards.length +
+    state.players[1].purchasedCards.length + state.players[1].reservedCards.length;
+  const royal =
+    state.royalDeck.length +
+    state.players[0].royalCards.length +
+    state.players[1].royalCards.length;
+  return { jewel, royal };
+}
+
+
 /**
  * Transfer up to `amount` privileges to `to`, taking from table first,
  * then from opponent if table is exhausted.

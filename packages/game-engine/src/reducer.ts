@@ -132,10 +132,10 @@ function resolveAbility(state: GameState, card: Card): GameState {
 
     case 'Bonus':
     case 'Bonus/Turn': {
-      // Player must choose which card this overlaps — needs a card with a bonus to overlap
+      // Player must choose which card this overlaps — needs a card with a bonus to overlap (excluding itself)
       const player = state.players[state.currentPlayer];
       const eligible = player.purchasedCards.filter(
-        c => c.color !== 'joker' && c.color !== 'points' && c.bonus > 0 && c.overlappingCardId === null
+        c => c.id !== card.id && c.color !== 'points' && c.bonus > 0 && c.overlappingCardId === null
       );
       if (eligible.length === 0) {
         // Cannot purchase this card — this should be caught in legalMoves, but guard here

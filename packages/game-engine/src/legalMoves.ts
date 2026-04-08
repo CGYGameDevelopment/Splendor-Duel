@@ -161,7 +161,7 @@ function reserveMoves(state: GameState): Action[] {
       moves.push({ type: 'RESERVE_CARD_FROM_PYRAMID', cardId: card.id });
     }
     if (state.decks[key].length > 0) {
-      moves.push({ type: 'RESERVE_CARD', source: `deck_${level}` as Action['type'] extends 'RESERVE_CARD' ? never : any });
+      moves.push({ type: 'RESERVE_CARD', source: `deck_${level}` as 'deck_1' | 'deck_2' | 'deck_3' });
     }
   }
 
@@ -184,7 +184,7 @@ function purchaseMoves(state: GameState): Action[] {
     // Bonus cards require an eligible target card
     if (card.ability === 'Bonus' || card.ability === 'Bonus/Turn') {
       const eligible = player.purchasedCards.filter(
-        c => c.color !== 'joker' && c.color !== 'points' && c.bonus > 0 && c.overlappingCardId === null
+        c => c.color !== 'points' && c.bonus > 0 && c.overlappingCardId === null
       );
       if (eligible.length === 0) continue;
     }
@@ -194,7 +194,7 @@ function purchaseMoves(state: GameState): Action[] {
 
     if (canAfford(card, player)) {
       // Generate gold usage options
-      const goldOptions = goldUsageCombinations(cost, player.tokens.gold);
+      const goldOptions = goldUsageCombinations(cost, player.tokens);
       for (const goldUsage of goldOptions) {
         moves.push({ type: 'PURCHASE_CARD', cardId: card.id, goldUsage });
       }
@@ -205,16 +205,34 @@ function purchaseMoves(state: GameState): Action[] {
 }
 
 /**
- * Generate all valid ways to use gold tokens to cover a cost.
- * Returns at minimum one option (no gold used, if affordable without gold).
+ * Generate the minimal gold usage needed to afford a cost.
+ * - If affordable without gold, returns [{}]
+ * - If gold needed, returns one option with minimal allocation
+ * - Card must be pre-validated by canAfford()
  */
 function goldUsageCombinations(
   cost: Partial<Record<TokenColor, number>>,
-  goldAvailable: number
+  playerTokens: TokenPool
 ): Partial<Record<GemColor | 'pearl', number>>[] {
-  // For AI/engine purposes we just return the minimal gold usage
-  // (exact gold allocation is a client UI concern — engine validates canAfford)
-  return [{}];
+  let totalShortage = 0;
+  const allocation: Partial<Record<GemColor | 'pearl', number>> = {};
+
+  for (const [colorStr, needed] of Object.entries(cost) as [TokenColor, number][]) {
+    const have = playerTokens[colorStr] ?? 0;
+    const shortage = Math.max(0, needed - have);
+    if (shortage > 0) {
+      allocation[colorStr as GemColor | 'pearl'] = shortage;
+      totalShortage += shortage;
+    }
+  }
+
+  // If no shortage, no gold needed
+  if (totalShortage === 0) {
+    return [{}];
+  }
+
+  // Return the minimal allocation (card is pre-validated as affordable)
+  return [allocation];
 }
 
 // ─── Discard ──────────────────────────────────────────────────────────────────
@@ -285,7 +303,7 @@ function placeBonusMoves(state: GameState): Action[] {
   if (!bonusCard) return [];
 
   const eligible = player.purchasedCards.filter(
-    c => c.color !== 'joker' && c.color !== 'points' && c.bonus > 0 && c.overlappingCardId === null
+    c => c.id !== bonusCard.id && c.color !== 'points' && c.bonus > 0 && c.overlappingCardId === null
   );
 
   return eligible.map(target => ({

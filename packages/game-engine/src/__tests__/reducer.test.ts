@@ -1,7 +1,7 @@
 import { reducer } from '../reducer';
 import { createInitialState } from '../initialState';
 import type { GameState, Card, PlayerState } from '../types';
-import { emptyPool } from '../helpers';
+import { emptyPool, totalPrivileges, totalTokensByColor, totalCardCount } from '../helpers';
 
 function makeCard(overrides: Partial<Card> = {}): Card {
   return {
@@ -45,6 +45,7 @@ describe('TAKE_TOKENS', () => {
 
     const next = reducer(s, { type: 'TAKE_TOKENS', indices: [0, 1, 2] });
     expect(next.players[1].privileges).toBe(1);
+    expect(totalPrivileges(next)).toBe(3);
   });
 
   test('taking 2 pearls grants opponent a privilege', () => {
@@ -58,6 +59,7 @@ describe('TAKE_TOKENS', () => {
 
     const next = reducer(s, { type: 'TAKE_TOKENS', indices: [0, 1] });
     expect(next.players[1].privileges).toBe(1);
+    expect(totalPrivileges(next)).toBe(3);
   });
 
   test('non-line selection is rejected', () => {
@@ -205,6 +207,7 @@ describe('USE_PRIVILEGE', () => {
     expect(next.players[0].privileges).toBe(0);
     expect(next.players[0].tokens.green).toBe(1);
     expect(next.privileges).toBe(3);
+    expect(totalPrivileges(next)).toBe(3);
   });
 });
 
@@ -257,6 +260,7 @@ describe('REPLENISH_BOARD', () => {
     expect(filled).toBe(5);
     expect(next.players[1].privileges).toBe(1);
     expect(next.phase).toBe('mandatory');
+    expect(totalPrivileges(next)).toBe(3);
   });
 });
 
@@ -406,6 +410,7 @@ describe('Privilege Ability', () => {
     expect(next.players[0].privileges).toBe(1);
     expect(next.privileges).toBe(2);
     expect(next.phase).toBe('optional_privilege');
+    expect(totalPrivileges(next)).toBe(3);
   });
 
   test('Privilege ability capped at 3 total (exhaust privilege)', () => {
@@ -426,6 +431,7 @@ describe('Privilege Ability', () => {
     // Player already has 3 privileges; cannot take more
     expect(next.players[0].privileges).toBe(3);
     expect(next.privileges).toBe(0);
+    expect(totalPrivileges(next)).toBe(3);
   });
 });
 
@@ -595,6 +601,7 @@ describe('Royal Card Abilities', () => {
     expect(next.players[0].royalCards).toHaveLength(1);
     expect(next.players[0].privileges).toBe(1);
     expect(next.privileges).toBe(2);
+    expect(totalPrivileges(next)).toBe(3);
   });
 
   test('Reaching 6 crowns awards another royal card', () => {
@@ -669,5 +676,173 @@ describe('Multi-ability Sequences', () => {
     const next3 = reducer(next2, { type: 'PURCHASE_CARD', cardId: 151, goldUsage: {} });
     expect(next3.players[0].privileges).toBe(1);
     expect(next3.extraTurns).toBe(0);
+    expect(totalPrivileges(next3)).toBe(3);
+  });
+});
+
+// ─── Conservation Invariants ──────────────────────────────────────────────────
+// For each action, verify that tokens and cards are conserved across all zones.
+
+describe('Conservation Invariants', () => {
+  /** Asserts token counts per color are unchanged vs baseline, and card counts are unchanged. */
+  function assertConserved(before: GameState, after: GameState) {
+    const tokBefore = totalTokensByColor(before);
+    const tokAfter  = totalTokensByColor(after);
+    expect(tokAfter).toEqual(tokBefore);
+
+    const cardsBefore = totalCardCount(before);
+    const cardsAfter  = totalCardCount(after);
+    expect(cardsAfter).toEqual(cardsBefore);
+  }
+
+  test('TAKE_TOKENS conserves tokens', () => {
+    const state = createInitialState(false);
+    const board = new Array(25).fill(null);
+    board[0] = 'black'; board[1] = 'red'; board[2] = 'green';
+    const s: GameState = { ...state, board, phase: 'mandatory', players: [makePlayer(), makePlayer()] };
+    const next = reducer(s, { type: 'TAKE_TOKENS', indices: [0, 1, 2] });
+    assertConserved(s, next);
+  });
+
+  test('TAKE_TOKENS penalty (3 same color) conserves tokens', () => {
+    const state = createInitialState(false);
+    const board = new Array(25).fill(null);
+    board[0] = 'red'; board[1] = 'red'; board[2] = 'red';
+    const s: GameState = {
+      ...state, board, phase: 'mandatory',
+      privileges: 3, players: [makePlayer(), makePlayer()],
+    };
+    const next = reducer(s, { type: 'TAKE_TOKENS', indices: [0, 1, 2] });
+    assertConserved(s, next);
+  });
+
+  test('RESERVE_CARD_FROM_PYRAMID conserves tokens and cards', () => {
+    const card = makeCard({ id: 60 });
+    const state = createInitialState(false);
+    const board = new Array(25).fill(null);
+    board[12] = 'gold';
+    const s: GameState = {
+      ...state, board, phase: 'mandatory',
+      pyramid: { ...state.pyramid, level1: [card, ...state.pyramid.level1.slice(0, 4)] },
+      players: [makePlayer(), makePlayer()],
+    };
+    const next = reducer(s, { type: 'RESERVE_CARD_FROM_PYRAMID', cardId: 60 });
+    assertConserved(s, next);
+  });
+
+  test('RESERVE_CARD (from deck) conserves tokens and cards', () => {
+    const deckCard = makeCard({ id: 70 });
+    const state = createInitialState(false);
+    const board = new Array(25).fill(null);
+    board[12] = 'gold';
+    const s: GameState = {
+      ...state, board, phase: 'mandatory',
+      decks: { ...state.decks, level1: [deckCard, ...state.decks.level1] },
+      players: [makePlayer(), makePlayer()],
+    };
+    const next = reducer(s, { type: 'RESERVE_CARD', source: 'deck_1' });
+    assertConserved(s, next);
+  });
+
+  test('PURCHASE_CARD conserves tokens and cards', () => {
+    const card = makeCard({ id: 80, cost: { black: 2 } });
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state, phase: 'mandatory',
+      pyramid: { ...state.pyramid, level1: [card, ...state.pyramid.level1.slice(0, 4)] },
+      players: [makePlayer({ tokens: { ...emptyPool(), black: 2 } }), makePlayer()],
+    };
+    const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 80, goldUsage: {} });
+    assertConserved(s, next);
+  });
+
+  test('PURCHASE_CARD with gold usage conserves tokens and cards', () => {
+    const card = makeCard({ id: 81, cost: { black: 3 } });
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state, phase: 'mandatory',
+      pyramid: { ...state.pyramid, level1: [card, ...state.pyramid.level1.slice(0, 4)] },
+      players: [makePlayer({ tokens: { ...emptyPool(), black: 2, gold: 1 } }), makePlayer()],
+    };
+    const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 81, goldUsage: { black: 1 } });
+    assertConserved(s, next);
+  });
+
+  test('USE_PRIVILEGE conserves tokens', () => {
+    const board = new Array(25).fill(null);
+    board[5] = 'green';
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state, board, phase: 'optional_privilege', privileges: 2,
+      players: [makePlayer({ privileges: 1 }), makePlayer()],
+    };
+    const next = reducer(s, { type: 'USE_PRIVILEGE', tokens: { green: 1 } });
+    assertConserved(s, next);
+  });
+
+  test('REPLENISH_BOARD conserves tokens', () => {
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      board: new Array(25).fill(null),
+      bag: { ...emptyPool(), black: 5 },
+      phase: 'optional_replenish',
+      privileges: 3,
+      players: [makePlayer(), makePlayer()],
+    };
+    const next = reducer(s, { type: 'REPLENISH_BOARD' });
+    assertConserved(s, next);
+  });
+
+  test('DISCARD_TOKENS conserves tokens', () => {
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state, phase: 'discard',
+      players: [makePlayer({ tokens: { ...emptyPool(), black: 11 } }), makePlayer()],
+    };
+    const next = reducer(s, { type: 'DISCARD_TOKENS', tokens: { black: 1 } });
+    assertConserved(s, next);
+  });
+
+  test('TAKE_TOKEN_FROM_BOARD (Token ability) conserves tokens', () => {
+    const card = makeCard({ id: 100, ability: 'Token', color: 'red', cost: {} });
+    const state = createInitialState(false);
+    const board = new Array(25).fill(null);
+    board[5] = 'red';
+    const s: GameState = {
+      ...state, board, phase: 'mandatory',
+      pyramid: { ...state.pyramid, level1: [card, ...state.pyramid.level1.slice(0, 4)] },
+      players: [makePlayer(), makePlayer()],
+    };
+    const afterPurchase = reducer(s, { type: 'PURCHASE_CARD', cardId: 100, goldUsage: {} });
+    const afterAbility  = reducer(afterPurchase, { type: 'TAKE_TOKEN_FROM_BOARD', color: 'red' });
+    assertConserved(s, afterAbility);
+  });
+
+  test('TAKE_TOKEN_FROM_OPPONENT (Take ability) conserves tokens', () => {
+    const card = makeCard({ id: 103, ability: 'Take', cost: {} });
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state, phase: 'mandatory',
+      pyramid: { ...state.pyramid, level1: [card, ...state.pyramid.level1.slice(0, 4)] },
+      players: [makePlayer(), makePlayer({ tokens: { ...emptyPool(), green: 2 } })],
+    };
+    const afterPurchase = reducer(s, { type: 'PURCHASE_CARD', cardId: 103, goldUsage: {} });
+    const afterAbility  = reducer(afterPurchase, { type: 'TAKE_TOKEN_FROM_OPPONENT', color: 'green' });
+    assertConserved(s, afterAbility);
+  });
+
+  test('Crown milestone (royal card awarded) conserves cards', () => {
+    const card = makeCard({ id: 140, crowns: 3, cost: {} });
+    const royalCard = makeCard({ id: 200, level: 'royal', points: 3, cost: {} });
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state, phase: 'mandatory',
+      pyramid: { ...state.pyramid, level1: [card, ...state.pyramid.level1.slice(0, 4)] },
+      royalDeck: [royalCard],
+      players: [makePlayer(), makePlayer()],
+    };
+    const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 140, goldUsage: {} });
+    assertConserved(s, next);
   });
 });
