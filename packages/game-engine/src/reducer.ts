@@ -104,7 +104,7 @@ function resolveAbility(state: GameState, card: Card): GameState {
 
   switch (card.ability) {
     case 'Turn': {
-      return { ...state, extraTurns: state.extraTurns + 1, phase: 'mandatory', pendingAbility: null };
+      return endTurn({ ...state, extraTurns: state.extraTurns + 1, pendingAbility: null });
     }
 
     case 'Privilege': {
