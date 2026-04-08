@@ -1,5 +1,5 @@
 /**
- * Reads Card List.csv from the repo root and writes src/data/cards.json.
+ * Reads card-list.csv from the repo root and writes src/data/cards.json.
  * Run with: npx ts-node scripts/generateCards.ts
  */
 
@@ -7,7 +7,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { Card, CardAbility, CardColor } from '../src/types';
 
-const CSV_PATH = path.resolve(__dirname, '../../../Card List.csv');
+const CSV_PATH = path.resolve(__dirname, '../../../card-list.csv');
 const OUT_PATH = path.resolve(__dirname, '../src/data/cards.json');
 
 const ABILITY_VALUES = new Set<string>(['Turn', 'Token', 'Take', 'Privilege', 'Bonus', 'Bonus/Turn']);
