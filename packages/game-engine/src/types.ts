@@ -35,20 +35,6 @@ export type BoardCell = TokenColor | null;
 // 25 cells indexed 0–24, spiral order from center
 export type Board = BoardCell[];
 
-// ─── Players ─────────────────────────────────────────────────────────────────
-
-export type PlayerId = 0 | 1;
-
-export interface PlayerState {
-  tokens: TokenPool;
-  purchasedCards: Card[];
-  reservedCards: Card[];   // kept secret from opponent; max 3
-  privileges: number;      // 0–3
-  crowns: number;
-  prestige: number;
-  royalCards: Card[];
-}
-
 // ─── Decks / Pyramid ─────────────────────────────────────────────────────────
 
 export interface Pyramid {
@@ -61,6 +47,20 @@ export interface Decks {
   level1: Card[];
   level2: Card[];
   level3: Card[];
+}
+
+// ─── Players ─────────────────────────────────────────────────────────────────
+
+export type PlayerId = 0 | 1;
+
+export interface PlayerState {
+  tokens: TokenPool;
+  purchasedCards: Card[];
+  reservedCards: Card[];   // kept secret from opponent; max 3
+  privileges: number;      // 0–3
+  crowns: number;
+  prestige: number;
+  royalCards: Card[];
 }
 
 // ─── Game State ──────────────────────────────────────────────────────────────

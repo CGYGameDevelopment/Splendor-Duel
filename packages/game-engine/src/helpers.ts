@@ -45,21 +45,6 @@ export function totalTokens(pool: TokenPool): number {
   return TOKEN_COLORS.reduce((sum, c) => sum + pool[c], 0);
 }
 
-export function addTokens(pool: TokenPool, color: TokenColor, amount: number): TokenPool {
-  return { ...pool, [color]: pool[color] + amount };
-}
-
-export function subtractTokens(pool: TokenPool, color: TokenColor, amount: number): TokenPool {
-  return { ...pool, [color]: pool[color] - amount };
-}
-
-export function poolFromPartial(partial: Partial<Record<TokenColor, number>>): TokenPool {
-  const pool = emptyPool();
-  for (const [color, amount] of Object.entries(partial) as [TokenColor, number][]) {
-    pool[color] = amount;
-  }
-  return pool;
-}
 
 // ─── Bonus helpers ────────────────────────────────────────────────────────────
 
@@ -88,14 +73,6 @@ export function effectiveCardColor(card: Card): GemColor | null {
   if (card.color === 'joker') return card.assignedColor;
   if (card.color === 'points') return null;
   return card.color as GemColor;
-}
-
-/**
- * Returns the effective card color for the "10 prestige of same color" victory condition.
- * Joker cards use assignedColor; Points cards are excluded.
- */
-export function cardColorForVictory(card: Card): GemColor | null {
-  return effectiveCardColor(card);
 }
 
 // ─── Cost calculation ─────────────────────────────────────────────────────────
@@ -139,7 +116,7 @@ export function canAfford(
   return goldUsed <= player.tokens.gold;
 }
 
-// ─── Privilege helpers ────────────────────────────────────────────────────────
+// ─── Invariant / conservation helpers ────────────────────────────────────────
 
 /** Returns the total privileges in circulation (table + both players). Should always equal 3. */
 export function totalPrivileges(state: GameState): number {
@@ -180,6 +157,7 @@ export function totalCardCount(state: GameState): { jewel: number; royal: number
   return { jewel, royal };
 }
 
+// ─── Privilege helpers ────────────────────────────────────────────────────────
 
 /**
  * Transfer up to `amount` privileges to `to`, taking from table first,
@@ -225,7 +203,7 @@ export function checkVictory(player: PlayerState): 'prestige' | 'crowns' | 'colo
   // Check prestige by color
   const byColor: Partial<Record<GemColor, number>> = {};
   for (const card of player.purchasedCards) {
-    const color = cardColorForVictory(card);
+    const color = effectiveCardColor(card);
     if (color) {
       byColor[color] = (byColor[color] ?? 0) + card.points;
     }

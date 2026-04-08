@@ -23,12 +23,6 @@ function optionalPrivilegeMoves(state: GameState): Action[] {
   const player = state.players[state.currentPlayer];
   if (player.privileges === 0) return moves;
 
-  // Collect all token colors available on the board (excluding gold)
-  const onBoard = new Set<TokenColor>();
-  for (const cell of state.board) {
-    if (cell && cell !== 'gold') onBoard.add(cell);
-  }
-
   // Generate all subsets of board tokens up to maxPrivileges, with repetition
   const tokenCombinationsList = tokenCombinations(state, player.privileges);
   for (const tokens of tokenCombinationsList) {
@@ -190,7 +184,6 @@ function purchaseMoves(state: GameState): Action[] {
     }
 
     const cost = netCost(card, player);
-    const totalNeeded = Object.values(cost).reduce((s, v) => s + v, 0);
 
     if (canAfford(card, player)) {
       // Generate gold usage options

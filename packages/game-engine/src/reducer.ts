@@ -149,6 +149,62 @@ function resolveAbility(state: GameState, card: Card): GameState {
   }
 }
 
+// ─── Crown milestone helpers ──────────────────────────────────────────────────
+
+function resolveRoyalAbility(state: GameState, playerId: PlayerId, card: Card): GameState {
+  if (!card.ability) return state;
+
+  switch (card.ability) {
+    case 'Privilege': {
+      const { privileges, players } = grantPrivileges(state, playerId, 1);
+      return { ...state, privileges, players };
+    }
+    case 'Token': {
+      // Resolved immediately — take from board if available; no blocking phase for royal
+      if (card.color === 'joker' || card.color === 'points') return state;
+      const color = card.color as TokenColor;
+      const board = [...state.board];
+      const idx = board.findIndex(c => c === color);
+      if (idx === -1) return state;
+      board[idx] = null;
+      const player = state.players[playerId];
+      const tokens = { ...player.tokens, [color]: player.tokens[color] + 1 };
+      return updatePlayer({ ...state, board }, playerId, { tokens });
+    }
+    // Turn and Take on royal cards are not standard but handled defensively
+    default:
+      return state;
+  }
+}
+
+function checkCrownMilestone(
+  state: GameState,
+  playerId: PlayerId,
+  prevCrowns: number,
+  newCrowns: number
+): GameState {
+  let current = state;
+
+  for (const milestone of CROWN_MILESTONES) {
+    if (prevCrowns < milestone && newCrowns >= milestone && current.royalDeck.length > 0) {
+      const [royalCard, ...rest] = current.royalDeck;
+      const player = current.players[playerId];
+      const updatedPlayer: PlayerState = {
+        ...player,
+        royalCards: [...player.royalCards, royalCard],
+        prestige: player.prestige + royalCard.points,
+      };
+      const players: [PlayerState, PlayerState] = [...current.players] as [PlayerState, PlayerState];
+      players[playerId] = updatedPlayer;
+      current = { ...current, players, royalDeck: rest };
+      // Resolve royal card ability inline (royal cards share jewel card abilities)
+      current = resolveRoyalAbility(current, playerId, royalCard);
+    }
+  }
+
+  return current;
+}
+
 // ─── Main reducer ─────────────────────────────────────────────────────────────
 
 export function reducer(state: GameState, action: Action): GameState {
@@ -186,7 +242,6 @@ export function reducer(state: GameState, action: Action): GameState {
           // Take from board
           const idx = board.findIndex(cell => cell === colorStr);
           if (idx === -1) return state; // token not on board
-          board = [...board];
           board[idx] = null;
           playerTokens = { ...playerTokens, [colorStr]: playerTokens[colorStr] + 1 };
         }
@@ -441,70 +496,9 @@ export function reducer(state: GameState, action: Action): GameState {
       let newState = updatePlayer(state, cp, { tokens: playerTokens });
       newState = { ...newState, bag };
 
-      // After discard, proceed with turn end logic
-      if (state.extraTurns > 0) {
-        return { ...newState, extraTurns: newState.extraTurns - 1, phase: 'optional_privilege' };
-      }
-      const next = (1 - cp) as PlayerId;
-      return { ...newState, currentPlayer: next, phase: 'optional_privilege' };
+      return endTurn(newState);
     }
 
-    default:
-      return state;
-  }
-}
-
-// ─── Crown milestone helper ───────────────────────────────────────────────────
-
-function checkCrownMilestone(
-  state: GameState,
-  playerId: PlayerId,
-  prevCrowns: number,
-  newCrowns: number
-): GameState {
-  let current = state;
-
-  for (const milestone of CROWN_MILESTONES) {
-    if (prevCrowns < milestone && newCrowns >= milestone && current.royalDeck.length > 0) {
-      const [royalCard, ...rest] = current.royalDeck;
-      const player = current.players[playerId];
-      const updatedPlayer: PlayerState = {
-        ...player,
-        royalCards: [...player.royalCards, royalCard],
-        prestige: player.prestige + royalCard.points,
-      };
-      const players: [PlayerState, PlayerState] = [...current.players] as [PlayerState, PlayerState];
-      players[playerId] = updatedPlayer;
-      current = { ...current, players, royalDeck: rest };
-      // Resolve royal card ability inline (royal cards share jewel card abilities)
-      current = resolveRoyalAbility(current, playerId, royalCard);
-    }
-  }
-
-  return current;
-}
-
-function resolveRoyalAbility(state: GameState, playerId: PlayerId, card: Card): GameState {
-  if (!card.ability) return state;
-
-  switch (card.ability) {
-    case 'Privilege': {
-      const { privileges, players } = grantPrivileges(state, playerId, 1);
-      return { ...state, privileges, players };
-    }
-    case 'Token': {
-      // Resolved immediately — take from board if available; no blocking phase for royal
-      if (card.color === 'joker' || card.color === 'points') return state;
-      const color = card.color as TokenColor;
-      const board = [...state.board];
-      const idx = board.findIndex(c => c === color);
-      if (idx === -1) return state;
-      board[idx] = null;
-      const player = state.players[playerId];
-      const tokens = { ...player.tokens, [color]: player.tokens[color] + 1 };
-      return updatePlayer({ ...state, board }, playerId, { tokens });
-    }
-    // Turn and Take on royal cards are not standard but handled defensively
     default:
       return state;
   }
