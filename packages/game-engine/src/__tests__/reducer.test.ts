@@ -259,3 +259,415 @@ describe('REPLENISH_BOARD', () => {
     expect(next.phase).toBe('mandatory');
   });
 });
+
+// ─── CARD ABILITY: Token ──────────────────────────────────────────────────────
+
+describe('Token Ability', () => {
+  test('Token ability takes matching color token from board', () => {
+    const card = makeCard({ id: 100, ability: 'Token', color: 'red', cost: {} });
+    const state = createInitialState(false);
+    const board = new Array(25).fill(null);
+    board[5] = 'red';
+    const s: GameState = {
+      ...state,
+      board,
+      phase: 'mandatory',
+      pyramid: { ...state.pyramid, level1: [card, ...state.pyramid.level1.slice(0, 4)] },
+      players: [makePlayer(), makePlayer()],
+    };
+
+    const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 100, goldUsage: {} });
+    expect(next.phase).toBe('resolve_ability');
+    expect(next.pendingAbility).toBe('Token');
+    expect(next.lastPurchasedCard?.id).toBe(100);
+
+    // Resolve the Token ability
+    const resolved = reducer(next, { type: 'TAKE_TOKEN_FROM_BOARD', color: 'red' });
+    expect(resolved.board[5]).toBeNull();
+    expect(resolved.players[0].tokens.red).toBe(1);
+    expect(resolved.pendingAbility).toBeNull();
+    expect(resolved.phase).toBe('optional_privilege');
+  });
+
+  test('Token ability skipped if no matching token on board', () => {
+    const card = makeCard({ id: 101, ability: 'Token', color: 'blue', cost: {} });
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      board: new Array(25).fill(null),
+      phase: 'mandatory',
+      pyramid: { ...state.pyramid, level1: [card, ...state.pyramid.level1.slice(0, 4)] },
+      players: [makePlayer(), makePlayer()],
+    };
+
+    const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 101, goldUsage: {} });
+    expect(next.pendingAbility).toBeNull();
+    expect(next.phase).toBe('optional_privilege');
+  });
+
+  test('Token ability on joker card is skipped', () => {
+    const card = makeCard({ id: 102, ability: 'Token', color: 'joker', cost: {} });
+    const state = createInitialState(false);
+    const board = new Array(25).fill(null);
+    board[5] = 'red';
+    const s: GameState = {
+      ...state,
+      board,
+      phase: 'mandatory',
+      pyramid: { ...state.pyramid, level1: [card, ...state.pyramid.level1.slice(0, 4)] },
+      players: [makePlayer(), makePlayer()],
+    };
+
+    const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 102, goldUsage: {} });
+    expect(next.pendingAbility).toBeNull();
+    expect(next.phase).toBe('optional_privilege');
+  });
+});
+
+// ─── CARD ABILITY: Take ───────────────────────────────────────────────────────
+
+describe('Take Ability', () => {
+  test('Take ability lets player steal gem token from opponent', () => {
+    const card = makeCard({ id: 103, ability: 'Take', cost: {} });
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      phase: 'mandatory',
+      pyramid: { ...state.pyramid, level1: [card, ...state.pyramid.level1.slice(0, 4)] },
+      players: [
+        makePlayer(),
+        makePlayer({ tokens: { ...emptyPool(), green: 2 } }),
+      ],
+    };
+
+    const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 103, goldUsage: {} });
+    expect(next.phase).toBe('resolve_ability');
+    expect(next.pendingAbility).toBe('Take');
+
+    // Resolve Take ability
+    const resolved = reducer(next, { type: 'TAKE_TOKEN_FROM_OPPONENT', color: 'green' });
+    expect(resolved.players[0].tokens.green).toBe(1);
+    expect(resolved.players[1].tokens.green).toBe(1);
+    expect(resolved.pendingAbility).toBeNull();
+  });
+
+  test('Take ability skipped if opponent has no eligible tokens', () => {
+    const card = makeCard({ id: 104, ability: 'Take', cost: {} });
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      phase: 'mandatory',
+      pyramid: { ...state.pyramid, level1: [card, ...state.pyramid.level1.slice(0, 4)] },
+      players: [
+        makePlayer(),
+        makePlayer({ tokens: { ...emptyPool(), gold: 5 } }),
+      ],
+    };
+
+    const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 104, goldUsage: {} });
+    expect(next.pendingAbility).toBeNull();
+    expect(next.phase).toBe('optional_privilege');
+  });
+
+  test('Take ability rejects gold token', () => {
+    const card = makeCard({ id: 105, ability: 'Take', cost: {} });
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      phase: 'mandatory',
+      pyramid: { ...state.pyramid, level1: [card, ...state.pyramid.level1.slice(0, 4)] },
+      players: [
+        makePlayer(),
+        makePlayer({ tokens: { ...emptyPool(), gold: 5 } }),
+      ],
+    };
+
+    const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 105, goldUsage: {} });
+    // Even though opponent has gold, Take ability is skipped (no non-gold tokens)
+    expect(next.pendingAbility).toBeNull();
+  });
+});
+
+// ─── CARD ABILITY: Privilege ──────────────────────────────────────────────────
+
+describe('Privilege Ability', () => {
+  test('Privilege ability grants 1 privilege to current player', () => {
+    const card = makeCard({ id: 106, ability: 'Privilege', cost: {} });
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      phase: 'mandatory',
+      privileges: 3,
+      pyramid: { ...state.pyramid, level1: [card, ...state.pyramid.level1.slice(0, 4)] },
+      players: [makePlayer(), makePlayer()],
+    };
+
+    const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 106, goldUsage: {} });
+    expect(next.players[0].privileges).toBe(1);
+    expect(next.privileges).toBe(2);
+    expect(next.phase).toBe('optional_privilege');
+  });
+
+  test('Privilege ability capped at 3 total (exhaust privilege)', () => {
+    const card = makeCard({ id: 107, ability: 'Privilege', cost: {} });
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      phase: 'mandatory',
+      privileges: 0,
+      pyramid: { ...state.pyramid, level1: [card, ...state.pyramid.level1.slice(0, 4)] },
+      players: [
+        makePlayer({ privileges: 3 }),
+        makePlayer(),
+      ],
+    };
+
+    const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 107, goldUsage: {} });
+    // Player already has 3 privileges; cannot take more
+    expect(next.players[0].privileges).toBe(3);
+    expect(next.privileges).toBe(0);
+  });
+});
+
+// ─── CARD ABILITY: Bonus ──────────────────────────────────────────────────────
+
+describe('Bonus Ability', () => {
+  test('Bonus card requires placement on eligible purchased card', () => {
+    const bonusCard = makeCard({ id: 110, ability: 'Bonus', color: 'joker', cost: {} });
+    const targetCard = makeCard({ id: 111, color: 'red', bonus: 1 });
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      phase: 'mandatory',
+      pyramid: { ...state.pyramid, level1: [bonusCard, ...state.pyramid.level1.slice(0, 4)] },
+      players: [
+        makePlayer({ purchasedCards: [targetCard] }),
+        makePlayer(),
+      ],
+    };
+
+    const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 110, goldUsage: {} });
+    expect(next.phase).toBe('place_bonus');
+    expect(next.pendingAbility).toBe('Bonus');
+
+    const resolved = reducer(next, { type: 'PLACE_BONUS_CARD', bonusCardId: 110, targetCardId: 111 });
+    expect(resolved.players[0].purchasedCards[1].overlappingCardId).toBe(111);
+    expect(resolved.players[0].purchasedCards[1].assignedColor).toBe('red');
+    expect(resolved.pendingAbility).toBeNull();
+  });
+
+  test('Bonus card ability skipped if no eligible targets', () => {
+    const bonusCard = makeCard({ id: 112, ability: 'Bonus', color: 'joker', cost: {} });
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      phase: 'mandatory',
+      pyramid: { ...state.pyramid, level1: [bonusCard, ...state.pyramid.level1.slice(0, 4)] },
+      players: [makePlayer({ purchasedCards: [] }), makePlayer()],
+    };
+
+    // Purchase succeeds, but ability is skipped (no eligible cards to place on)
+    const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 112, goldUsage: {} });
+    expect(next.players[0].purchasedCards.some(c => c.id === 112)).toBe(true);
+    expect(next.phase).toBe('optional_privilege');
+    expect(next.pendingAbility).toBeNull();
+  });
+
+  test('Bonus card requires eligible target (must have bonus and no overlap)', () => {
+    const bonusCard1 = makeCard({ id: 113, ability: 'Bonus', color: 'joker' });
+    const bonusCard2 = makeCard({ id: 114, ability: 'Bonus', color: 'joker' });
+    const bonusCard3 = makeCard({ id: 200, ability: 'Bonus', color: 'joker' });
+    const noBonus = makeCard({ id: 116, color: 'blue', bonus: 0 });
+
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      phase: 'mandatory',
+      pyramid: { ...state.pyramid, level1: [bonusCard3, ...state.pyramid.level1.slice(0, 4)] },
+      players: [
+        makePlayer({
+          purchasedCards: [
+            noBonus,  // no bonus, ineligible
+            { ...bonusCard1, assignedColor: 'red', overlappingCardId: 999 },  // already has overlap, ineligible
+            { ...bonusCard2, assignedColor: 'blue', overlappingCardId: 998 },  // already has overlap, ineligible
+          ],
+        }),
+        makePlayer(),
+      ],
+    };
+
+    const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 200, goldUsage: {} });
+    // Purchase succeeds, but ability is skipped (no eligible target cards)
+    expect(next.players[0].purchasedCards.some(c => c.id === 200)).toBe(true);
+    expect(next.phase).toBe('optional_privilege');
+  });
+});
+
+// ─── CARD ABILITY: Bonus/Turn ─────────────────────────────────────────────────
+
+describe('Bonus/Turn Ability', () => {
+  test('Bonus/Turn places bonus card and grants extra turn (consumed immediately in endTurn)', () => {
+    const bonusCard = makeCard({ id: 120, ability: 'Bonus/Turn', color: 'joker', cost: {} });
+    const targetCard = makeCard({ id: 121, color: 'green', bonus: 1 });
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      phase: 'mandatory',
+      pyramid: { ...state.pyramid, level1: [bonusCard, ...state.pyramid.level1.slice(0, 4)] },
+      players: [
+        makePlayer({ purchasedCards: [targetCard] }),
+        makePlayer(),
+      ],
+    };
+
+    const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 120, goldUsage: {} });
+    expect(next.phase).toBe('place_bonus');
+
+    const resolved = reducer(next, { type: 'PLACE_BONUS_CARD', bonusCardId: 120, targetCardId: 121 });
+    // Bonus/Turn increments extraTurns then calls endTurn, which immediately decrements it
+    // Result: player continues their turn in optional_privilege phase
+    expect(resolved.extraTurns).toBe(0);
+    expect(resolved.currentPlayer).toBe(0);
+    expect(resolved.phase).toBe('optional_privilege');
+  });
+});
+
+// ─── CARD ABILITY: Turn (chaining) ────────────────────────────────────────────
+
+describe('Turn Ability Chaining', () => {
+  test('Turn ability grants extra turn on same player', () => {
+    const turnCard = makeCard({ id: 130, ability: 'Turn', cost: {} });
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      phase: 'mandatory',
+      pyramid: { ...state.pyramid, level1: [turnCard, ...state.pyramid.level1.slice(0, 4)] },
+      players: [makePlayer(), makePlayer()],
+    };
+
+    const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 130, goldUsage: {} });
+    expect(next.extraTurns).toBe(1);
+    expect(next.currentPlayer).toBe(0);
+    expect(next.phase).toBe('mandatory');
+  });
+
+  test('Turn abilities can chain (buying Turn during extra turn)', () => {
+    const turnCard1 = makeCard({ id: 131, ability: 'Turn', cost: {} });
+    const turnCard2 = makeCard({ id: 132, ability: 'Turn', cost: {} });
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      phase: 'mandatory',
+      extraTurns: 1,
+      pyramid: { ...state.pyramid, level1: [turnCard1, ...state.pyramid.level1.slice(0, 4)] },
+      players: [makePlayer(), makePlayer()],
+    };
+
+    // First Turn card during extra turn increments the queue
+    const next1 = reducer(s, { type: 'PURCHASE_CARD', cardId: 131, goldUsage: {} });
+    expect(next1.extraTurns).toBe(2); // 1 (existing) + 1 (from Turn ability)
+    expect(next1.phase).toBe('mandatory');
+
+    // Second Turn card further increments the queue
+    const next2: GameState = { ...next1, phase: 'mandatory', pyramid: { ...next1.pyramid, level1: [turnCard2, ...next1.pyramid.level1.slice(0, 4)] } };
+    const next3 = reducer(next2, { type: 'PURCHASE_CARD', cardId: 132, goldUsage: {} });
+    expect(next3.extraTurns).toBe(3);
+  });
+});
+
+// ─── CARD ABILITY: Royal Cards ────────────────────────────────────────────────
+
+describe('Royal Card Abilities', () => {
+  test('Reaching 3 crowns awards royal card with Privilege ability', () => {
+    const card = makeCard({ id: 140, crowns: 3, cost: {} });
+    const royalCard = makeCard({ id: 200, level: 'royal', ability: 'Privilege', points: 3, cost: {} });
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      phase: 'mandatory',
+      privileges: 3,
+      pyramid: { ...state.pyramid, level1: [card, ...state.pyramid.level1.slice(0, 4)] },
+      royalDeck: [royalCard],
+      players: [makePlayer(), makePlayer()],
+    };
+
+    const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 140, goldUsage: {} });
+    expect(next.players[0].royalCards).toHaveLength(1);
+    expect(next.players[0].privileges).toBe(1);
+    expect(next.privileges).toBe(2);
+  });
+
+  test('Reaching 6 crowns awards another royal card', () => {
+    const card = makeCard({ id: 141, crowns: 4, cost: {} });
+    const royalCard = makeCard({ id: 201, level: 'royal', points: 5, cost: {} });
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      phase: 'mandatory',
+      pyramid: { ...state.pyramid, level1: [card, ...state.pyramid.level1.slice(0, 4)] },
+      royalDeck: [royalCard],
+      players: [
+        makePlayer({ crowns: 2 }),
+        makePlayer(),
+      ],
+    };
+
+    const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 141, goldUsage: {} });
+    expect(next.players[0].royalCards).toHaveLength(1);
+    expect(next.players[0].crowns).toBe(6);
+  });
+
+  test('Royal card with Token ability takes from board immediately', () => {
+    const card = makeCard({ id: 142, crowns: 3, cost: {} });
+    const royalCard = makeCard({ id: 202, level: 'royal', ability: 'Token', color: 'black', points: 3, cost: {} });
+    const state = createInitialState(false);
+    const board = new Array(25).fill(null);
+    board[5] = 'black';
+    const s: GameState = {
+      ...state,
+      board,
+      phase: 'mandatory',
+      pyramid: { ...state.pyramid, level1: [card, ...state.pyramid.level1.slice(0, 4)] },
+      royalDeck: [royalCard],
+      players: [makePlayer(), makePlayer()],
+    };
+
+    const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 142, goldUsage: {} });
+    expect(next.board[5]).toBeNull();
+    expect(next.players[0].tokens.black).toBe(1);
+  });
+});
+
+// ─── Full Game Flow: Multi-ability sequence ────────────────────────────────────
+
+describe('Multi-ability Sequences', () => {
+  test('Purchase card with Turn, then another card with ability in extra turn', () => {
+    const turnCard = makeCard({ id: 150, ability: 'Turn', cost: {} });
+    const privilegeCard = makeCard({ id: 151, ability: 'Privilege', cost: {} });
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      phase: 'mandatory',
+      privileges: 3,
+      pyramid: { ...state.pyramid, level1: [turnCard, ...state.pyramid.level1.slice(0, 4)] },
+      players: [
+        makePlayer(),
+        makePlayer(),
+      ],
+    };
+
+    // Buy Turn card
+    const next1 = reducer(s, { type: 'PURCHASE_CARD', cardId: 150, goldUsage: {} });
+    expect(next1.extraTurns).toBe(1);
+    expect(next1.phase).toBe('mandatory');
+
+    // Simulate second mandatory phase with Privilege card available
+    const next2 = {
+      ...next1,
+      pyramid: { ...next1.pyramid, level1: [privilegeCard, ...next1.pyramid.level1.slice(1)] },
+    };
+    const next3 = reducer(next2, { type: 'PURCHASE_CARD', cardId: 151, goldUsage: {} });
+    expect(next3.players[0].privileges).toBe(1);
+    expect(next3.extraTurns).toBe(0);
+  });
+});
