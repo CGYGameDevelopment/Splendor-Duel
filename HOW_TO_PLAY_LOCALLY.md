@@ -64,8 +64,54 @@ npm run test
 
 ---
 
+## 5. Play via CLI Client
+
+Each player runs the CLI client in their own terminal. Open **two terminals** (or share the session ID with a second person).
+
+```bash
+npm run dev --workspace=packages/cli-client
+```
+
+On startup it will ask for:
+1. **Server URL** — press Enter to use `ws://localhost:3001`
+2. **Your name**
+3. **Create or join** — `c` to host a new session, `j` to join an existing one
+
+The host receives a **session ID** to share with the second player. Once both are connected the game begins automatically.
+
+On your turn the CLI lists all legal moves numbered from 1. Enter the number to play it, or `q` to quit.
+
+---
+
+## 6. Manual Testing via Firefox DevTools
+
+You can interact with the WebSocket server directly from Firefox's DevTools console (`F12` → Console) without any extra tooling.
+
+**Player 1** (host):
+```js
+const ws = new WebSocket('ws://localhost:3001');
+ws.onmessage = e => console.log('←', JSON.parse(e.data));
+
+ws.send(JSON.stringify({ type: 'CREATE_SESSION', playerName: 'Alice' }));
+// ← { type: 'SESSION_CREATED', sessionId: '<uuid>', playerId: 0 }
+```
+
+**Player 2** (open a second tab and repeat in its console):
+```js
+const ws = new WebSocket('ws://localhost:3001');
+ws.onmessage = e => console.log('←', JSON.parse(e.data));
+
+ws.send(JSON.stringify({ type: 'JOIN_SESSION', sessionId: '<uuid>', playerName: 'Bob' }));
+```
+
+Once both players are connected, dispatch actions on your turn:
+```js
+ws.send(JSON.stringify({ type: 'DISPATCH_ACTION', action: { /* ... */ } }));
+```
+
+---
+
 ## Notes
 
-- The client (`packages/client`) is not yet implemented.
 - Session state is held **in memory** on the server — restarting the server clears all sessions.
-- Two players connect via WebSocket, create/join a session, then exchange game actions through the socket.
+- Rate limiting: max 20 messages per second per WebSocket connection.
