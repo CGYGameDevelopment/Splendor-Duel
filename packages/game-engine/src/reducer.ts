@@ -82,6 +82,7 @@ function endTurn(state: GameState): GameState {
       ...state,
       extraTurns: state.extraTurns - 1,
       phase: 'optional_privilege',
+      lastPurchasedCard: null,
     };
   }
 
@@ -92,6 +93,7 @@ function endTurn(state: GameState): GameState {
     currentPlayer: next,
     phase: 'optional_privilege',
     extraTurns: 0,
+    lastPurchasedCard: null,
   };
 }
 
@@ -102,7 +104,7 @@ function resolveAbility(state: GameState, card: Card): GameState {
 
   switch (card.ability) {
     case 'Turn': {
-      return { ...state, extraTurns: state.extraTurns + 1, phase: 'mandatory', pendingAbility: null };
+      return endTurn({ ...state, extraTurns: state.extraTurns + 1, pendingAbility: null });
     }
 
     case 'Privilege': {

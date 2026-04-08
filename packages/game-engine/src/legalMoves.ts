@@ -1,4 +1,4 @@
-import type { GameState, Action, TokenColor, GemColor, Card } from './types';
+import type { GameState, Action, TokenColor, GemColor, Card, TokenPool } from './types';
 import { isValidTokenLine } from './board';
 import { netCost, canAfford, GEM_COLORS, MAX_RESERVED, totalTokens, MAX_TOKENS, MAX_TOKENS_IN_LINE, TOKEN_COLORS, CARD_LEVELS } from './helpers';
 
