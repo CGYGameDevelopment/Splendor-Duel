@@ -23,64 +23,22 @@ function optionalPrivilegeMoves(state: GameState): Action[] {
   const player = state.players[state.currentPlayer];
   if (player.privileges === 0) return moves;
 
-  // Generate all subsets of board tokens up to maxPrivileges, with repetition
-  const tokenCombinationsList = tokenCombinations(state, player.privileges);
-  for (const tokens of tokenCombinationsList) {
-    moves.push({ type: 'USE_PRIVILEGE', tokens });
+  // Collect all non-gold, non-null cell indices available on the board
+  const availableIndices = state.board
+    .map((cell, i) => (cell && cell !== 'gold' ? i : -1))
+    .filter(i => i !== -1);
+
+  if (availableIndices.length === 0) return moves;
+
+  // Generate all combinations of 1..maxPrivileges distinct cell indices
+  const maxPrivileges = Math.min(player.privileges, availableIndices.length);
+  for (let len = 1; len <= maxPrivileges; len++) {
+    for (const combo of combinations(availableIndices, len)) {
+      moves.push({ type: 'USE_PRIVILEGE', indices: combo });
+    }
   }
 
   return moves;
-}
-
-/** Generate all ways to spend 1..maxPrivileges privileges on available board tokens. */
-function tokenCombinations(
-  state: GameState,
-  maxPrivileges: number
-): Partial<Record<TokenColor, number>>[] {
-  const results: Partial<Record<TokenColor, number>>[] = [];
-  const player = state.players[state.currentPlayer];
-
-  // Count each color available on board
-  const boardCounts: Partial<Record<TokenColor, number>> = {};
-  for (const cell of state.board) {
-    if (cell && cell !== 'gold') {
-      boardCounts[cell] = (boardCounts[cell] ?? 0) + 1;
-    }
-  }
-
-  const colors = Object.keys(boardCounts) as TokenColor[];
-
-  function recurse(
-    remainingPrivileges: number,
-    currentCombination: Partial<Record<TokenColor, number>>,
-    startIndex: number
-  ) {
-    if (remainingPrivileges === 0) { results.push({ ...currentCombination }); return; }
-    // Also allow using fewer than maxPrivileges
-    if (Object.keys(currentCombination).length > 0) results.push({ ...currentCombination });
-
-    for (let i = startIndex; i < colors.length; i++) {
-      const color = colors[i];
-      const used = currentCombination[color] ?? 0;
-      const available = boardCounts[color] ?? 0;
-      if (used < available) {
-        currentCombination[color] = used + 1;
-        recurse(remainingPrivileges - 1, currentCombination, i); // allow same color again
-        currentCombination[color] = used;
-        if (currentCombination[color] === 0) delete currentCombination[color];
-      }
-    }
-  }
-
-  recurse(Math.min(maxPrivileges, player.privileges), {}, 0);
-  // Deduplicate (recurse may add duplicates)
-  const seen = new Set<string>();
-  return results.filter(r => {
-    const key = JSON.stringify(r);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
 }
 
 // ─── Optional: Replenish ──────────────────────────────────────────────────────

@@ -1,4 +1,3 @@
-import { v4 as uuidv4 } from 'uuid';
 import WebSocket from 'ws';
 import { createInitialState, reducer } from '@splendor-duel/game-engine';
 import type { Action, PlayerId } from '@splendor-duel/game-engine';
@@ -15,6 +14,14 @@ interface Session {
 }
 
 const sessions = new Map<string, Session>();
+
+function generateSessionId(): string {
+  let id: string;
+  do {
+    id = String(Math.floor(Math.random() * 9000) + 1000);
+  } while (sessions.has(id));
+  return id;
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -51,7 +58,7 @@ export function createSession(playerName: string, ws: WebSocket): string | null 
     return null;
   }
   playerName = sanitized;
-  const id = uuidv4();
+  const id = generateSessionId();
   const session: Session = {
     id,
     state: createInitialState(true),

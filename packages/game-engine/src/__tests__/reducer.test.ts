@@ -206,7 +206,7 @@ describe('USE_PRIVILEGE', () => {
       players: [makePlayer({ privileges: 1 }), makePlayer()],
     };
 
-    const next = reducer(s, { type: 'USE_PRIVILEGE', tokens: { green: 1 } });
+    const next = reducer(s, { type: 'USE_PRIVILEGE', indices: [5] });
     expect(next.players[0].privileges).toBe(0);
     expect(next.players[0].tokens.green).toBe(1);
     expect(next.privileges).toBe(3);
@@ -779,7 +779,7 @@ describe('Conservation Invariants', () => {
       ...state, board, phase: 'optional_privilege', privileges: 2,
       players: [makePlayer({ privileges: 1 }), makePlayer()],
     };
-    const next = reducer(s, { type: 'USE_PRIVILEGE', tokens: { green: 1 } });
+    const next = reducer(s, { type: 'USE_PRIVILEGE', indices: [5] });
     assertConserved(s, next);
   });
 

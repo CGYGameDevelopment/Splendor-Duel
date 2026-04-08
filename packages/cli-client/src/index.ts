@@ -1,6 +1,6 @@
 import WebSocket from 'ws';
 import * as readline from 'readline';
-import { legalMoves } from '@splendor-duel/game-engine';
+import { legalMoves, adjacentCells } from '@splendor-duel/game-engine';
 import type { GameState, Action, PlayerId, Card } from '@splendor-duel/game-engine';
 
 // ─── Protocol types (mirrored from server/src/protocol.ts) ───────────────────
@@ -140,11 +140,7 @@ function displayPlayers(state: GameState): void {
     console.log(`\n${name} — ${player.prestige}pt | crowns:${player.crowns} | priv:${player.privileges}${turnMark}`);
 
     const total = totalTokens(player.tokens as { [key: string]: number });
-    if (isMe) {
-      console.log(`  Tokens (${total}): ${formatPool(player.tokens as { [key: string]: number }, true)}`);
-    } else {
-      console.log(`  Tokens: ${total} total`);
-    }
+    console.log(`  Tokens (${total}): ${formatPool(player.tokens as { [key: string]: number }, true)}`);
 
     const gems: { [key: string]: number } = {};
     for (const card of player.purchasedCards) {
@@ -194,7 +190,10 @@ function describeMove(action: Action, state: GameState): string {
     }
 
     case 'USE_PRIVILEGE': {
-      return `Use privilege(s): take ${formatPool(action.tokens as { [key: string]: number })}`;
+      const tokens = action.indices
+        .map(i => { const cell = state.board[i]; return cell ? `${abbr(cell)}[${i}]` : '?'; })
+        .join(' ');
+      return `Use privilege(s): take cells [${action.indices.join(',')}] → ${tokens}`;
     }
 
     case 'REPLENISH_BOARD':
@@ -239,18 +238,53 @@ function describeMove(action: Action, state: GameState): string {
   }
 }
 
+// ─── Token move ordering ──────────────────────────────────────────────────────
+
+/**
+ * Returns the TAKE_TOKENS moves in display order:
+ *   1. All size-3 sets.
+ *   2. Size-2 sets that are NOT a subset of any size-3 set.
+ *   3. Size-1 sets whose cell has no adjacent non-gold token on the board.
+ */
+function orderedTokenMoves(tokenMoves: Action[], board: GameState['board']): Action[] {
+  const size3 = tokenMoves.filter(m => m.type === 'TAKE_TOKENS' && m.indices.length === 3);
+  const size2 = tokenMoves.filter(m => m.type === 'TAKE_TOKENS' && m.indices.length === 2);
+  const size1 = tokenMoves.filter(m => m.type === 'TAKE_TOKENS' && m.indices.length === 1);
+
+  const indices3Sets = size3.map(m => (m as Extract<Action, { type: 'TAKE_TOKENS' }>).indices);
+
+  const filtered2 = size2.filter(m => {
+    const idxs = (m as Extract<Action, { type: 'TAKE_TOKENS' }>).indices;
+    return !indices3Sets.some(set => idxs.every(i => set.includes(i)));
+  });
+
+  const filtered1 = size1.filter(m => {
+    const [idx] = (m as Extract<Action, { type: 'TAKE_TOKENS' }>).indices;
+    return !adjacentCells(idx).some(adj => {
+      const cell = board[adj];
+      return cell !== null && cell !== undefined && cell !== 'gold';
+    });
+  });
+
+  return [...size3, ...filtered2, ...filtered1];
+}
+
 // ─── Move prompt ──────────────────────────────────────────────────────────────
 
 async function promptMove(state: GameState, ws: WebSocket): Promise<void> {
   if (awaitingInput) return;
   awaitingInput = true;
 
-  const moves = legalMoves(state);
-  if (moves.length === 0) {
+  const allMoves = legalMoves(state);
+  if (allMoves.length === 0) {
     console.log('\nNo legal moves available.');
     awaitingInput = false;
     return;
   }
+
+  const tokenMoves = allMoves.filter(m => m.type === 'TAKE_TOKENS');
+  const otherMoves = allMoves.filter(m => m.type !== 'TAKE_TOKENS');
+  const moves = [...orderedTokenMoves(tokenMoves, state.board), ...otherMoves];
 
   console.log(`\n── YOUR TURN (${state.phase}) ──`);
   console.log(`Legal moves (${moves.length}):`);

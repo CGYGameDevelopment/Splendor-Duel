@@ -99,7 +99,7 @@ export interface GameState {
 // ─── Actions ─────────────────────────────────────────────────────────────────
 
 export type Action =
-  | { type: 'USE_PRIVILEGE'; tokens: Partial<Record<TokenColor, number>> }
+  | { type: 'USE_PRIVILEGE'; indices: number[] }                // board cell indices (1 per privilege, non-gold)
   | { type: 'REPLENISH_BOARD' }
   | { type: 'TAKE_TOKENS'; indices: number[] }          // board cell indices (1–3, must be adjacent line)
   | { type: 'RESERVE_CARD'; source: 'pyramid_1' | 'pyramid_2' | 'pyramid_3' | 'deck_1' | 'deck_2' | 'deck_3' }

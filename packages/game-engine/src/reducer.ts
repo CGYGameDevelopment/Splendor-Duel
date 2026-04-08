@@ -231,30 +231,24 @@ export function reducer(state: GameState, action: Action): GameState {
 
     // ── Optional: Use Privilege ───────────────────────────────────────────────
     case 'USE_PRIVILEGE': {
-      const tokensToTake = action.tokens;
-      const totalRequested = Object.values(tokensToTake).reduce((s, v) => s + (v ?? 0), 0);
+      const { indices } = action;
+      const privilegesUsed = indices.length;
 
       // Validate: must use at least 1 privilege, can't exceed privileges held
-      if (player.privileges === 0) return state;
+      if (privilegesUsed === 0 || privilegesUsed > player.privileges) return state;
 
-      // Consume privileges (1 per token taken)
-      const privilegesUsed = totalRequested;
-      if (privilegesUsed > player.privileges) return state;
+      // Validate: no duplicate indices
+      if (new Set(indices).size !== indices.length) return state;
 
-      let bag = { ...state.bag };
       let board = [...state.board];
       let playerTokens = { ...player.tokens };
-      let tablePrivileges = state.privileges + privilegesUsed;
+      const tablePrivileges = state.privileges + privilegesUsed;
 
-      for (const [colorStr, amount] of Object.entries(tokensToTake) as [TokenColor, number][]) {
-        if (colorStr === 'gold') return state; // gold not allowed
-        for (let i = 0; i < (amount ?? 0); i++) {
-          // Take from board
-          const idx = board.findIndex(cell => cell === colorStr);
-          if (idx === -1) return state; // token not on board
-          board[idx] = null;
-          playerTokens = { ...playerTokens, [colorStr]: playerTokens[colorStr] + 1 };
-        }
+      for (const idx of indices) {
+        const cell = board[idx];
+        if (!cell || cell === 'gold') return state; // cell must have a non-gold token
+        board[idx] = null;
+        playerTokens = { ...playerTokens, [cell]: playerTokens[cell] + 1 };
       }
 
       const newPrivileges = player.privileges - privilegesUsed;
