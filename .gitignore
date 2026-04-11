@@ -3,3 +3,20 @@ node_modules/
 *.tsbuildinfo
 .env
 .claude/
+
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+
+# AI trainer
+packages/ai-trainer/checkpoints/
+
