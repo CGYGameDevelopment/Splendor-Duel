@@ -289,7 +289,7 @@ export function reducer(state: GameState, action: Action): GameState {
 
       // Penalty: PENALTY_SAME_COLOR_COUNT same color or PENALTY_PEARL_COUNT pearls → opponent gets 1 privilege
       const allSame = taken.length === PENALTY_SAME_COLOR_COUNT && taken.every(c => c === taken[0]);
-      const twoPearls = taken.length === PENALTY_PEARL_COUNT && taken.every(c => c === 'pearl');
+      const twoPearls = taken.filter(c => c === 'pearl').length >= PENALTY_PEARL_COUNT;
       let newState = updatePlayer(state, cp, { tokens: playerTokens });
       newState = { ...newState, board };
 

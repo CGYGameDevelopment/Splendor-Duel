@@ -255,6 +255,10 @@ function orderedTokenMoves(tokenMoves: Action[], board: GameState['board']): Act
 
   const filtered2 = size2.filter(m => {
     const idxs = (m as Extract<Action, { type: 'TAKE_TOKENS' }>).indices;
+    // Always keep the 2-pearl move — it triggers a distinct rule (opponent gains a privilege)
+    // and must remain selectable even when it's a subset of a size-3 line.
+    const isTwoPearls = idxs.every(i => board[i] === 'pearl');
+    if (isTwoPearls) return true;
     return !indices3Sets.some(set => idxs.every(i => set.includes(i)));
   });
 

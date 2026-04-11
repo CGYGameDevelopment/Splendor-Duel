@@ -62,6 +62,20 @@ describe('TAKE_TOKENS', () => {
     expect(totalPrivileges(next)).toBe(3);
   });
 
+  test('taking 2 pearls alongside a third token still grants opponent a privilege', () => {
+    const state = createInitialState(false);
+    const board = new Array(25).fill(null);
+    board[0] = 'pearl'; board[1] = 'pearl'; board[2] = 'red';
+    const s: GameState = {
+      ...state, board, phase: 'mandatory',
+      privileges: 3, players: [makePlayer(), makePlayer()],
+    };
+
+    const next = reducer(s, { type: 'TAKE_TOKENS', indices: [0, 1, 2] });
+    expect(next.players[1].privileges).toBe(1);
+    expect(totalPrivileges(next)).toBe(3);
+  });
+
   test('non-line selection is rejected', () => {
     const state = createInitialState(false);
     const board = new Array(25).fill(null);
