@@ -428,7 +428,11 @@ export function reducer(state: GameState, action: Action): GameState {
       const targetCard = player.purchasedCards.find(c => c.id === targetCardId);
 
       if (!bonusCard || !targetCard) return state;
+      if (bonusCard.id === targetCard.id) return state;
       if (targetCard.color === 'joker' || targetCard.color === 'points') return state;
+      if (targetCard.bonus === 0) return state;
+      if (targetCard.overlappingCardId !== null) return state;
+      if (bonusCard.overlappingCardId !== null) return state;
 
       const assignedColor = targetCard.color as GemColor;
       const updatedCards = player.purchasedCards.map(c => {
