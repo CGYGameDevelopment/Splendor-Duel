@@ -64,6 +64,18 @@ router.post('/legal-moves', (req, res) => {
   res.json({ legalMoves: legalMoves(state) });
 });
 
+// POST /legal-moves-from-state
+// Body: { state: GameState }
+// Returns: { legalMoves }
+router.post('/legal-moves-from-state', (req, res) => {
+  const { state } = req.body;
+  if (!state) {
+    res.status(400).json({ error: 'Missing state in request body' });
+    return;
+  }
+  res.json({ legalMoves: legalMoves(state) });
+});
+
 // DELETE /session/:id
 router.delete('/session/:id', (req, res) => {
   store.remove(req.params.id);

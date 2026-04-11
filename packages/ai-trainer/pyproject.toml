@@ -12,6 +12,7 @@ dependencies = [
     "requests>=2.32",
     "numpy>=1.26",
     "typer>=0.12",
+    "websockets>=12",
 ]
 
 [project.optional-dependencies]
@@ -19,6 +20,7 @@ dev = ["pytest>=8", "black", "ruff"]
 
 [project.scripts]
 train = "ai_trainer.train:app"
+play-vs-ai = "ai_trainer.bot_client:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ai_trainer"]
