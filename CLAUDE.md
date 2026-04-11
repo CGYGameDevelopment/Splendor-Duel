@@ -10,6 +10,9 @@ A TypeScript monorepo implementing the **Splendor Duel** board game as a persona
 |---|---|
 | `packages/game-engine` | Core game logic: state types, reducer, legal moves, board helpers |
 | `packages/server` | Express + WebSocket server for multiplayer sessions |
+| `packages/cli-client` | Terminal-based interactive client for local play |
+| `packages/game-sim` | HTTP server wrapping game-engine for Python AI training |
+| `packages/ai-trainer` | Python RL training pipeline (PPO, self-play, evaluation) |
 | `packages/client` | React + Vite frontend (not actively developed yet) |
 
 Build all packages: `npm run build`
@@ -17,7 +20,7 @@ Run all tests: `npm run test`
 
 ## Active Development Focus
 
-Only `game-engine` and `server` are being actively worked on. **Do not touch the client** until the game engine is complete and solid.
+Only `game-engine` and `server` are being actively worked on. `cli-client`, `game-sim`, and `ai-trainer` exist and function. **Do not touch the client** until the game engine is complete and solid.
 
 ## Architecture Principles
 

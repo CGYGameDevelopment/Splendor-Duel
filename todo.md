@@ -1,7 +1,7 @@
 ﻿# Splendor Duel - Development TODO
 
 ## Current Status
-**Last Updated**: 2026-04-08
+**Last Updated**: 2026-04-11
 
 
 ---
@@ -51,12 +51,33 @@ Splendor Duel (monorepo)
 │   │   ├── initialState.ts   [Initial game state factory]
 │   │   ├── index.ts          [Package entry point]
 │   │   ├── data/cards.json   [Card definitions]
-│   │   └── __tests__/        [74 tests: all passing]
+│   │   └── __tests__/        [75 tests: all passing]
 │   │
 │   ├── server/               [Express + WebSocket, ~50% complete]
 │   │   ├── index.ts          [HTTP & WebSocket server]
 │   │   ├── sessionManager.ts [Game session handling]
 │   │   └── protocol.ts       [Message types]
+│   │
+│   ├── cli-client/           [Terminal interactive client, functional]
+│   │   └── index.ts          [CLI entry point]
+│   │
+│   ├── game-sim/             [HTTP server wrapping game-engine for AI, functional]
+│   │   ├── index.ts          [Server entry point, listens on :3002]
+│   │   ├── routes.ts         [REST endpoints for Python sim client]
+│   │   └── simStore.ts       [In-memory game session store]
+│   │
+│   ├── ai-trainer/           [Python RL pipeline, functional]
+│   │   └── src/ai_trainer/
+│   │       ├── sim_client.py     [HTTP client for game-sim]
+│   │       ├── action_space.py   [617-action vocabulary + masking]
+│   │       ├── state_encoder.py  [GameState → float[858] tensor]
+│   │       ├── env.py            [gymnasium.Env wrapper]
+│   │       ├── model.py          [ActorCriticNet (policy + value)]
+│   │       ├── random_agent.py   [Baseline random agent]
+│   │       ├── self_play.py      [Episode collection]
+│   │       ├── ppo.py            [PPO update loop]
+│   │       ├── evaluate.py       [Win-rate vs random agent]
+│   │       └── train.py          [CLI entry point]
 │   │
 │   └── client/               [React + Vite, 0% — not yet started]
 │       └── package.json      [Dependencies configured]
