@@ -77,7 +77,7 @@ def _encode_card(card: dict | None, out: np.ndarray, offset: int) -> None:
     # index 7 = absent — left 0 since card is present
     out[offset + 8] = 1.0  # present bit
     out[offset + 9] = card.get("points", 0) / 6.0
-    out[offset + 10] = card.get("bonus", 1) / 2.0
+    out[offset + 10] = card.get("bonus", 0) / 2.0
 
     ability = card.get("ability")
     if ability and ability in ABILITIES:
@@ -132,7 +132,7 @@ def _encode_player(player: dict, out: np.ndarray, offset: int) -> None:
             base = offset + 99 + i * 3
             out[base] = r.get("points", 0) / 6.0
             out[base + 1] = r.get("crowns", 0) / 3.0
-            out[base + 2] = r.get("bonus", 0) / 2.0
+            out[base + 2] = r.get("prestige", 0) / 20.0
 
 
 # ── Main encode function ──────────────────────────────────────────────────────
@@ -143,11 +143,11 @@ def encode(state: dict) -> np.ndarray:
     current_player_idx: int = state.get("currentPlayer", 0)
 
     # Board: 25 cells × 8
+    # The game state serialises board cells as plain strings (e.g. "black") or null.
     board = state.get("board", [])
     for cell_idx, cell in enumerate(board[:25]):
-        token_color = cell.get("token") if isinstance(cell, dict) else None
-        if token_color and token_color in TOKEN_COLORS:
-            out[cell_idx * 8 + TOKEN_COLORS.index(token_color)] = 1.0
+        if isinstance(cell, str) and cell in TOKEN_COLORS:
+            out[cell_idx * 8 + TOKEN_COLORS.index(cell)] = 1.0
         else:
             out[cell_idx * 8 + 7] = 1.0  # empty
 

@@ -8,6 +8,7 @@ Each step's info dict contains:
   legal_mask: np.ndarray[3677, bool]  — True at each legal action index
   state:      dict                   — raw GameState from the server
   legal_moves: list[dict]            — raw legal moves from the server
+  winner:     int | None             — winning player index, or None if game not over
 """
 
 from __future__ import annotations
@@ -39,6 +40,7 @@ class SplendorDuelEnv(gym.Env):
         self._session_id: str | None = None
         self._legal_moves: list[dict] = []
         self._state: dict = {}
+        self._winner: int | None = None
 
     # ── Core API ──────────────────────────────────────────────────────────────
 
@@ -57,6 +59,7 @@ class SplendorDuelEnv(gym.Env):
         self._session_id = result["sessionId"]
         self._state = result["state"]
         self._legal_moves = result["legalMoves"]
+        self._winner = None
 
         obs = encode(self._state)
         info = self._make_info()
@@ -78,14 +81,15 @@ class SplendorDuelEnv(gym.Env):
 
         done: bool = result["done"]
         winner: int | None = result["winner"]
+        self._winner = winner
         current_player: int = self._state.get("currentPlayer", 0)
 
         reward = 0.0
         if done and winner is not None:
-            # Reward from the perspective of the player who just moved
-            # (currentPlayer has already advanced to the next player after game_over,
-            #  so the player who won is the one whose turn it was before the move)
-            acting_player = 1 - current_player if done else current_player
+            # Reward from the perspective of the player who just moved.
+            # currentPlayer has already advanced to the next player after game over,
+            # so the player who just moved is 1 - current_player.
+            acting_player = 1 - current_player
             reward = 1.0 if winner == acting_player else -1.0
 
         obs = encode(self._state)
@@ -104,4 +108,5 @@ class SplendorDuelEnv(gym.Env):
             "legal_mask": build_legal_mask(self._legal_moves),
             "state": self._state,
             "legal_moves": self._legal_moves,
+            "winner": self._winner,
         }

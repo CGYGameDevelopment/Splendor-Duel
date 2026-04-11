@@ -85,17 +85,18 @@ def update(
 
         advantages, returns = _compute_gae(rewards, values, dones, config.gamma, config.lam)
 
-        # Normalise advantages within this episode
-        adv_arr = np.array(advantages, dtype=np.float32)
-        adv_arr = (adv_arr - adv_arr.mean()) / (adv_arr.std() + 1e-8)
-
         for i, t in enumerate(ep.transitions):
             all_obs.append(t.obs)
             all_actions.append(t.action)
             all_log_probs_old.append(t.log_prob)
-            all_advantages.append(adv_arr[i])
+            all_advantages.append(advantages[i])
             all_returns.append(returns[i])
             all_masks.append(t.legal_mask)
+
+    # Normalise advantages globally across the entire rollout batch
+    adv_arr = np.array(all_advantages, dtype=np.float32)
+    adv_arr = (adv_arr - adv_arr.mean()) / (adv_arr.std() + 1e-8)
+    all_advantages = adv_arr.tolist()
 
     obs_t = torch.tensor(np.array(all_obs), dtype=torch.float32, device=device)
     actions_t = torch.tensor(all_actions, dtype=torch.long, device=device)

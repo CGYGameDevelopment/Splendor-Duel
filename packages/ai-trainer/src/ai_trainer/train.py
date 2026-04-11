@@ -8,14 +8,16 @@ Options:
   --iterations INT          Number of training iterations  [default: 500]
   --episodes-per-iter INT   Self-play episodes per iteration  [default: 20]
   --eval-every INT          Evaluate vs random every N iterations  [default: 50]
+  --checkpoint-every INT    Save latest checkpoint every N iterations  [default: 10]
   --sim-url TEXT            game-sim server URL  [default: http://127.0.0.1:3002]
   --checkpoint-dir PATH     Directory for saving model checkpoints  [default: checkpoints]
   --lr FLOAT                Learning rate  [default: 3e-4]
+  --resume PATH             Resume training from a checkpoint file
 """
 
 from __future__ import annotations
 
-import os
+import csv
 from pathlib import Path
 
 import torch
@@ -31,14 +33,33 @@ from .evaluate import win_rate_vs_random
 app = typer.Typer(add_completion=False)
 
 
+def _save_checkpoint(
+    path: Path,
+    iteration: int,
+    model: ActorCriticNet,
+    optimizer: optim.Optimizer,
+    win_rate: float | None = None,
+) -> None:
+    payload: dict = {
+        "iteration": iteration,
+        "model_state": model.state_dict(),
+        "optimizer_state": optimizer.state_dict(),
+    }
+    if win_rate is not None:
+        payload["win_rate"] = win_rate
+    torch.save(payload, path)
+
+
 @app.command()
 def main(
     iterations: int = typer.Option(500, help="Number of training iterations"),
     episodes_per_iter: int = typer.Option(20, help="Self-play episodes per iteration"),
     eval_every: int = typer.Option(50, help="Evaluate vs random every N iterations"),
+    checkpoint_every: int = typer.Option(10, help="Save latest checkpoint every N iterations"),
     sim_url: str = typer.Option("http://127.0.0.1:3002", help="game-sim server URL"),
     checkpoint_dir: Path = typer.Option(Path("checkpoints"), help="Checkpoint directory"),
     lr: float = typer.Option(3e-4, help="Learning rate"),
+    resume: Path | None = typer.Option(None, help="Resume from checkpoint file"),
 ) -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     typer.echo(f"Training on {device}")
@@ -57,28 +78,61 @@ def main(
     optimizer = optim.Adam(model.parameters(), lr=lr)
     config = PPOConfig()
 
+    start_iteration = 1
+    if resume is not None:
+        if not resume.exists():
+            typer.echo(f"ERROR: checkpoint not found: {resume}", err=True)
+            raise typer.Exit(code=1)
+        ckpt = torch.load(resume, map_location=device, weights_only=True)
+        model.load_state_dict(ckpt["model_state"])
+        optimizer.load_state_dict(ckpt["optimizer_state"])
+        start_iteration = ckpt["iteration"] + 1
+        typer.echo(f"Resumed from {resume} (iteration {ckpt['iteration']})")
+
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    log_path = checkpoint_dir / "training_log.csv"
+    log_existed = log_path.exists()
 
-    for iteration in range(1, iterations + 1):
-        episodes = collect_episodes(model, env, episodes_per_iter, device=device)
-        losses = update(model, optimizer, episodes, config=config, device=device)
+    with open(log_path, "a", newline="") as log_file:
+        writer = csv.writer(log_file)
+        if not log_existed:
+            writer.writerow(["iteration", "transitions", "policy_loss", "value_loss", "entropy", "win_rate"])
 
-        n_transitions = sum(len(ep) for ep in episodes)
-        typer.echo(
-            f"[{iteration:4d}/{iterations}] "
-            f"transitions={n_transitions:5d}  "
-            f"policy_loss={losses['policy_loss']:.4f}  "
-            f"value_loss={losses['value_loss']:.4f}  "
-            f"entropy={losses['entropy']:.4f}"
-        )
+        for iteration in range(start_iteration, start_iteration + iterations):
+            episodes = collect_episodes(model, env, episodes_per_iter, device=device)
+            losses = update(model, optimizer, episodes, config=config, device=device)
 
-        if iteration % eval_every == 0:
-            win_rate = win_rate_vs_random(model, env, n_games=100, device=device)
-            typer.echo(f"  >> Win rate vs random: {win_rate:.1%}")
+            n_transitions = sum(len(ep) for ep in episodes)
+            typer.echo(
+                f"[{iteration:4d}] "
+                f"transitions={n_transitions:5d}  "
+                f"policy_loss={losses['policy_loss']:.4f}  "
+                f"value_loss={losses['value_loss']:.4f}  "
+                f"entropy={losses['entropy']:.4f}"
+            )
 
-            ckpt_path = checkpoint_dir / f"model_iter{iteration:04d}_wr{win_rate:.2f}.pt"
-            torch.save({"iteration": iteration, "model_state": model.state_dict()}, ckpt_path)
-            typer.echo(f"  >> Checkpoint saved: {ckpt_path}")
+            win_rate: float | None = None
+
+            if iteration % eval_every == 0:
+                win_rate = win_rate_vs_random(model, env, n_games=100, device=device)
+                typer.echo(f"  >> Win rate vs random: {win_rate:.1%}")
+
+                ckpt_path = checkpoint_dir / f"model_iter{iteration:04d}_wr{win_rate:.2f}.pt"
+                _save_checkpoint(ckpt_path, iteration, model, optimizer, win_rate)
+                typer.echo(f"  >> Checkpoint saved: {ckpt_path}")
+
+            elif iteration % checkpoint_every == 0:
+                _save_checkpoint(checkpoint_dir / "latest.pt", iteration, model, optimizer)
+
+            writer.writerow([
+                iteration,
+                n_transitions,
+                f"{losses['policy_loss']:.6f}",
+                f"{losses['value_loss']:.6f}",
+                f"{losses['entropy']:.6f}",
+                f"{win_rate:.4f}" if win_rate is not None else "",
+            ])
+            log_file.flush()
 
     env.close()
     typer.echo("Training complete.")

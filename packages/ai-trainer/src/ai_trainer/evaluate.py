@@ -20,23 +20,21 @@ def win_rate_vs_random(
     device: torch.device | None = None,
 ) -> float:
     """
-    Play n_games with the model as player 0 and a random agent as player 1.
+    Play n_games against a random agent and return the model's win rate.
 
-    The env's current player perspective always starts at player 0
-    (secondPlayerGetsPrivilege=True gives player 1 one privilege to compensate).
-    We track which player the model controls across turns using the raw state.
-
-    Returns the fraction of games won by the model.
+    To eliminate first-player bias the model alternates sides: it plays as
+    player 0 for the first half of the games and player 1 for the second half.
     """
     if device is None:
         device = next(model.parameters()).device
 
     model.eval()
     random_agent = RandomAgent()
-    model_player = 0  # model always plays as player 0
     wins = 0
 
-    for _ in range(n_games):
+    for game_idx in range(n_games):
+        model_player = game_idx % 2  # alternate sides each game
+
         obs_np, info = env.reset()
         done = False
 
@@ -55,8 +53,7 @@ def win_rate_vs_random(
 
             obs_np, _, done, _, info = env.step(action)
 
-        winner = info["state"].get("winner")
-        if winner == model_player:
+        if info["winner"] == model_player:
             wins += 1
 
     return wins / n_games

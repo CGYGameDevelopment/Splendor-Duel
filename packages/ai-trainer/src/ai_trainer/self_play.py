@@ -3,6 +3,9 @@ Self-play data collection.
 
 Both sides of each game use the same model. The collected transitions
 are used as training data for PPO.
+
+MAX_STEPS_PER_EPISODE caps each game to guard against infinite loops caused
+by bugs in the game engine or an adversarial action-masking edge case.
 """
 
 from __future__ import annotations
@@ -14,6 +17,8 @@ import torch
 
 from .env import SplendorDuelEnv
 from .model import ActorCriticNet
+
+MAX_STEPS_PER_EPISODE = 2_000
 
 
 @dataclass
@@ -57,13 +62,16 @@ def collect_episodes(
         episode = Episode()
         done = False
 
-        while not done:
+        for _ in range(MAX_STEPS_PER_EPISODE):
+            if done:
+                break
             obs_t = torch.tensor(obs_np, dtype=torch.float32, device=device).unsqueeze(0)
             mask_np = info["legal_mask"].copy()  # mask for the current state
             mask_t = torch.tensor(mask_np, dtype=torch.bool, device=device).unsqueeze(0)
 
-            dist = model.masked_policy(obs_t, mask_t)
-            _, value_t = model(obs_t)
+            logits, value_t = model(obs_t)
+            logits_masked = logits.masked_fill(~mask_t, float("-inf"))
+            dist = torch.distributions.Categorical(logits=logits_masked)
 
             action = dist.sample()
             log_prob = dist.log_prob(action)

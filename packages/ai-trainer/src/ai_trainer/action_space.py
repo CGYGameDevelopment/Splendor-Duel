@@ -120,7 +120,7 @@ def action_to_index(action: dict) -> int | None:
     t = action.get("type")
 
     if t == "TAKE_TOKENS":
-        key = tuple(sorted(action["indices"]))
+        key = tuple(sorted(action.get("indices", [])))
         idx = LINE_TO_IDX.get(key)
         return None if idx is None else OFFSET_TAKE_TOKENS + idx
 
@@ -144,7 +144,7 @@ def action_to_index(action: dict) -> int | None:
             return OFFSET_PLACE_BONUS + (target_id - 1)
 
     if t == "USE_PRIVILEGE":
-        key = tuple(sorted(action["indices"]))
+        key = tuple(sorted(action.get("indices", [])))
         idx = LINE_TO_IDX.get(key)
         return None if idx is None else OFFSET_USE_PRIVILEGE + idx
 

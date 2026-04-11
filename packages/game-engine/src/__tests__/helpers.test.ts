@@ -1,43 +1,21 @@
-import { netCost, canAfford, checkVictory, playerBonuses, totalTokens, emptyPool } from '../helpers';
-import type { Card, PlayerState } from '../types';
-
-function makeCard(overrides: Partial<Card> = {}): Card {
-  return {
-    id: 1, level: 1, color: 'black', points: 0, bonus: 1,
-    ability: null, crowns: 0, cost: {}, assignedColor: null, overlappingCardId: null,
-    ...overrides,
-  };
-}
-
-function makePlayer(overrides: Partial<PlayerState> = {}): PlayerState {
-  return {
-    tokens: emptyPool(),
-    purchasedCards: [],
-    reservedCards: [],
-    privileges: 0,
-    crowns: 0,
-    prestige: 0,
-    royalCards: [],
-    ...overrides,
-  };
-}
+import { netCost, canAfford, checkVictory, totalTokens, emptyPool } from '../helpers';
+import { makeCard, makePlayer } from './fixtures';
 
 describe('netCost', () => {
-  test('no bonuses — returns full cost', () => {
+  it('returns full cost when player has no bonuses', () => {
     const card = makeCard({ cost: { black: 2, red: 3 } });
     const player = makePlayer();
     expect(netCost(card, player)).toEqual({ black: 2, red: 3 });
   });
 
-  test('bonus reduces cost, floor at 0', () => {
+  it('subtracts matching bonuses from cost', () => {
     const card = makeCard({ cost: { black: 2, red: 3 } });
     const purchased = makeCard({ id: 2, color: 'black', bonus: 2, cost: {} });
     const player = makePlayer({ purchasedCards: [purchased] });
-    // 2 black bonuses covers all 2 black cost
     expect(netCost(card, player)).toEqual({ red: 3 });
   });
 
-  test('excess bonus does not go negative', () => {
+  it('floors cost at 0 when bonus exceeds requirement', () => {
     const card = makeCard({ cost: { blue: 1 } });
     const purchased = makeCard({ id: 2, color: 'blue', bonus: 3, cost: {} });
     const player = makePlayer({ purchasedCards: [purchased] });
@@ -46,25 +24,25 @@ describe('netCost', () => {
 });
 
 describe('canAfford', () => {
-  test('player with exact tokens can afford', () => {
+  it('returns true when player has exact tokens for cost', () => {
     const card = makeCard({ cost: { black: 2 } });
     const player = makePlayer({ tokens: { ...emptyPool(), black: 2 } });
     expect(canAfford(card, player)).toBe(true);
   });
 
-  test('player without enough tokens cannot afford', () => {
+  it('returns false when player has insufficient tokens', () => {
     const card = makeCard({ cost: { black: 3 } });
     const player = makePlayer({ tokens: { ...emptyPool(), black: 2 } });
     expect(canAfford(card, player)).toBe(false);
   });
 
-  test('gold fills the gap', () => {
+  it('returns true when gold fills the remaining gap', () => {
     const card = makeCard({ cost: { black: 3 } });
     const player = makePlayer({ tokens: { ...emptyPool(), black: 2, gold: 1 } });
     expect(canAfford(card, player, { black: 1 })).toBe(true);
   });
 
-  test('cannot afford if gold allocation exceeds gold held', () => {
+  it('returns false when gold allocation exceeds gold held', () => {
     const card = makeCard({ cost: { black: 3 } });
     const player = makePlayer({ tokens: { ...emptyPool(), black: 2, gold: 0 } });
     expect(canAfford(card, player, { black: 1 })).toBe(false);
@@ -72,22 +50,22 @@ describe('canAfford', () => {
 });
 
 describe('checkVictory', () => {
-  test('prestige win at 20', () => {
+  it('returns prestige when player reaches 20 prestige', () => {
     const player = makePlayer({ prestige: 20 });
     expect(checkVictory(player)).toBe('prestige');
   });
 
-  test('no win below 20 prestige', () => {
+  it('returns null below 20 prestige with no other win condition', () => {
     const player = makePlayer({ prestige: 19 });
     expect(checkVictory(player)).toBeNull();
   });
 
-  test('crowns win at 10', () => {
+  it('returns crowns when player reaches 10 crowns', () => {
     const player = makePlayer({ crowns: 10 });
     expect(checkVictory(player)).toBe('crowns');
   });
 
-  test('color prestige win — 10 points of same color', () => {
+  it('returns color_prestige when a single color accumulates 10 points', () => {
     const cards = [
       makeCard({ id: 1, color: 'red', points: 5 }),
       makeCard({ id: 2, color: 'red', points: 5 }),
@@ -96,7 +74,7 @@ describe('checkVictory', () => {
     expect(checkVictory(player)).toBe('color_prestige');
   });
 
-  test('color prestige — joker uses assignedColor', () => {
+  it('counts joker card points under its assignedColor for color_prestige', () => {
     const redCard = makeCard({ id: 1, color: 'red', points: 7 });
     const jokerCard = makeCard({ id: 2, color: 'joker', points: 3, assignedColor: 'red' });
     const player = makePlayer({ purchasedCards: [redCard, jokerCard] });
@@ -105,7 +83,7 @@ describe('checkVictory', () => {
 });
 
 describe('totalTokens', () => {
-  test('sums all token counts', () => {
+  it('sums all token counts across every color', () => {
     const pool = { ...emptyPool(), black: 3, gold: 2, pearl: 1 };
     expect(totalTokens(pool)).toBe(6);
   });
