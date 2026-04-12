@@ -20,7 +20,7 @@ export function legalMoves(state: GameState): Action[] {
 // ─── Optional: Use Privilege ──────────────────────────────────────────────────
 
 function optionalPrivilegeMoves(state: GameState): Action[] {
-  const moves: Action[] = [{ type: 'END_OPTIONAL_PHASE' }];
+  const moves: Action[] = [{ type: 'END_OPTIONAL_PHASE' }, { type: 'SKIP_TO_MANDATORY' }];
   const player = state.players[state.currentPlayer];
   if (player.privileges === 0) return moves;
 
@@ -45,7 +45,7 @@ function optionalPrivilegeMoves(state: GameState): Action[] {
 // ─── Optional: Replenish ──────────────────────────────────────────────────────
 
 function optionalReplenishMoves(state: GameState): Action[] {
-  const moves: Action[] = [{ type: 'END_OPTIONAL_PHASE' }];
+  const moves: Action[] = [{ type: 'END_OPTIONAL_PHASE' }, { type: 'SKIP_TO_MANDATORY' }];
   // Can only replenish if bag is non-empty
   if (Object.values(state.bag).some(v => v > 0)) {
     moves.push({ type: 'REPLENISH_BOARD' });
@@ -224,10 +224,11 @@ function resolveAbilityMoves(state: GameState): Action[] {
   if (!card) return [];
 
   if (state.pendingAbility === 'Token') {
-    if (!card.color || card.color === 'wild') return [{ type: 'END_OPTIONAL_PHASE' }];
+    // resolveAbility() only enters resolve_ability when card.color is a gem color
+    // and a matching token exists on the board, so the colorless/no-token cases
+    // are unreachable here. Enumerate the valid target indices directly.
     const color = card.color as TokenColor;
     const indices = state.board.reduce<number[]>((acc, c, i) => { if (c === color) acc.push(i); return acc; }, []);
-    if (indices.length === 0) return [{ type: 'END_OPTIONAL_PHASE' }]; // auto-skipped in reducer, but guard
     return indices.map(index => ({ type: 'TAKE_TOKEN_FROM_BOARD', index }) as Action);
   }
 

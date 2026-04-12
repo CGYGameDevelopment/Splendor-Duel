@@ -102,12 +102,13 @@ export interface GameState {
 // ─── Actions ─────────────────────────────────────────────────────────────────
 
 export type Action =
-  | { type: 'END_OPTIONAL_PHASE' }                            // skip optional phase
+  | { type: 'END_OPTIONAL_PHASE' }                            // advance one optional phase
+  | { type: 'SKIP_TO_MANDATORY' }                             // skip all remaining optional phases
   | { type: 'USE_PRIVILEGE'; indices: number[] }              // board cell indices (1 per privilege, non-gold)
   | { type: 'REPLENISH_BOARD' }
   | { type: 'TAKE_TOKENS'; indices: number[] }                // board cell indices (1–3, must be adjacent line)
   | { type: 'RESERVE_CARD_FROM_PYRAMID'; cardId: number }
-  | { type: 'RESERVE_CARD'; source: 'pyramid_1' | 'pyramid_2' | 'pyramid_3' | 'deck_1' | 'deck_2' | 'deck_3' }
+  | { type: 'RESERVE_CARD'; source: 'deck_1' | 'deck_2' | 'deck_3' }
   | { type: 'PURCHASE_CARD'; cardId: number; goldUsage: Partial<Record<GemColor | 'pearl', number>>; wildColor?: GemColor }
   | { type: 'CHOOSE_ROYAL_CARD'; cardId: number }             // choose a royal card after crown milestone
   | { type: 'TAKE_TOKEN_FROM_BOARD'; index: number }          // Token ability resolution

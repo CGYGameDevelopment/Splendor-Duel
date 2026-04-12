@@ -200,7 +200,7 @@ export function checkVictory(player: PlayerState): 'prestige' | 'crowns' | 'colo
   if (player.prestige >= PRESTIGE_WIN) return 'prestige';
   if (player.crowns >= CROWNS_WIN) return 'crowns';
 
-  // Check prestige by color
+  // Check prestige by color (purchasedCards only — royal cards have no gem color).
   const byColor: Partial<Record<GemColor, number>> = {};
   for (const card of player.purchasedCards) {
     const color = effectiveCardColor(card);

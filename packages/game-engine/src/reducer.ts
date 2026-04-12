@@ -203,8 +203,16 @@ export function reducer(state: GameState, action: Action): GameState {
       return state;
     }
 
+    case 'SKIP_TO_MANDATORY': {
+      if (state.phase === 'optional_privilege' || state.phase === 'optional_replenish') {
+        return { ...state, phase: 'mandatory' };
+      }
+      return state;
+    }
+
     // ── Optional: Use Privilege ───────────────────────────────────────────────
     case 'USE_PRIVILEGE': {
+      if (state.phase !== 'optional_privilege') return state;
       const { indices } = action;
       const privilegesUsed = indices.length;
 
@@ -235,6 +243,7 @@ export function reducer(state: GameState, action: Action): GameState {
 
     // ── Optional: Replenish Board ─────────────────────────────────────────────
     case 'REPLENISH_BOARD': {
+      if (state.phase !== 'optional_replenish') return state;
       if (totalTokens(state.bag) === 0) return state;
       let newState = replenishBoard(state);
       // Opponent gets 1 privilege as penalty
@@ -246,6 +255,7 @@ export function reducer(state: GameState, action: Action): GameState {
 
     // ── Mandatory: Take Tokens ────────────────────────────────────────────────
     case 'TAKE_TOKENS': {
+      if (state.phase !== 'mandatory') return state;
       const { indices } = action;
       if (!isValidTokenLine(indices)) return state;
 
@@ -278,6 +288,7 @@ export function reducer(state: GameState, action: Action): GameState {
 
     // ── Mandatory: Reserve Card (from pyramid by id) ──────────────────────────
     case 'RESERVE_CARD_FROM_PYRAMID': {
+      if (state.phase !== 'mandatory') return state;
       if (player.reservedCards.length >= MAX_RESERVED) return state;
 
       const board = [...state.board];
@@ -306,6 +317,7 @@ export function reducer(state: GameState, action: Action): GameState {
 
     // ── Mandatory: Reserve Card (from deck top) ───────────────────────────────
     case 'RESERVE_CARD': {
+      if (state.phase !== 'mandatory') return state;
       if (player.reservedCards.length >= MAX_RESERVED) return state;
 
       const board = [...state.board];
@@ -331,6 +343,7 @@ export function reducer(state: GameState, action: Action): GameState {
 
     // ── Mandatory: Purchase Card ──────────────────────────────────────────────
     case 'PURCHASE_CARD': {
+      if (state.phase !== 'mandatory') return state;
       const { cardId, goldUsage, wildColor } = action;
 
       // Find card in pyramid or reserve
@@ -406,6 +419,7 @@ export function reducer(state: GameState, action: Action): GameState {
 
     // ── Choose Royal Card (crown milestone) ──────────────────────────────────
     case 'CHOOSE_ROYAL_CARD': {
+      if (state.phase !== 'choose_royal') return state;
       const royalCard = state.royalDeck.find(c => c.id === action.cardId);
       if (!royalCard) return state;
 
@@ -423,6 +437,7 @@ export function reducer(state: GameState, action: Action): GameState {
 
     // ── Ability: Assign Wild card color from target ───────────────────────────
     case 'PLACE_WILD_CARD': {
+      if (state.phase !== 'assign_wild') return state;
       const { wildCardId, targetCardId } = action;
       const wildCard = player.purchasedCards.find(c => c.id === wildCardId);
       const targetCard = player.purchasedCards.find(c => c.id === targetCardId);
@@ -456,6 +471,7 @@ export function reducer(state: GameState, action: Action): GameState {
 
     // ── Ability: Token — take 1 token of card's color from board ─────────────
     case 'TAKE_TOKEN_FROM_BOARD': {
+      if (state.phase !== 'resolve_ability') return state;
       const { index } = action;
       const card = state.lastPurchasedCard;
       if (!card) return state;
@@ -474,6 +490,7 @@ export function reducer(state: GameState, action: Action): GameState {
 
     // ── Ability: Take — take 1 gem/pearl from opponent ────────────────────────
     case 'TAKE_TOKEN_FROM_OPPONENT': {
+      if (state.phase !== 'resolve_ability') return state;
       const { color } = action;
       if (color === 'gold') return state;
 
@@ -493,6 +510,7 @@ export function reducer(state: GameState, action: Action): GameState {
 
     // ── Discard tokens ────────────────────────────────────────────────────────
     case 'DISCARD_TOKENS': {
+      if (state.phase !== 'discard') return state;
       let playerTokens = { ...player.tokens };
       let bag = { ...state.bag };
 
