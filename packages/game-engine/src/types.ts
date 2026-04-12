@@ -69,6 +69,7 @@ export type Phase =
   | 'optional_privilege'      // may use privileges
   | 'optional_replenish'      // may replenish board
   | 'mandatory'               // must take tokens | reserve | purchase
+  | 'choose_royal'            // must choose a royal card after hitting a crown milestone
   | 'resolve_ability'         // resolving a card ability (Turn, Token, Take, etc.)
   | 'place_bonus'             // choosing which card a Bonus card overlaps
   | 'discard'                 // must discard down to 10 tokens
@@ -88,6 +89,8 @@ export interface GameState {
   phase: Phase;
   // When true, endTurn repeats the current player's turn instead of switching
   repeatTurn: boolean;
+  // Set when a crown milestone is crossed — player must choose a royal card after ability resolution
+  pendingCrownCheck: boolean;
   // Pending ability to resolve after a purchase
   pendingAbility: CardAbility | null;
   // Pending royal card ability deferred until after the main card ability resolves
@@ -108,6 +111,7 @@ export type Action =
   | { type: 'RESERVE_CARD_FROM_PYRAMID'; cardId: number }
   | { type: 'RESERVE_CARD'; source: 'pyramid_1' | 'pyramid_2' | 'pyramid_3' | 'deck_1' | 'deck_2' | 'deck_3' }
   | { type: 'PURCHASE_CARD'; cardId: number; goldUsage: Partial<Record<GemColor | 'pearl', number>>; jokerColor?: GemColor }
+  | { type: 'CHOOSE_ROYAL_CARD'; cardId: number }             // choose a royal card after crown milestone
   | { type: 'TAKE_TOKEN_FROM_BOARD'; index: number }          // Token ability resolution
   | { type: 'TAKE_TOKEN_FROM_OPPONENT'; color: TokenColor }   // Take ability resolution
   | { type: 'PLACE_BONUS_CARD'; bonusCardId: number; targetCardId: number }

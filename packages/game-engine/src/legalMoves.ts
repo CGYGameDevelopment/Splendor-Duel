@@ -9,9 +9,10 @@ export function legalMoves(state: GameState): Action[] {
     case 'optional_privilege':   return optionalPrivilegeMoves(state);
     case 'optional_replenish':   return optionalReplenishMoves(state);
     case 'mandatory':            return mandatoryMoves(state);
-    case 'discard':              return discardMoves(state);
+    case 'choose_royal':         return chooseRoyalMoves(state);
     case 'resolve_ability':      return resolveAbilityMoves(state);
     case 'place_bonus':          return placeBonusMoves(state);
+    case 'discard':              return discardMoves(state);
     default:                     return [];
   }
 }
@@ -206,6 +207,12 @@ function goldUsageCombinations(
 
   // Return the minimal allocation (card is pre-validated as affordable)
   return [allocation];
+}
+
+// ─── Choose Royal Card ────────────────────────────────────────────────────────
+
+function chooseRoyalMoves(state: GameState): Action[] {
+  return state.royalDeck.map(card => ({ type: 'CHOOSE_ROYAL_CARD' as const, cardId: card.id }));
 }
 
 // ─── Ability resolution ───────────────────────────────────────────────────────

@@ -145,7 +145,10 @@ describe('PURCHASE_CARD', () => {
       players: [makePlayer(), makePlayer()],
     };
 
-    const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 53, goldUsage: {} });
+    const afterPurchase = reducer(s, { type: 'PURCHASE_CARD', cardId: 53, goldUsage: {} });
+    expect(afterPurchase.phase).toBe('choose_royal');
+
+    const next = reducer(afterPurchase, { type: 'CHOOSE_ROYAL_CARD', cardId: 200 });
     expect(next.players[0].royalCards).toHaveLength(1);
     expect(next.players[0].royalCards[0].id).toBe(200);
     expect(next.royalDeck).toHaveLength(0);
@@ -590,7 +593,10 @@ describe('Royal Card Abilities', () => {
       players: [makePlayer(), makePlayer()],
     };
 
-    const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 140, goldUsage: {} });
+    const afterPurchase = reducer(s, { type: 'PURCHASE_CARD', cardId: 140, goldUsage: {} });
+    expect(afterPurchase.phase).toBe('choose_royal');
+
+    const next = reducer(afterPurchase, { type: 'CHOOSE_ROYAL_CARD', cardId: 200 });
     expect(next.players[0].royalCards).toHaveLength(1);
     expect(next.players[0].privileges).toBe(1);
     expect(next.privileges).toBe(2);
@@ -612,7 +618,10 @@ describe('Royal Card Abilities', () => {
       ],
     };
 
-    const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 141, goldUsage: {} });
+    const afterPurchase = reducer(s, { type: 'PURCHASE_CARD', cardId: 141, goldUsage: {} });
+    expect(afterPurchase.phase).toBe('choose_royal');
+
+    const next = reducer(afterPurchase, { type: 'CHOOSE_ROYAL_CARD', cardId: 201 });
     expect(next.players[0].royalCards).toHaveLength(1);
     expect(next.players[0].crowns).toBe(6);
   });
@@ -633,15 +642,18 @@ describe('Royal Card Abilities', () => {
       players: [makePlayer(), makePlayer()],
     };
 
-    const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 142, goldUsage: {} });
-    expect(next.phase).toBe('resolve_ability');
-    expect(next.pendingAbility).toBe('Token');
+    const afterPurchase = reducer(s, { type: 'PURCHASE_CARD', cardId: 142, goldUsage: {} });
+    expect(afterPurchase.phase).toBe('choose_royal');
+
+    const afterChoose = reducer(afterPurchase, { type: 'CHOOSE_ROYAL_CARD', cardId: 202 });
+    expect(afterChoose.phase).toBe('resolve_ability');
+    expect(afterChoose.pendingAbility).toBe('Token');
     // Board unchanged until player selects a position
-    expect(next.board[5]).toBe('black');
-    expect(next.board[10]).toBe('black');
+    expect(afterChoose.board[5]).toBe('black');
+    expect(afterChoose.board[10]).toBe('black');
 
     // Player selects position 10
-    const after = reducer(next, { type: 'TAKE_TOKEN_FROM_BOARD', index: 10 });
+    const after = reducer(afterChoose, { type: 'TAKE_TOKEN_FROM_BOARD', index: 10 });
     expect(after.board[10]).toBeNull();
     expect(after.players[0].tokens.black).toBe(1);
   });

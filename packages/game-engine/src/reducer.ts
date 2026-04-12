@@ -150,26 +150,12 @@ function checkCrownMilestone(
   prevCrowns: number,
   newCrowns: number
 ): GameState {
-  let current = state;
-
   for (const milestone of CROWN_MILESTONES) {
-    if (prevCrowns < milestone && newCrowns >= milestone && current.royalDeck.length > 0) {
-      const [royalCard, ...rest] = current.royalDeck;
-      const player = current.players[playerId];
-      const updatedPlayer: PlayerState = {
-        ...player,
-        royalCards: [...player.royalCards, royalCard],
-        prestige: player.prestige + royalCard.points,
-      };
-      const players: [PlayerState, PlayerState] = [...current.players] as [PlayerState, PlayerState];
-      players[playerId] = updatedPlayer;
-      current = { ...current, players, royalDeck: rest };
-      // Resolve royal card ability inline (royal cards share jewel card abilities)
-      current = resolveRoyalAbility(current, playerId, royalCard);
+    if (prevCrowns < milestone && newCrowns >= milestone && state.royalDeck.length > 0) {
+      return { ...state, phase: 'choose_royal' };
     }
   }
-
-  return current;
+  return state;
 }
 
 // ─── Resolve card ability ─────────────────────────────────────────────────────
@@ -433,10 +419,30 @@ export function reducer(state: GameState, action: Action): GameState {
         newState = refillPyramidSlot(newState, level, cardId);
       }
 
-      // Check crown milestones (3rd and 6th crown)
+      // Check crown milestones (3rd and 6th crown) — player must choose a royal card
       newState = checkCrownMilestone(newState, cp, player.crowns, crowns);
+      if (newState.phase === 'choose_royal') return newState;
 
       // Resolve ability
+      return resolveAbility(newState, purchasedCard);
+    }
+
+    // ── Choose Royal Card (crown milestone) ──────────────────────────────────
+    case 'CHOOSE_ROYAL_CARD': {
+      const royalCard = state.royalDeck.find(c => c.id === action.cardId);
+      if (!royalCard) return state;
+
+      const purchasedCard = state.lastPurchasedCard;
+      const royalDeck = state.royalDeck.filter(c => c.id !== action.cardId);
+
+      let newState = updatePlayer(state, cp, {
+        royalCards: [...player.royalCards, royalCard],
+        prestige: player.prestige + royalCard.points,
+      });
+      newState = { ...newState, royalDeck };
+      newState = resolveRoyalAbility(newState, cp, royalCard);
+
+      if (!purchasedCard) return endTurn(newState);
       return resolveAbility(newState, purchasedCard);
     }
 
