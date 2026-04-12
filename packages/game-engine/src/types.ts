@@ -9,14 +9,14 @@ export type TokenPool = Record<TokenColor, number>;
 
 export type CardAbility = 'Turn' | 'Token' | 'Take' | 'Privilege' | 'Bonus' | 'Bonus/Turn';
 
-export type CardColor = GemColor | 'joker' | 'points';
+export type CardColor = GemColor | 'joker';
 
 export type Cost = Partial<Record<TokenColor, number>>;
 
 export interface Card {
   id: number;
   level: 1 | 2 | 3 | 'royal';
-  color: CardColor;
+  color: CardColor | null;
   points: number;
   bonus: number;           // number of bonus gems this card grants (usually 1, sometimes 2)
   ability: CardAbility | null;
@@ -90,6 +90,8 @@ export interface GameState {
   extraTurns: number;
   // Pending ability to resolve after a purchase
   pendingAbility: CardAbility | null;
+  // Pending royal card ability deferred until after the main card ability resolves
+  pendingRoyalAbility: CardAbility | null;
   // The card just purchased (needed for Token/Bonus ability resolution)
   lastPurchasedCard: Card | null;
   winner: PlayerId | null;
@@ -104,7 +106,7 @@ export type Action =
   | { type: 'TAKE_TOKENS'; indices: number[] }          // board cell indices (1–3, must be adjacent line)
   | { type: 'RESERVE_CARD'; source: 'pyramid_1' | 'pyramid_2' | 'pyramid_3' | 'deck_1' | 'deck_2' | 'deck_3' }
   | { type: 'RESERVE_CARD_FROM_PYRAMID'; cardId: number }
-  | { type: 'PURCHASE_CARD'; cardId: number; goldUsage: Partial<Record<GemColor | 'pearl', number>> }
+  | { type: 'PURCHASE_CARD'; cardId: number; goldUsage: Partial<Record<GemColor | 'pearl', number>>; jokerColor?: GemColor }
   | { type: 'PLACE_BONUS_CARD'; bonusCardId: number; targetCardId: number }
   | { type: 'TAKE_TOKEN_FROM_BOARD'; color: TokenColor }   // Token ability resolution
   | { type: 'TAKE_TOKEN_FROM_OPPONENT'; color: TokenColor } // Take ability resolution

@@ -32,10 +32,10 @@ function shuffle<T>(arr: T[]): T[] {
 
 /** Returns a fresh game state ready to play. secondPlayerGetsPrivilege = true by default. */
 export function createInitialState(secondPlayerGetsPrivilege = true): GameState {
-  // Separate cards by level (royal cards not yet in data — they'll be added later)
   const level1 = shuffle(ALL_CARDS.filter(card => card.level === 1));
   const level2 = shuffle(ALL_CARDS.filter(card => card.level === 2));
   const level3 = shuffle(ALL_CARDS.filter(card => card.level === 3));
+  const royalDeck = shuffle(ALL_CARDS.filter(card => card.level === 'royal'));
 
   // Reveal pyramid: PYRAMID_LEVEL1_COUNT, PYRAMID_LEVEL2_COUNT, PYRAMID_LEVEL3_COUNT
   const pyramid = {
@@ -87,13 +87,14 @@ export function createInitialState(secondPlayerGetsPrivilege = true): GameState 
     bag,
     pyramid,
     decks,
-    royalDeck: [], // Royal cards added when provided
+    royalDeck,
     privileges: tablePrivileges,
     players,
     currentPlayer: 0,
     phase: 'optional_privilege',
     extraTurns: 0,
     pendingAbility: null,
+    pendingRoyalAbility: null,
     lastPurchasedCard: null,
     winner: null,
     winCondition: null,

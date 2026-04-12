@@ -76,6 +76,18 @@ function endTurn(state: GameState): GameState {
     return { ...state, phase: 'discard' };
   }
 
+  // Royal Take ability deferred from crown milestone — resolve before ending turn
+  if (state.pendingRoyalAbility === 'Take') {
+    const opp = (1 - state.currentPlayer) as PlayerId;
+    const oppTokens = state.players[opp].tokens;
+    const hasEligible = GEM_COLORS.some(c => oppTokens[c] > 0) || oppTokens.pearl > 0;
+    const cleared = { ...state, pendingRoyalAbility: null };
+    if (hasEligible) {
+      return { ...cleared, phase: 'resolve_ability', pendingAbility: 'Take', lastPurchasedCard: null };
+    }
+    return endTurn(cleared); // opponent has no tokens — skip and end turn
+  }
+
   // Extra turns banked from a Turn-ability card — give the player a full new turn
   if (state.extraTurns > 0) {
     return {
@@ -122,8 +134,8 @@ function resolveAbility(state: GameState, card: Card): GameState {
 
     case 'Token': {
       // Player must take 1 token matching the card's effective color from the board
-      // If card is a joker/bonus, it has no token effect (no gem color until assigned)
-      if (card.color === 'joker' || card.color === 'points') {
+      // If card has no gem color, skip the token effect
+      if (card.color === 'joker' || card.color === null) {
         return endTurn({ ...state, pendingAbility: null });
       }
       const color = card.color as TokenColor;
@@ -145,7 +157,7 @@ function resolveAbility(state: GameState, card: Card): GameState {
       // Player must choose which card this overlaps — needs a card with a bonus to overlap (excluding itself)
       const player = state.players[state.currentPlayer];
       const eligible = player.purchasedCards.filter(
-        c => c.id !== card.id && c.color !== 'joker' && c.color !== 'points' && c.bonus > 0 && c.overlappingCardId === null
+        c => c.id !== card.id && c.color !== 'joker' && c.color !== null && c.bonus > 0 && c.overlappingCardId === null
       );
       if (eligible.length === 0) {
         // Cannot purchase this card — this should be caught in legalMoves, but guard here
@@ -171,7 +183,7 @@ function resolveRoyalAbility(state: GameState, playerId: PlayerId, card: Card): 
     }
     case 'Token': {
       // Resolved immediately — take from board if available; no blocking phase for royal
-      if (card.color === 'joker' || card.color === 'points') return state;
+      if (card.color === null || card.color === 'joker') return state;
       const color = card.color as TokenColor;
       const board = [...state.board];
       const idx = board.findIndex(c => c === color);
@@ -181,7 +193,14 @@ function resolveRoyalAbility(state: GameState, playerId: PlayerId, card: Card): 
       const tokens = { ...player.tokens, [color]: player.tokens[color] + 1 };
       return updatePlayer({ ...state, board }, playerId, { tokens });
     }
-    // Turn and Take on royal cards are not standard but handled defensively
+    case 'Take': {
+      // Defer to endTurn — player must choose a gem/pearl token from opponent
+      const opp = (1 - playerId) as PlayerId;
+      const oppTokens = state.players[opp].tokens;
+      const hasEligible = GEM_COLORS.some(c => oppTokens[c] > 0) || oppTokens.pearl > 0;
+      if (!hasEligible) return state;
+      return { ...state, pendingRoyalAbility: 'Take' };
+    }
     default:
       return state;
   }
@@ -357,7 +376,7 @@ export function reducer(state: GameState, action: Action): GameState {
 
     // ── Mandatory: Purchase Card ──────────────────────────────────────────────
     case 'PURCHASE_CARD': {
-      const { cardId, goldUsage } = action;
+      const { cardId, goldUsage, jokerColor } = action;
 
       // Find card in pyramid or reserve
       let card: Card | undefined;
@@ -394,7 +413,10 @@ export function reducer(state: GameState, action: Action): GameState {
       bag = { ...bag, gold: bag.gold + goldSpent };
 
       // Add card to purchased, remove from source
-      const purchasedCard = { ...card };
+      // For joker cards, assign the chosen color immediately
+      const purchasedCard = card.color === 'joker' && jokerColor
+        ? { ...card, assignedColor: jokerColor }
+        : { ...card };
       const purchasedCards = [...player.purchasedCards, purchasedCard];
       const reservedCards = fromReserve
         ? player.reservedCards.filter(c => c.id !== cardId)
@@ -429,7 +451,7 @@ export function reducer(state: GameState, action: Action): GameState {
 
       if (!bonusCard || !targetCard) return state;
       if (bonusCard.id === targetCard.id) return state;
-      if (targetCard.color === 'joker' || targetCard.color === 'points') return state;
+      if (targetCard.color === 'joker' || targetCard.color === null) return state;
       if (targetCard.bonus === 0) return state;
       if (targetCard.overlappingCardId !== null) return state;
       if (bonusCard.overlappingCardId !== null) return state;

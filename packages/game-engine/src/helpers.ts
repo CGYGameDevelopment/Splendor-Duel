@@ -67,12 +67,12 @@ export function playerBonuses(player: PlayerState): Record<GemColor, number> {
 
 /**
  * Returns the effective gem color of a card for bonus purposes.
- * Joker cards use assignedColor; Points cards have no gem color.
+ * Joker cards use assignedColor; null-color cards have no gem color.
  */
 export function effectiveCardColor(card: Card): GemColor | null {
   if (card.color === 'joker') return card.assignedColor;
-  if (card.color === 'points') return null;
-  return card.color as GemColor;
+  if (card.color === null) return null;
+  return card.color;
 }
 
 // ─── Cost calculation ─────────────────────────────────────────────────────────

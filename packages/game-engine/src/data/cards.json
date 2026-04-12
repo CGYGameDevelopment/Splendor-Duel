@@ -339,7 +339,7 @@
   {
     "id": 22,
     "level": 1,
-    "color": "points",
+    "color": null,
     "points": 3,
     "bonus": 0,
     "ability": null,
@@ -731,7 +731,7 @@
   {
     "id": 47,
     "level": 2,
-    "color": "points",
+    "color": null,
     "points": 5,
     "bonus": 0,
     "ability": null,
@@ -955,7 +955,7 @@
   {
     "id": 61,
     "level": 3,
-    "color": "points",
+    "color": null,
     "points": 6,
     "bonus": 0,
     "ability": null,
@@ -991,6 +991,54 @@
     "cost": {
       "red": 8
     },
+    "assignedColor": null,
+    "overlappingCardId": null
+  },
+  {
+    "id": 64,
+    "level": "royal",
+    "color": null,
+    "points": 2,
+    "bonus": 0,
+    "ability": "Take",
+    "crowns": 0,
+    "cost": {},
+    "assignedColor": null,
+    "overlappingCardId": null
+  },
+  {
+    "id": 65,
+    "level": "royal",
+    "color": null,
+    "points": 2,
+    "bonus": 0,
+    "ability": "Turn",
+    "crowns": 0,
+    "cost": {},
+    "assignedColor": null,
+    "overlappingCardId": null
+  },
+  {
+    "id": 66,
+    "level": "royal",
+    "color": null,
+    "points": 2,
+    "bonus": 0,
+    "ability": "Privilege",
+    "crowns": 0,
+    "cost": {},
+    "assignedColor": null,
+    "overlappingCardId": null
+  },
+  {
+    "id": 67,
+    "level": "royal",
+    "color": null,
+    "points": 3,
+    "bonus": 0,
+    "ability": null,
+    "crowns": 0,
+    "cost": {},
     "assignedColor": null,
     "overlappingCardId": null
   }

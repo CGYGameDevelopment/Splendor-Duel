@@ -136,9 +136,31 @@ function purchaseMoves(state: GameState): Action[] {
     // Bonus cards require an eligible target card
     if (card.ability === 'Bonus' || card.ability === 'Bonus/Turn') {
       const eligible = player.purchasedCards.filter(
-        c => c.color !== 'joker' && c.color !== 'points' && c.bonus > 0 && c.overlappingCardId === null
+        c => c.color !== 'joker' && c.color !== null && c.bonus > 0 && c.overlappingCardId === null
       );
       if (eligible.length === 0) continue;
+    }
+
+    // Joker cards: player must own at least one card with an effective GemColor;
+    // generate one move per available color.
+    if (card.color === 'joker') {
+      const ownedColors = new Set<GemColor>(
+        player.purchasedCards.flatMap(c => {
+          if (c.color !== null && c.color !== 'joker') return [c.color];
+          if (c.color === 'joker' && c.assignedColor) return [c.assignedColor];
+          return [];
+        })
+      );
+      if (ownedColors.size === 0) continue;
+      if (!canAfford(card, player)) continue;
+      const cost = netCost(card, player);
+      const goldOptions = goldUsageCombinations(cost, player.tokens);
+      for (const jokerColor of ownedColors) {
+        for (const goldUsage of goldOptions) {
+          moves.push({ type: 'PURCHASE_CARD', cardId: card.id, goldUsage, jokerColor });
+        }
+      }
+      continue;
     }
 
     const cost = netCost(card, player);
@@ -228,6 +250,7 @@ function resolveAbilityMoves(state: GameState): Action[] {
   if (!card) return [];
 
   if (state.pendingAbility === 'Token') {
+    if (!card.color || card.color === 'joker') return [{ type: 'END_OPTIONAL_PHASE' }];
     const color = card.color as TokenColor;
     const onBoard = state.board.some(c => c === color);
     if (!onBoard) return [{ type: 'END_OPTIONAL_PHASE' }]; // auto-skipped in reducer, but guard
@@ -254,7 +277,7 @@ function placeBonusMoves(state: GameState): Action[] {
   if (!bonusCard) return [];
 
   const eligible = player.purchasedCards.filter(
-    c => c.id !== bonusCard.id && c.color !== 'joker' && c.color !== 'points' && c.bonus > 0 && c.overlappingCardId === null
+    c => c.id !== bonusCard.id && c.color !== 'joker' && c.color !== null && c.bonus > 0 && c.overlappingCardId === null
   );
 
   return eligible.map(target => ({
