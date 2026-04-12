@@ -95,7 +95,6 @@ export function createInitialState(secondPlayerGetsPrivilege = true): GameState 
     repeatTurn: false,
     pendingCrownCheck: false,
     pendingAbility: null,
-    pendingRoyalAbility: null,
     lastPurchasedCard: null,
     winner: null,
     winCondition: null,

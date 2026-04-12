@@ -93,8 +93,6 @@ export interface GameState {
   pendingCrownCheck: boolean;
   // Pending ability to resolve after a purchase
   pendingAbility: CardAbility | null;
-  // Pending royal card ability deferred until after the main card ability resolves
-  pendingRoyalAbility: CardAbility | null;
   // The card just purchased (needed for Token/Bonus ability resolution)
   lastPurchasedCard: Card | null;
   winner: PlayerId | null;

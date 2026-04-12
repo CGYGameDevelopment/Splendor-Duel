@@ -61,24 +61,7 @@ function refillPyramidSlot(
 function endTurn(state: GameState): GameState {
   const cp = state.currentPlayer;
 
-  // 1. Royal Card Check — resolve deferred royal ability before anything else
-  if (state.pendingRoyalAbility === 'Token') {
-    const cleared = { ...state, pendingRoyalAbility: null };
-    return { ...cleared, phase: 'resolve_ability', pendingAbility: 'Token' };
-  }
-
-  if (state.pendingRoyalAbility === 'Take') {
-    const opp = (1 - cp) as PlayerId;
-    const oppTokens = state.players[opp].tokens;
-    const hasEligible = GEM_COLORS.some(c => oppTokens[c] > 0) || oppTokens.pearl > 0;
-    const cleared = { ...state, pendingRoyalAbility: null };
-    if (hasEligible) {
-      return { ...cleared, phase: 'resolve_ability', pendingAbility: 'Take', lastPurchasedCard: null };
-    }
-    return endTurn(cleared); // opponent has no tokens — skip
-  }
-
-  // 2. Victory Condition Check
+  // 1. Victory Condition Check
   const player = state.players[cp];
   const victoryCondition = checkVictory(player);
   if (victoryCondition) {
@@ -116,6 +99,7 @@ function endTurn(state: GameState): GameState {
 
 // ─── Crown milestone helpers ──────────────────────────────────────────────────
 
+// Returns updated state but does NOT call endTurn — mirrors resolveAbility's contract.
 function resolveRoyalAbility(state: GameState, playerId: PlayerId, card: Card): GameState {
   if (!card.ability) return state;
 
@@ -129,15 +113,14 @@ function resolveRoyalAbility(state: GameState, playerId: PlayerId, card: Card): 
       const color = card.color as TokenColor;
       const hasToken = state.board.some(c => c === color);
       if (!hasToken) return state;
-      return { ...state, pendingRoyalAbility: 'Token', lastPurchasedCard: card };
+      return { ...state, phase: 'resolve_ability', pendingAbility: 'Token', lastPurchasedCard: card };
     }
     case 'Take': {
-      // Defer to endTurn — player must choose a gem/pearl token from opponent
       const opp = (1 - playerId) as PlayerId;
       const oppTokens = state.players[opp].tokens;
       const hasEligible = GEM_COLORS.some(c => oppTokens[c] > 0) || oppTokens.pearl > 0;
       if (!hasEligible) return state;
-      return { ...state, pendingRoyalAbility: 'Take' };
+      return { ...state, phase: 'resolve_ability', pendingAbility: 'Take', lastPurchasedCard: null };
     }
     default:
       return state;
@@ -434,6 +417,7 @@ export function reducer(state: GameState, action: Action): GameState {
       });
       newState = { ...newState, royalDeck, pendingCrownCheck: false };
       newState = resolveRoyalAbility(newState, cp, royalCard);
+      if (newState.phase === 'resolve_ability') return newState;
       return endTurn(newState);
     }
 
