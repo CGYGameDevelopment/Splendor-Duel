@@ -70,6 +70,15 @@ def collect_episodes(
             mask_np = info["legal_mask"].copy()  # mask for the current state
             mask_t = torch.tensor(mask_np, dtype=torch.bool, device=device).unsqueeze(0)
 
+            if not mask_t.any():
+                legal_moves = info.get("legal_moves", [])
+                raise RuntimeError(
+                    "legal_mask is all-False — no legal action could be mapped to a "
+                    "canonical index.\n"
+                    f"  legal_moves from server ({len(legal_moves)} entries): {legal_moves}\n"
+                    f"  state: {info.get('state')}"
+                )
+
             logits, value_t = model(obs_t)
             logits_masked = logits.masked_fill(~mask_t, float("-inf"))
             dist = torch.distributions.Categorical(logits=logits_masked)
