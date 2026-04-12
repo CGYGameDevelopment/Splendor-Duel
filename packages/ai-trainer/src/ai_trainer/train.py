@@ -57,7 +57,7 @@ def main(
     iterations: int = typer.Option(500, help="Number of training iterations"),
     episodes_per_iter: int = typer.Option(20, help="Self-play episodes per iteration"),
     eval_every: int = typer.Option(50, help="Evaluate vs random every N iterations"),
-    checkpoint_every: int = typer.Option(10, help="Save latest checkpoint every N iterations"),
+    checkpoint_every: int = typer.Option(5, help="Save latest checkpoint every N iterations"),
     sim_url: str = typer.Option("http://127.0.0.1:3002", help="game-sim server URL"),
     checkpoint_dir: Path = typer.Option(Path("checkpoints"), help="Checkpoint directory"),
     lr: float = typer.Option(3e-4, help="Learning rate"),

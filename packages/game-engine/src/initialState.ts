@@ -92,7 +92,7 @@ export function createInitialState(secondPlayerGetsPrivilege = true): GameState 
     players,
     currentPlayer: 0,
     phase: 'optional_privilege',
-    extraTurns: 0,
+    repeatTurn: false,
     pendingAbility: null,
     pendingRoyalAbility: null,
     lastPurchasedCard: null,

@@ -127,8 +127,8 @@ describe('PURCHASE_CARD', () => {
 
     const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 52, goldUsage: {} });
     expect(next.currentPlayer).toBe(0);
-    expect(next.phase).toBe('mandatory');
-    expect(next.extraTurns).toBe(1);
+    expect(next.phase).toBe('optional_privilege');
+    expect(next.repeatTurn).toBe(false);
     expect(next.pendingAbility).toBeNull();
     expect(next.lastPurchasedCard).toBeNull();
   });
@@ -284,7 +284,7 @@ describe('Token Ability', () => {
     expect(next.pendingAbility).toBe('Token');
     expect(next.lastPurchasedCard?.id).toBe(100);
 
-    const resolved = reducer(next, { type: 'TAKE_TOKEN_FROM_BOARD', color: 'red' });
+    const resolved = reducer(next, { type: 'TAKE_TOKEN_FROM_BOARD', index: 5 });
     expect(resolved.board[5]).toBeNull();
     expect(resolved.players[0].tokens.red).toBe(1);
     expect(resolved.pendingAbility).toBeNull();
@@ -523,8 +523,7 @@ describe('Bonus/Turn Ability', () => {
     expect(next.phase).toBe('place_bonus');
 
     const resolved = reducer(next, { type: 'PLACE_BONUS_CARD', bonusCardId: 120, targetCardId: 121 });
-    // Bonus/Turn increments extraTurns then endTurn immediately decrements it
-    expect(resolved.extraTurns).toBe(0);
+    expect(resolved.repeatTurn).toBe(false);
     expect(resolved.currentPlayer).toBe(0);
     expect(resolved.phase).toBe('optional_privilege');
   });
@@ -544,30 +543,34 @@ describe('Turn Ability Chaining', () => {
     };
 
     const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 130, goldUsage: {} });
-    expect(next.extraTurns).toBe(1);
+    expect(next.repeatTurn).toBe(false);
     expect(next.currentPlayer).toBe(0);
-    expect(next.phase).toBe('mandatory');
+    expect(next.phase).toBe('optional_privilege');
   });
 
-  it('chains multiple Turn abilities by accumulating extraTurns', () => {
+  it('chains multiple Turn abilities by repeating the same player each time', () => {
     const turnCard1 = makeCard({ id: 131, ability: 'Turn', cost: {} });
     const turnCard2 = makeCard({ id: 132, ability: 'Turn', cost: {} });
     const state = createInitialState(false);
     const s: GameState = {
       ...state,
       phase: 'mandatory',
-      extraTurns: 1,
       pyramid: { ...state.pyramid, level1: [turnCard1, ...state.pyramid.level1.slice(0, 4)] },
       players: [makePlayer(), makePlayer()],
     };
 
+    // Buy first Turn card — player 0 gets another turn
     const next1 = reducer(s, { type: 'PURCHASE_CARD', cardId: 131, goldUsage: {} });
-    expect(next1.extraTurns).toBe(2);
-    expect(next1.phase).toBe('mandatory');
+    expect(next1.repeatTurn).toBe(false);
+    expect(next1.currentPlayer).toBe(0);
+    expect(next1.phase).toBe('optional_privilege');
 
+    // During that extra turn, buy a second Turn card — player 0 gets yet another turn
     const next2: GameState = { ...next1, phase: 'mandatory', pyramid: { ...next1.pyramid, level1: [turnCard2, ...next1.pyramid.level1.slice(0, 4)] } };
     const next3 = reducer(next2, { type: 'PURCHASE_CARD', cardId: 132, goldUsage: {} });
-    expect(next3.extraTurns).toBe(3);
+    expect(next3.repeatTurn).toBe(false);
+    expect(next3.currentPlayer).toBe(0);
+    expect(next3.phase).toBe('optional_privilege');
   });
 });
 
@@ -614,12 +617,13 @@ describe('Royal Card Abilities', () => {
     expect(next.players[0].crowns).toBe(6);
   });
 
-  it('royal card with Token ability takes a matching token from the board immediately', () => {
+  it('royal card with Token ability defers to resolve_ability phase for player to choose board position', () => {
     const card = makeCard({ id: 142, crowns: 3, cost: {} });
     const royalCard = makeCard({ id: 202, level: 'royal', ability: 'Token', color: 'black', points: 3, cost: {} });
     const state = createInitialState(false);
     const board = new Array(25).fill(null);
     board[5] = 'black';
+    board[10] = 'black';
     const s: GameState = {
       ...state,
       board,
@@ -630,8 +634,16 @@ describe('Royal Card Abilities', () => {
     };
 
     const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 142, goldUsage: {} });
-    expect(next.board[5]).toBeNull();
-    expect(next.players[0].tokens.black).toBe(1);
+    expect(next.phase).toBe('resolve_ability');
+    expect(next.pendingAbility).toBe('Token');
+    // Board unchanged until player selects a position
+    expect(next.board[5]).toBe('black');
+    expect(next.board[10]).toBe('black');
+
+    // Player selects position 10
+    const after = reducer(next, { type: 'TAKE_TOKEN_FROM_BOARD', index: 10 });
+    expect(after.board[10]).toBeNull();
+    expect(after.players[0].tokens.black).toBe(1);
   });
 });
 
@@ -651,16 +663,19 @@ describe('Multi-ability Sequences', () => {
     };
 
     const next1 = reducer(s, { type: 'PURCHASE_CARD', cardId: 150, goldUsage: {} });
-    expect(next1.extraTurns).toBe(1);
-    expect(next1.phase).toBe('mandatory');
+    expect(next1.repeatTurn).toBe(false);
+    expect(next1.currentPlayer).toBe(0);
+    expect(next1.phase).toBe('optional_privilege');
 
     const next2 = {
       ...next1,
+      phase: 'mandatory' as const,
       pyramid: { ...next1.pyramid, level1: [privilegeCard, ...next1.pyramid.level1.slice(1)] },
     };
     const next3 = reducer(next2, { type: 'PURCHASE_CARD', cardId: 151, goldUsage: {} });
     expect(next3.players[0].privileges).toBe(1);
-    expect(next3.extraTurns).toBe(0);
+    expect(next3.repeatTurn).toBe(false);
+    expect(next3.currentPlayer).toBe(1);
     expect(totalPrivileges(next3)).toBe(3);
   });
 });
@@ -784,7 +799,7 @@ describe('Conservation Invariants', () => {
       players: [makePlayer(), makePlayer()],
     };
     const afterPurchase = reducer(s, { type: 'PURCHASE_CARD', cardId: 100, goldUsage: {} });
-    assertConserved(s, reducer(afterPurchase, { type: 'TAKE_TOKEN_FROM_BOARD', color: 'red' }));
+    assertConserved(s, reducer(afterPurchase, { type: 'TAKE_TOKEN_FROM_BOARD', index: 5 }));
   });
 
   it('TAKE_TOKEN_FROM_OPPONENT (Take ability) conserves tokens', () => {

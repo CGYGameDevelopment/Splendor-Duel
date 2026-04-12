@@ -69,9 +69,9 @@ export type Phase =
   | 'optional_privilege'      // may use privileges
   | 'optional_replenish'      // may replenish board
   | 'mandatory'               // must take tokens | reserve | purchase
-  | 'discard'                 // must discard down to 10 tokens
   | 'resolve_ability'         // resolving a card ability (Turn, Token, Take, etc.)
   | 'place_bonus'             // choosing which card a Bonus card overlaps
+  | 'discard'                 // must discard down to 10 tokens
   | 'game_over';
 
 export type WinCondition = 'prestige' | 'crowns' | 'color_prestige';
@@ -86,8 +86,8 @@ export interface GameState {
   players: [PlayerState, PlayerState];
   currentPlayer: PlayerId;
   phase: Phase;
-  // Extra turns queued from Turn ability
-  extraTurns: number;
+  // When true, endTurn repeats the current player's turn instead of switching
+  repeatTurn: boolean;
   // Pending ability to resolve after a purchase
   pendingAbility: CardAbility | null;
   // Pending royal card ability deferred until after the main card ability resolves
@@ -101,14 +101,14 @@ export interface GameState {
 // ─── Actions ─────────────────────────────────────────────────────────────────
 
 export type Action =
-  | { type: 'USE_PRIVILEGE'; indices: number[] }                // board cell indices (1 per privilege, non-gold)
+  | { type: 'END_OPTIONAL_PHASE' }                            // skip optional phase
+  | { type: 'USE_PRIVILEGE'; indices: number[] }              // board cell indices (1 per privilege, non-gold)
   | { type: 'REPLENISH_BOARD' }
-  | { type: 'TAKE_TOKENS'; indices: number[] }          // board cell indices (1–3, must be adjacent line)
-  | { type: 'RESERVE_CARD'; source: 'pyramid_1' | 'pyramid_2' | 'pyramid_3' | 'deck_1' | 'deck_2' | 'deck_3' }
+  | { type: 'TAKE_TOKENS'; indices: number[] }                // board cell indices (1–3, must be adjacent line)
   | { type: 'RESERVE_CARD_FROM_PYRAMID'; cardId: number }
+  | { type: 'RESERVE_CARD'; source: 'pyramid_1' | 'pyramid_2' | 'pyramid_3' | 'deck_1' | 'deck_2' | 'deck_3' }
   | { type: 'PURCHASE_CARD'; cardId: number; goldUsage: Partial<Record<GemColor | 'pearl', number>>; jokerColor?: GemColor }
+  | { type: 'TAKE_TOKEN_FROM_BOARD'; index: number }          // Token ability resolution
+  | { type: 'TAKE_TOKEN_FROM_OPPONENT'; color: TokenColor }   // Take ability resolution
   | { type: 'PLACE_BONUS_CARD'; bonusCardId: number; targetCardId: number }
-  | { type: 'TAKE_TOKEN_FROM_BOARD'; color: TokenColor }   // Token ability resolution
-  | { type: 'TAKE_TOKEN_FROM_OPPONENT'; color: TokenColor } // Take ability resolution
-  | { type: 'DISCARD_TOKENS'; tokens: Partial<Record<TokenColor, number>> }
-  | { type: 'END_OPTIONAL_PHASE' };                        // skip optional actions
+  | { type: 'DISCARD_TOKENS'; tokens: Partial<Record<TokenColor, number>> };

@@ -208,6 +208,52 @@ function goldUsageCombinations(
   return [allocation];
 }
 
+// ─── Ability resolution ───────────────────────────────────────────────────────
+
+function resolveAbilityMoves(state: GameState): Action[] {
+  const cp = state.currentPlayer;
+  const player = state.players[cp];
+  const card = state.lastPurchasedCard;
+  if (!card) return [];
+
+  if (state.pendingAbility === 'Token') {
+    if (!card.color || card.color === 'joker') return [{ type: 'END_OPTIONAL_PHASE' }];
+    const color = card.color as TokenColor;
+    const indices = state.board.reduce<number[]>((acc, c, i) => { if (c === color) acc.push(i); return acc; }, []);
+    if (indices.length === 0) return [{ type: 'END_OPTIONAL_PHASE' }]; // auto-skipped in reducer, but guard
+    return indices.map(index => ({ type: 'TAKE_TOKEN_FROM_BOARD', index }) as Action);
+  }
+
+  if (state.pendingAbility === 'Take') {
+    const opp = (1 - cp) as 0 | 1;
+    const oppTokens = state.players[opp].tokens;
+    const eligible = (GEM_COLORS as TokenColor[]).concat('pearl').filter(
+      c => oppTokens[c as TokenColor] > 0
+    ) as TokenColor[];
+    return eligible.map(color => ({ type: 'TAKE_TOKEN_FROM_OPPONENT', color }));
+  }
+
+  return [];
+}
+
+// ─── Place Bonus ──────────────────────────────────────────────────────────────
+
+function placeBonusMoves(state: GameState): Action[] {
+  const player = state.players[state.currentPlayer];
+  const bonusCard = state.lastPurchasedCard;
+  if (!bonusCard) return [];
+
+  const eligible = player.purchasedCards.filter(
+    c => c.id !== bonusCard.id && c.color !== 'joker' && c.color !== null && c.bonus > 0 && c.overlappingCardId === null
+  );
+
+  return eligible.map(target => ({
+    type: 'PLACE_BONUS_CARD' as const,
+    bonusCardId: bonusCard.id,
+    targetCardId: target.id,
+  }));
+}
+
 // ─── Discard ──────────────────────────────────────────────────────────────────
 
 function discardMoves(state: GameState): Action[] {
@@ -239,52 +285,6 @@ function discardMoves(state: GameState): Action[] {
 
   recurse(excess, {}, 0);
   return moves;
-}
-
-// ─── Ability resolution ───────────────────────────────────────────────────────
-
-function resolveAbilityMoves(state: GameState): Action[] {
-  const cp = state.currentPlayer;
-  const player = state.players[cp];
-  const card = state.lastPurchasedCard;
-  if (!card) return [];
-
-  if (state.pendingAbility === 'Token') {
-    if (!card.color || card.color === 'joker') return [{ type: 'END_OPTIONAL_PHASE' }];
-    const color = card.color as TokenColor;
-    const onBoard = state.board.some(c => c === color);
-    if (!onBoard) return [{ type: 'END_OPTIONAL_PHASE' }]; // auto-skipped in reducer, but guard
-    return [{ type: 'TAKE_TOKEN_FROM_BOARD', color }];
-  }
-
-  if (state.pendingAbility === 'Take') {
-    const opp = (1 - cp) as 0 | 1;
-    const oppTokens = state.players[opp].tokens;
-    const eligible = (GEM_COLORS as TokenColor[]).concat('pearl').filter(
-      c => oppTokens[c as TokenColor] > 0
-    ) as TokenColor[];
-    return eligible.map(color => ({ type: 'TAKE_TOKEN_FROM_OPPONENT', color }));
-  }
-
-  return [];
-}
-
-// ─── Place Bonus ──────────────────────────────────────────────────────────────
-
-function placeBonusMoves(state: GameState): Action[] {
-  const player = state.players[state.currentPlayer];
-  const bonusCard = state.lastPurchasedCard;
-  if (!bonusCard) return [];
-
-  const eligible = player.purchasedCards.filter(
-    c => c.id !== bonusCard.id && c.color !== 'joker' && c.color !== null && c.bonus > 0 && c.overlappingCardId === null
-  );
-
-  return eligible.map(target => ({
-    type: 'PLACE_BONUS_CARD' as const,
-    bonusCardId: bonusCard.id,
-    targetCardId: target.id,
-  }));
 }
 
 // ─── Utility ──────────────────────────────────────────────────────────────────

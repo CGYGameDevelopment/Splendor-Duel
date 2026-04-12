@@ -59,54 +59,117 @@ function refillPyramidSlot(
 // ─── End of turn processing ───────────────────────────────────────────────────
 
 function endTurn(state: GameState): GameState {
-  const player = state.players[state.currentPlayer];
-  const victoryCondition = checkVictory(player);
+  const cp = state.currentPlayer;
 
-  if (victoryCondition) {
-    return {
-      ...state,
-      phase: 'game_over',
-      winner: state.currentPlayer,
-      winCondition: victoryCondition,
-    };
+  // 1. Royal Card Check — resolve deferred royal ability before anything else
+  if (state.pendingRoyalAbility === 'Token') {
+    const cleared = { ...state, pendingRoyalAbility: null };
+    return { ...cleared, phase: 'resolve_ability', pendingAbility: 'Token' };
   }
 
-  // If player needs to discard, move to discard phase
-  if (totalTokens(player.tokens) > MAX_TOKENS) {
-    return { ...state, phase: 'discard' };
-  }
-
-  // Royal Take ability deferred from crown milestone — resolve before ending turn
   if (state.pendingRoyalAbility === 'Take') {
-    const opp = (1 - state.currentPlayer) as PlayerId;
+    const opp = (1 - cp) as PlayerId;
     const oppTokens = state.players[opp].tokens;
     const hasEligible = GEM_COLORS.some(c => oppTokens[c] > 0) || oppTokens.pearl > 0;
     const cleared = { ...state, pendingRoyalAbility: null };
     if (hasEligible) {
       return { ...cleared, phase: 'resolve_ability', pendingAbility: 'Take', lastPurchasedCard: null };
     }
-    return endTurn(cleared); // opponent has no tokens — skip and end turn
+    return endTurn(cleared); // opponent has no tokens — skip
   }
 
-  // Extra turns banked from a Turn-ability card — give the player a full new turn
-  if (state.extraTurns > 0) {
+  // 2. Victory Condition Check
+  const player = state.players[cp];
+  const victoryCondition = checkVictory(player);
+  if (victoryCondition) {
     return {
       ...state,
-      extraTurns: state.extraTurns - 1,
+      phase: 'game_over',
+      winner: cp,
+      winCondition: victoryCondition,
+    };
+  }
+
+  // 3. Discard Check
+  if (totalTokens(player.tokens) > MAX_TOKENS) {
+    return { ...state, phase: 'discard' };
+  }
+
+  // 4. End of Turn — repeat or switch player
+  if (state.repeatTurn) {
+    return {
+      ...state,
+      repeatTurn: false,
       phase: 'optional_privilege',
       lastPurchasedCard: null,
     };
   }
 
-  // Normal turn end — switch player
-  const next = (1 - state.currentPlayer) as PlayerId;
+  const next = (1 - cp) as PlayerId;
   return {
     ...state,
     currentPlayer: next,
     phase: 'optional_privilege',
-    extraTurns: 0,
     lastPurchasedCard: null,
   };
+}
+
+// ─── Crown milestone helpers ──────────────────────────────────────────────────
+
+function resolveRoyalAbility(state: GameState, playerId: PlayerId, card: Card): GameState {
+  if (!card.ability) return state;
+
+  switch (card.ability) {
+    case 'Privilege': {
+      const { privileges, players } = grantPrivileges(state, playerId, 1);
+      return { ...state, privileges, players };
+    }
+    case 'Token': {
+      if (card.color === null || card.color === 'joker') return state;
+      const color = card.color as TokenColor;
+      const hasToken = state.board.some(c => c === color);
+      if (!hasToken) return state;
+      return { ...state, pendingRoyalAbility: 'Token', lastPurchasedCard: card };
+    }
+    case 'Take': {
+      // Defer to endTurn — player must choose a gem/pearl token from opponent
+      const opp = (1 - playerId) as PlayerId;
+      const oppTokens = state.players[opp].tokens;
+      const hasEligible = GEM_COLORS.some(c => oppTokens[c] > 0) || oppTokens.pearl > 0;
+      if (!hasEligible) return state;
+      return { ...state, pendingRoyalAbility: 'Take' };
+    }
+    default:
+      return state;
+  }
+}
+
+function checkCrownMilestone(
+  state: GameState,
+  playerId: PlayerId,
+  prevCrowns: number,
+  newCrowns: number
+): GameState {
+  let current = state;
+
+  for (const milestone of CROWN_MILESTONES) {
+    if (prevCrowns < milestone && newCrowns >= milestone && current.royalDeck.length > 0) {
+      const [royalCard, ...rest] = current.royalDeck;
+      const player = current.players[playerId];
+      const updatedPlayer: PlayerState = {
+        ...player,
+        royalCards: [...player.royalCards, royalCard],
+        prestige: player.prestige + royalCard.points,
+      };
+      const players: [PlayerState, PlayerState] = [...current.players] as [PlayerState, PlayerState];
+      players[playerId] = updatedPlayer;
+      current = { ...current, players, royalDeck: rest };
+      // Resolve royal card ability inline (royal cards share jewel card abilities)
+      current = resolveRoyalAbility(current, playerId, royalCard);
+    }
+  }
+
+  return current;
 }
 
 // ─── Resolve card ability ─────────────────────────────────────────────────────
@@ -116,15 +179,12 @@ function resolveAbility(state: GameState, card: Card): GameState {
 
   switch (card.ability) {
     case 'Turn': {
-      // Grant an extra turn by banking it in extraTurns, then jump directly to mandatory.
-      // Unlike other abilities, we don't call endTurn here — the player continues immediately.
-      return {
+      return endTurn({
         ...state,
-        extraTurns: state.extraTurns + 1,
-        phase: 'mandatory',
+        repeatTurn: true,
         pendingAbility: null,
         lastPurchasedCard: null,
-      };
+      });
     }
 
     case 'Privilege': {
@@ -169,69 +229,6 @@ function resolveAbility(state: GameState, card: Card): GameState {
     default:
       return endTurn({ ...state, pendingAbility: null });
   }
-}
-
-// ─── Crown milestone helpers ──────────────────────────────────────────────────
-
-function resolveRoyalAbility(state: GameState, playerId: PlayerId, card: Card): GameState {
-  if (!card.ability) return state;
-
-  switch (card.ability) {
-    case 'Privilege': {
-      const { privileges, players } = grantPrivileges(state, playerId, 1);
-      return { ...state, privileges, players };
-    }
-    case 'Token': {
-      // Resolved immediately — take from board if available; no blocking phase for royal
-      if (card.color === null || card.color === 'joker') return state;
-      const color = card.color as TokenColor;
-      const board = [...state.board];
-      const idx = board.findIndex(c => c === color);
-      if (idx === -1) return state;
-      board[idx] = null;
-      const player = state.players[playerId];
-      const tokens = { ...player.tokens, [color]: player.tokens[color] + 1 };
-      return updatePlayer({ ...state, board }, playerId, { tokens });
-    }
-    case 'Take': {
-      // Defer to endTurn — player must choose a gem/pearl token from opponent
-      const opp = (1 - playerId) as PlayerId;
-      const oppTokens = state.players[opp].tokens;
-      const hasEligible = GEM_COLORS.some(c => oppTokens[c] > 0) || oppTokens.pearl > 0;
-      if (!hasEligible) return state;
-      return { ...state, pendingRoyalAbility: 'Take' };
-    }
-    default:
-      return state;
-  }
-}
-
-function checkCrownMilestone(
-  state: GameState,
-  playerId: PlayerId,
-  prevCrowns: number,
-  newCrowns: number
-): GameState {
-  let current = state;
-
-  for (const milestone of CROWN_MILESTONES) {
-    if (prevCrowns < milestone && newCrowns >= milestone && current.royalDeck.length > 0) {
-      const [royalCard, ...rest] = current.royalDeck;
-      const player = current.players[playerId];
-      const updatedPlayer: PlayerState = {
-        ...player,
-        royalCards: [...player.royalCards, royalCard],
-        prestige: player.prestige + royalCard.points,
-      };
-      const players: [PlayerState, PlayerState] = [...current.players] as [PlayerState, PlayerState];
-      players[playerId] = updatedPlayer;
-      current = { ...current, players, royalDeck: rest };
-      // Resolve royal card ability inline (royal cards share jewel card abilities)
-      current = resolveRoyalAbility(current, playerId, royalCard);
-    }
-  }
-
-  return current;
 }
 
 // ─── Main reducer ─────────────────────────────────────────────────────────────
@@ -467,7 +464,7 @@ export function reducer(state: GameState, action: Action): GameState {
 
       // If Bonus/Turn, grant an extra turn
       if (state.pendingAbility === 'Bonus/Turn') {
-        newState = { ...newState, extraTurns: newState.extraTurns + 1, pendingAbility: null };
+        newState = { ...newState, repeatTurn: true, pendingAbility: null };
       } else {
         newState = { ...newState, pendingAbility: null };
       }
@@ -477,15 +474,15 @@ export function reducer(state: GameState, action: Action): GameState {
 
     // ── Ability: Token — take 1 token of card's color from board ─────────────
     case 'TAKE_TOKEN_FROM_BOARD': {
-      const { color } = action;
+      const { index } = action;
       const card = state.lastPurchasedCard;
-      if (!card || card.color !== color) return state;
+      if (!card) return state;
 
+      const color = card.color as TokenColor;
       const board = [...state.board];
-      const idx = board.findIndex(c => c === color);
-      if (idx === -1) return endTurn({ ...state, pendingAbility: null });
+      if (board[index] !== color) return state;
 
-      board[idx] = null;
+      board[index] = null;
       const playerTokens = { ...player.tokens, [color]: player.tokens[color] + 1 };
       let newState = updatePlayer(state, cp, { tokens: playerTokens });
       newState = { ...newState, board, pendingAbility: null, lastPurchasedCard: null };
