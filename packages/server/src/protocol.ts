@@ -1,4 +1,20 @@
-import type { GameState, Action, PlayerId } from '@splendor-duel/game-engine';
+import type { GameState, PlayerState, Action, PlayerId } from '@splendor-duel/game-engine';
+
+// ─── Sanitized state sent over the wire ──────────────────────────────────────
+
+/**
+ * Player state as seen by a specific client.
+ * Own player: reservedCards contains the actual cards.
+ * Opponent: reservedCards is empty; reservedCardCount carries the count.
+ */
+export type ClientPlayerState = Omit<PlayerState, 'reservedCards'> & {
+  reservedCards: PlayerState['reservedCards'];
+  reservedCardCount: number;
+};
+
+export type ClientGameState = Omit<GameState, 'players'> & {
+  players: [ClientPlayerState, ClientPlayerState];
+};
 
 // ─── HTTP ─────────────────────────────────────────────────────────────────────
 
@@ -23,11 +39,11 @@ export type ServerMessage =
   /** Sent to player 0 after they create a session. */
   | { type: 'SESSION_CREATED'; sessionId: string; playerId: 0 }
   /** Sent to player 1 after they successfully join. */
-  | { type: 'SESSION_JOINED'; sessionId: string; playerId: 1; state: GameState }
+  | { type: 'SESSION_JOINED'; sessionId: string; playerId: 1; state: ClientGameState }
   /** Sent to player 0 when player 1 connects, confirming the game can start. */
-  | { type: 'GAME_STARTED'; state: GameState; opponentName: string }
-  /** Broadcast to both players after every valid action. */
-  | { type: 'STATE_UPDATE'; state: GameState }
+  | { type: 'GAME_STARTED'; state: ClientGameState; opponentName: string }
+  /** Sent to each player individually after every valid action. */
+  | { type: 'STATE_UPDATE'; state: ClientGameState }
   /** Sent to the remaining player when the other disconnects mid-game. */
   | { type: 'OPPONENT_DISCONNECTED' }
   | { type: 'ERROR'; message: string }

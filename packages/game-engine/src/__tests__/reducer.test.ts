@@ -264,6 +264,38 @@ describe('REPLENISH_BOARD', () => {
     expect(next.phase).toBe('mandatory');
     expect(totalPrivileges(next)).toBe(3);
   });
+
+  it('is accepted in mandatory phase when forced (no other mandatory moves), stays in mandatory', () => {
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      board: new Array(25).fill(null),
+      bag: { ...emptyPool(), black: 5 },
+      phase: 'mandatory',
+      privileges: 3,
+      players: [makePlayer(), makePlayer()],
+    };
+
+    const next = reducer(s, { type: 'REPLENISH_BOARD' });
+    expect(next.board.filter(c => c !== null)).toHaveLength(5);
+    expect(next.players[1].privileges).toBe(1);
+    expect(next.phase).toBe('mandatory');
+  });
+
+  it('is rejected in mandatory phase if bag is empty', () => {
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      board: new Array(25).fill(null),
+      bag: emptyPool(),
+      phase: 'mandatory',
+      privileges: 3,
+      players: [makePlayer(), makePlayer()],
+    };
+
+    const next = reducer(s, { type: 'REPLENISH_BOARD' });
+    expect(next).toBe(s);
+  });
 });
 
 // ─── CARD ABILITY: Token ──────────────────────────────────────────────────────

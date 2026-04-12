@@ -56,13 +56,44 @@ function refillPyramidSlot(
   return { ...state, pyramid, decks };
 }
 
-// ─── End of turn processing ───────────────────────────────────────────────────
+// ─── Phase 4: End of Turn Sequence ───────────────────────────────────────────
+//
+// Mirrors the rulebook's Phase 4 order:
+//   4.1  Victory Check
+//   4.2  Discard Check  (may park the game in 'discard' phase)
+//   4.3  Advance Turn   (repeat or switch player)
+//
+// Call endOfTurnSequence after every mandatory action (including ability and
+// royal-card resolution). Call advanceTurn directly after DISCARD_TOKENS —
+// victory was already verified before the discard phase was entered, and no
+// victory-relevant state can change during a discard, so step 4.1 is skipped.
 
-function endTurn(state: GameState): GameState {
+// Phase 4.3 — repeat or switch player.
+function advanceTurn(state: GameState): GameState {
   const cp = state.currentPlayer;
+  if (state.repeatTurn) {
+    return {
+      ...state,
+      repeatTurn: false,
+      phase: 'optional_privilege',
+      lastPurchasedCard: null,
+    };
+  }
+  const next = (1 - cp) as PlayerId;
+  return {
+    ...state,
+    currentPlayer: next,
+    phase: 'optional_privilege',
+    lastPurchasedCard: null,
+  };
+}
 
-  // 1. Victory Condition Check
+// Phase 4 (full) — steps 4.1 → 4.2 → 4.3.
+function endOfTurnSequence(state: GameState): GameState {
+  const cp = state.currentPlayer;
   const player = state.players[cp];
+
+  // 4.1 Victory Check
   const victoryCondition = checkVictory(player);
   if (victoryCondition) {
     return {
@@ -73,33 +104,18 @@ function endTurn(state: GameState): GameState {
     };
   }
 
-  // 3. Discard Check
+  // 4.2 Discard Check
   if (totalTokens(player.tokens) > MAX_TOKENS) {
     return { ...state, phase: 'discard' };
   }
 
-  // 4. End of Turn — repeat or switch player
-  if (state.repeatTurn) {
-    return {
-      ...state,
-      repeatTurn: false,
-      phase: 'optional_privilege',
-      lastPurchasedCard: null,
-    };
-  }
-
-  const next = (1 - cp) as PlayerId;
-  return {
-    ...state,
-    currentPlayer: next,
-    phase: 'optional_privilege',
-    lastPurchasedCard: null,
-  };
+  // 4.3 Advance Turn
+  return advanceTurn(state);
 }
 
 // ─── Crown milestone helpers ──────────────────────────────────────────────────
 
-// Returns updated state but does NOT call endTurn — mirrors resolveAbility's contract.
+// Returns updated state but does NOT call endOfTurnSequence — mirrors resolveAbility's contract.
 function resolveRoyalAbility(state: GameState, playerId: PlayerId, card: Card): GameState {
   if (!card.ability) return state;
 
@@ -128,9 +144,9 @@ function resolveRoyalAbility(state: GameState, playerId: PlayerId, card: Card): 
 }
 
 // ─── Resolve card ability ─────────────────────────────────────────────────────
-// Returns updated state but does NOT call endTurn — the caller is responsible.
+// Returns updated state but does NOT call endOfTurnSequence — the caller is responsible.
 // Interactive abilities (Token, Take, Wild) set an intermediate phase; the
-// caller must handle endTurn after the player resolves those actions.
+// caller must call endOfTurnSequence after the player resolves those actions.
 
 function resolveAbility(state: GameState, card: Card): GameState {
   if (!card.ability) return state;
@@ -237,13 +253,18 @@ export function reducer(state: GameState, action: Action): GameState {
       let newState = updatePlayer(state, cp, { tokens: playerTokens, privileges: newPrivileges });
       newState = { ...newState, board, privileges: tablePrivileges };
 
-      // Stay in optional_privilege phase (can use more privileges or move on)
+      // Stay in optional_privilege phase so the player can use additional privileges one at a time.
+      // The rulebook says "Return 1 or more Privilege Scrolls" as a single decision, which could
+      // imply the player must commit all scrolls upfront. However, allowing sequential single-scroll
+      // actions is intentional here: legalMoves already generates all multi-index combinations for
+      // AI/automated clients that want to commit atomically, and the small information advantage this
+      // gives a human player is acceptable for this implementation.
       return newState;
     }
 
     // ── Optional: Replenish Board ─────────────────────────────────────────────
     case 'REPLENISH_BOARD': {
-      if (state.phase !== 'optional_replenish') return state;
+      if (state.phase !== 'optional_replenish' && state.phase !== 'mandatory') return state;
       if (totalTokens(state.bag) === 0) return state;
       let newState = replenishBoard(state);
       // Opponent gets 1 privilege as penalty
@@ -283,7 +304,7 @@ export function reducer(state: GameState, action: Action): GameState {
         newState = { ...newState, privileges, players };
       }
 
-      return endTurn(newState);
+      return endOfTurnSequence(newState);
     }
 
     // ── Mandatory: Reserve Card (from pyramid by id) ──────────────────────────
@@ -312,7 +333,7 @@ export function reducer(state: GameState, action: Action): GameState {
       let newState = updatePlayer(state, cp, { tokens: playerTokens, reservedCards });
       newState = { ...newState, board };
       newState = refillPyramidSlot(newState, level, card.id);
-      return endTurn(newState);
+      return endOfTurnSequence(newState);
     }
 
     // ── Mandatory: Reserve Card (from deck top) ───────────────────────────────
@@ -338,7 +359,7 @@ export function reducer(state: GameState, action: Action): GameState {
 
       let newState = updatePlayer(state, cp, { tokens: playerTokens, reservedCards });
       newState = { ...newState, board, decks: { ...state.decks, [key]: rest } };
-      return endTurn(newState);
+      return endOfTurnSequence(newState);
     }
 
     // ── Mandatory: Purchase Card ──────────────────────────────────────────────
@@ -408,13 +429,15 @@ export function reducer(state: GameState, action: Action): GameState {
       newState = resolveAbility(newState, purchasedCard);
 
       // Crown milestone check — after ability or deferred if ability needs player interaction
+      // Note: crossing both milestones (3 and 6) in a single purchase is impossible — no card
+      // awards more than 3 crowns, so at most one milestone can be crossed per purchase.
       const milestoneCrossed = CROWN_MILESTONES.some(m => player.crowns < m && crowns >= m)
         && newState.royalDeck.length > 0;
       if (newState.phase === 'resolve_ability' || newState.phase === 'assign_wild') {
         return milestoneCrossed ? { ...newState, pendingCrownCheck: true } : newState;
       }
       if (milestoneCrossed) return { ...newState, phase: 'choose_royal' };
-      return endTurn(newState);
+      return endOfTurnSequence(newState);
     }
 
     // ── Choose Royal Card (crown milestone) ──────────────────────────────────
@@ -432,7 +455,7 @@ export function reducer(state: GameState, action: Action): GameState {
       newState = { ...newState, royalDeck, pendingCrownCheck: false };
       newState = resolveRoyalAbility(newState, cp, royalCard);
       if (newState.phase === 'resolve_ability') return newState;
-      return endTurn(newState);
+      return endOfTurnSequence(newState);
     }
 
     // ── Ability: Assign Wild card color from target ───────────────────────────
@@ -466,7 +489,7 @@ export function reducer(state: GameState, action: Action): GameState {
       }
 
       if (newState.pendingCrownCheck) return { ...newState, phase: 'choose_royal', pendingCrownCheck: false };
-      return endTurn(newState);
+      return endOfTurnSequence(newState);
     }
 
     // ── Ability: Token — take 1 token of card's color from board ─────────────
@@ -485,7 +508,7 @@ export function reducer(state: GameState, action: Action): GameState {
       let newState = updatePlayer(state, cp, { tokens: playerTokens });
       newState = { ...newState, board, pendingAbility: null, lastPurchasedCard: null };
       if (newState.pendingCrownCheck) return { ...newState, phase: 'choose_royal', pendingCrownCheck: false };
-      return endTurn(newState);
+      return endOfTurnSequence(newState);
     }
 
     // ── Ability: Take — take 1 gem/pearl from opponent ────────────────────────
@@ -505,7 +528,7 @@ export function reducer(state: GameState, action: Action): GameState {
       newState = updatePlayer(newState, cp, { tokens: newPlayerTokens });
       newState = { ...newState, pendingAbility: null, lastPurchasedCard: null };
       if (newState.pendingCrownCheck) return { ...newState, phase: 'choose_royal', pendingCrownCheck: false };
-      return endTurn(newState);
+      return endOfTurnSequence(newState);
     }
 
     // ── Discard tokens ────────────────────────────────────────────────────────
@@ -525,7 +548,7 @@ export function reducer(state: GameState, action: Action): GameState {
       let newState = updatePlayer(state, cp, { tokens: playerTokens });
       newState = { ...newState, bag };
 
-      return endTurn(newState);
+      return advanceTurn(newState);
     }
 
     default:

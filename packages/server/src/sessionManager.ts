@@ -1,7 +1,7 @@
 import WebSocket from 'ws';
 import { createInitialState, reducer } from '@splendor-duel/game-engine';
 import type { Action, PlayerId } from '@splendor-duel/game-engine';
-import type { ServerMessage, SessionInfo } from './protocol';
+import type { ClientGameState, ServerMessage, SessionInfo } from './protocol';
 
 // ─── Internal session shape ───────────────────────────────────────────────────
 
@@ -25,17 +25,30 @@ function generateSessionId(): string {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * Returns a sanitized view of the game state for the given player.
+ * The requesting player sees their own reserved cards in full.
+ * The opponent's reserved cards are hidden: reservedCards is set to [] and
+ * reservedCardCount carries the true count.
+ */
+function sanitizeStateFor(
+  state: ReturnType<typeof createInitialState>,
+  viewerId: PlayerId
+): ClientGameState {
+  const players = state.players.map((p, i) => ({
+    ...p,
+    reservedCards: i === viewerId ? p.reservedCards : [],
+    reservedCardCount: p.reservedCards.length,
+  })) as [ClientGameState['players'][0], ClientGameState['players'][1]];
+  return { ...state, players };
+}
+
 function send(ws: WebSocket, msg: ServerMessage): void {
   if (ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify(msg));
   }
 }
 
-function broadcast(session: Session, msg: ServerMessage): void {
-  for (const ws of session.connections) {
-    if (ws) send(ws, msg);
-  }
-}
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -101,13 +114,13 @@ export function joinSession(
   session.playerNames[1] = playerName;
   session.status = 'playing';
 
-  // Tell player 1 their identity and the starting state
-  send(ws, { type: 'SESSION_JOINED', sessionId, playerId: 1, state: session.state });
+  // Tell player 1 their identity and the starting state (their own reserved cards visible)
+  send(ws, { type: 'SESSION_JOINED', sessionId, playerId: 1, state: sanitizeStateFor(session.state, 1) });
 
-  // Tell player 0 the opponent arrived and the game is starting
+  // Tell player 0 the opponent arrived and the game is starting (their own reserved cards visible)
   const p0 = session.connections[0];
   if (p0) {
-    send(p0, { type: 'GAME_STARTED', state: session.state, opponentName: playerName });
+    send(p0, { type: 'GAME_STARTED', state: sanitizeStateFor(session.state, 0), opponentName: playerName });
   }
 
   return 1;
@@ -153,7 +166,10 @@ export function dispatchAction(
     session.status = 'finished';
   }
 
-  broadcast(session, { type: 'STATE_UPDATE', state: nextState });
+  for (const pid of [0, 1] as PlayerId[]) {
+    const ws = session.connections[pid];
+    if (ws) send(ws, { type: 'STATE_UPDATE', state: sanitizeStateFor(nextState, pid) });
+  }
 }
 
 /**
