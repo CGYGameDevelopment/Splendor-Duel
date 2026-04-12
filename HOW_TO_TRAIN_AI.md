@@ -20,7 +20,7 @@ The AI learns by playing games against itself. After each batch of games, it upd
 ## Prerequisites
 
 - **Node.js** 18+ and **npm** (for the game sim server)
-- **Python** 3.11+ (for training)
+- **Python 3.12** (for training — PyTorch does not yet support Python 3.13 or 3.14)
 - A Python virtual environment (recommended)
 
 ---
@@ -42,16 +42,13 @@ You only need to rebuild if you change the game engine.
 
 ## Step 2 — Set up the Python environment
 
-```bash
-# Create and activate a virtual environment (do this once)
-python -m venv .venv
-
-# Windows
+```cmd
+REM From the repo root — use Python 3.12 explicitly (PyTorch does not yet support 3.13 or 3.14)
+rmdir /s /q .venv
+py -3.12 -m venv .venv
 .venv\Scripts\activate
 
-
-# Install the AI trainer package
-cd packages/ai-trainer
+cd packages\ai-trainer
 pip install -e ".[dev]"
 ```
 

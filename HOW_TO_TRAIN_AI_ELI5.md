@@ -18,7 +18,7 @@ The robot plays games **against itself** (called *self-play*), wins or loses, an
 ## What You Need Before Starting
 
 - **Node.js** — the game table runs on this
-- **Python** — the brain coach runs on this
+- **Python 3.12** — the brain coach runs on this (PyTorch doesn't support 3.13 or 3.14 yet)
 - A virtual environment (just a tidy box to keep Python's stuff in)
 
 ---
@@ -39,13 +39,13 @@ Think of this like assembling the board game before you can play. Only do it aga
 
 ## Step 2 — Set Up the Brain Coach's Toolbox
 
-```bash
-python -m venv .venv
-.venv\Scripts\activate          # Windows
+```cmd
+py -3.12 -m venv .venv
+.venv\Scripts\activate
 
-cd packages/ai-trainer
+cd packages\ai-trainer
 pip install -e ".[dev]"
-pip install torch               # the math engine that powers the AI brain
+pip install torch               REM the math engine that powers the AI brain
 ```
 
 This installs all the tools the brain coach needs to do its job.

@@ -1,6 +1,6 @@
 # How to Play vs the AI
 
-You need **three terminals** and a trained checkpoint.
+You need **four terminals** and a trained checkpoint.
 
 ---
 
@@ -55,7 +55,7 @@ Waiting for opponent...
 
 ---
 
-## Step 4 — Join as the human (Terminal 3 or a new one)
+## Step 4 — Join as the human (Terminal 4)
 
 In another terminal (or the same machine):
 
