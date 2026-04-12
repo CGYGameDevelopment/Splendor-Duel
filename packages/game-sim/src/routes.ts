@@ -29,6 +29,12 @@ router.post('/reset', (req, res) => {
 // Returns: { state, legalMoves, done, winner }
 router.post('/step', (req, res) => {
   const { sessionId, action } = req.body;
+
+  if (!action) {
+    res.status(400).json({ error: 'Missing action in request body' });
+    return;
+  }
+
   const state = store.get(sessionId);
 
   if (!state) {

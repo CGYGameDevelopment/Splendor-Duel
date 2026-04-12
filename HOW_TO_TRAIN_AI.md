@@ -108,9 +108,11 @@ train --iterations 1000 --episodes-per-iter 40 --eval-every 25
 | `--iterations` | 500 | Total number of training iterations |
 | `--episodes-per-iter` | 20 | Self-play games collected before each update |
 | `--eval-every` | 50 | How often to measure win rate vs random agent |
+| `--checkpoint-every` | 10 | How often to save a rolling `latest.pt` checkpoint |
 | `--sim-url` | `http://127.0.0.1:3002` | URL of the game sim server |
 | `--checkpoint-dir` | `checkpoints` | Where to save model snapshots |
 | `--lr` | `0.0003` | Learning rate |
+| `--resume` | *(none)* | Path to a checkpoint file to resume training from |
 
 ---
 
@@ -123,11 +125,13 @@ Training on cpu
 ...
 [  50/500] transitions=  876  policy_loss=0.0201  value_loss=0.3102  entropy=5.8841
   >> Win rate vs random: 54.0%
+  >> Win rate vs prev checkpoint: 58.0%
   >> Checkpoint saved: checkpoints/model_iter0050_wr0.54.pt
 ```
 
 **What to watch:**
 - **Win rate vs random** should climb above 50% after ~100 iterations and continue improving
+- **Win rate vs prev checkpoint** shows improvement since the last evaluation — should stay above 50% as training progresses
 - **Entropy** should decrease slowly over time (the AI becomes less random)
 - **Value loss** should decrease as the network learns to predict outcomes
 
@@ -135,7 +139,15 @@ Training on cpu
 
 ## Checkpoints
 
-Model snapshots are saved to `checkpoints/` every time the win rate is evaluated. The filename encodes the iteration and win rate, for example:
+Three types of checkpoint are saved to `checkpoints/`:
+
+| File | When saved | Purpose |
+|---|---|---|
+| `model_iter####_wr#.##.pt` | Every `--eval-every` iterations | Milestone snapshot with iteration and win rate in the name |
+| `latest.pt` | Every `--checkpoint-every` iterations (default 10) | Rolling save for crash recovery |
+| `best.pt` | When a new highest win rate is reached | Best model weights across the entire run |
+
+Example milestone filenames:
 
 ```
 checkpoints/model_iter0050_wr0.54.pt
@@ -162,7 +174,7 @@ model.eval()
 Each game state is converted into a 858-element float vector capturing the board tokens, card pyramid, both players' tokens/cards/prestige, privileges, and current phase. The network always sees the state from the current player's perspective.
 
 ### Action space
-There are 617 possible action slots covering all move types (take tokens, purchase cards, reserve cards, use privileges, discard, etc.). At each step, the network outputs a score for all 617 slots, illegal moves are masked to negative infinity, and the AI samples from the remaining distribution.
+There are 3677 possible action slots covering all move types (take tokens, purchase cards, reserve cards, use privileges, discard tokens, take individual tokens from the board or opponent, replenish the board, end optional phases, and place bonus cards). At each step, the network outputs a score for all 3677 slots, illegal moves are masked to negative infinity, and the AI samples from the remaining distribution.
 
 ### Self-play
 Both sides of each training game use the same model. The AI effectively plays against itself, improving by learning from its own wins and losses.
@@ -181,15 +193,16 @@ packages/
   ai-trainer/
     src/ai_trainer/
       sim_client.py      HTTP client for the game-sim server
-      action_space.py    617-action vocabulary + legal move masking
+      action_space.py    3677-action vocabulary + legal move masking
       state_encoder.py   GameState → float[858] tensor
       env.py             gymnasium.Env for the game
       model.py           ActorCriticNet (policy + value heads)
       random_agent.py    Uniform-random baseline agent
       self_play.py       Collects game episodes using the current model
       ppo.py             PPO update loop
-      evaluate.py        Win-rate measurement vs random agent
-      train.py           CLI entry point
+      evaluate.py        Win-rate measurement vs random agent and vs previous checkpoint
+      bot_client.py      WebSocket bot for play-vs-ai
+      train.py           CLI entry point (`train`)
 ```
 
 ---

@@ -17,9 +17,11 @@ Options:
 
 from __future__ import annotations
 
+import copy
 import csv
 from pathlib import Path
 
+import requests
 import torch
 import torch.optim as optim
 import typer
@@ -28,7 +30,7 @@ from .env import SplendorDuelEnv
 from .model import ActorCriticNet
 from .ppo import PPOConfig, update
 from .self_play import collect_episodes
-from .evaluate import win_rate_vs_random
+from .evaluate import win_rate_vs_random, win_rate_vs_model
 
 app = typer.Typer(add_completion=False)
 
@@ -90,6 +92,23 @@ def main(
         typer.echo(f"Resumed from {resume} (iteration {ckpt['iteration']})")
 
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
+    # Snapshot of the model at the previous evaluation point, used for
+    # checkpoint-vs-checkpoint comparison during evaluation.
+    prev_model: ActorCriticNet | None = None
+
+    # Track the best win rate seen across the entire run so we can persist the
+    # best-performing weights separately from the rolling latest/milestone saves.
+    best_win_rate: float = -1.0
+    best_ckpt_path = checkpoint_dir / "best.pt"
+    if best_ckpt_path.exists():
+        try:
+            saved = torch.load(best_ckpt_path, map_location="cpu", weights_only=True)
+            best_win_rate = float(saved.get("win_rate", -1.0))
+            typer.echo(f"Existing best win rate: {best_win_rate:.1%}")
+        except Exception:
+            pass
+
     log_path = checkpoint_dir / "training_log.csv"
     log_existed = log_path.exists()
 
@@ -99,7 +118,17 @@ def main(
             writer.writerow(["iteration", "transitions", "policy_loss", "value_loss", "entropy", "win_rate"])
 
         for iteration in range(start_iteration, start_iteration + iterations):
-            episodes = collect_episodes(model, env, episodes_per_iter, device=device)
+            try:
+                episodes = collect_episodes(model, env, episodes_per_iter, device=device)
+            except requests.RequestException as exc:
+                typer.echo(
+                    f"\nERROR: game-sim server became unreachable at iteration {iteration}: {exc}\n"
+                    "Save the latest checkpoint and restart the server, then resume with --resume.",
+                    err=True,
+                )
+                _save_checkpoint(checkpoint_dir / "latest.pt", iteration - 1, model, optimizer)
+                raise typer.Exit(code=1)
+
             losses = update(model, optimizer, episodes, config=config, device=device)
 
             n_transitions = sum(len(ep) for ep in episodes)
@@ -114,12 +143,29 @@ def main(
             win_rate: float | None = None
 
             if iteration % eval_every == 0:
-                win_rate = win_rate_vs_random(model, env, n_games=100, device=device)
-                typer.echo(f"  >> Win rate vs random: {win_rate:.1%}")
+                try:
+                    win_rate = win_rate_vs_random(model, env, n_games=100, device=device)
+                    typer.echo(f"  >> Win rate vs random: {win_rate:.1%}")
+
+                    if prev_model is not None:
+                        wr_vs_prev = win_rate_vs_model(model, prev_model, env, n_games=50, device=device)
+                        typer.echo(f"  >> Win rate vs prev checkpoint: {wr_vs_prev:.1%}")
+                except requests.RequestException as exc:
+                    typer.echo(f"  >> Evaluation skipped (server error): {exc}", err=True)
 
                 ckpt_path = checkpoint_dir / f"model_iter{iteration:04d}_wr{win_rate:.2f}.pt"
                 _save_checkpoint(ckpt_path, iteration, model, optimizer, win_rate)
                 typer.echo(f"  >> Checkpoint saved: {ckpt_path}")
+
+                if win_rate is not None and win_rate > best_win_rate:
+                    best_win_rate = win_rate
+                    _save_checkpoint(checkpoint_dir / "best.pt", iteration, model, optimizer, win_rate)
+                    typer.echo(f"  >> New best model (win rate: {win_rate:.1%})")
+
+                # Snapshot current model for next checkpoint comparison
+                prev_model = ActorCriticNet().to(device)
+                prev_model.load_state_dict(copy.deepcopy(model.state_dict()))
+                prev_model.eval()
 
             elif iteration % checkpoint_every == 0:
                 _save_checkpoint(checkpoint_dir / "latest.pt", iteration, model, optimizer)

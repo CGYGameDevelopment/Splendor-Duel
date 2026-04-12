@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import requests
 
+_TIMEOUT = 10  # seconds — applied to all requests
+
 
 class SimClient:
     """Thin synchronous HTTP wrapper around the game-sim server."""
@@ -21,7 +23,7 @@ class SimClient:
         payload: dict = {"secondPlayerGetsPrivilege": second_player_gets_privilege}
         if session_id is not None:
             payload["sessionId"] = session_id
-        r = self._session.post(f"{self.base_url}/reset", json=payload)
+        r = self._session.post(f"{self.base_url}/reset", json=payload, timeout=_TIMEOUT)
         r.raise_for_status()
         return r.json()
 
@@ -30,6 +32,7 @@ class SimClient:
         r = self._session.post(
             f"{self.base_url}/step",
             json={"sessionId": session_id, "action": action},
+            timeout=_TIMEOUT,
         )
         r.raise_for_status()
         return r.json()
@@ -39,18 +42,19 @@ class SimClient:
         r = self._session.post(
             f"{self.base_url}/legal-moves",
             json={"sessionId": session_id},
+            timeout=_TIMEOUT,
         )
         r.raise_for_status()
         return r.json()["legalMoves"]
 
     def close_session(self, session_id: str) -> None:
         """Free the server-side session."""
-        self._session.delete(f"{self.base_url}/session/{session_id}")
+        self._session.delete(f"{self.base_url}/session/{session_id}", timeout=_TIMEOUT)
 
     def health(self) -> bool:
         """Returns True if the game-sim server is reachable."""
         try:
             r = self._session.get(f"{self.base_url}/health", timeout=2)
             return r.status_code == 200
-        except requests.ConnectionError:
+        except (requests.ConnectionError, requests.Timeout):
             return False

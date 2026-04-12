@@ -120,7 +120,7 @@ The filename tells you *when* it was saved and *how well* it was doing. You can 
 ## How the AI Actually "Thinks"
 
 1. **It looks at the board** — the whole game state gets squished into a list of 858 numbers the brain can read.
-2. **It considers all 617 possible moves** — things like "take these gems", "buy this card", "reserve that one".
+2. **It considers all 3677 possible moves** — things like "take these gems", "buy this card", "reserve that one", "discard these tokens", "take a token from the opponent".
 3. **Illegal moves get blocked** — the brain can't accidentally cheat; bad moves are filtered out automatically.
 4. **It picks a move** — based on which remaining moves it thinks are best.
 5. **It wins or loses** — and the brain coach updates the brain based on what happened.

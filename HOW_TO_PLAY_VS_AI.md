@@ -70,7 +70,7 @@ When prompted:
 3. Choose **join existing** (`j`)
 4. Paste the session ID printed by the bot
 
-The game starts immediately. You play as Player 1, the AI plays as Player 0 (so the AI goes first).
+The game starts immediately. The AI creates the session and is always Player 0 (goes first). You join as Player 1.
 
 ---
 

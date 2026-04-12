@@ -184,6 +184,16 @@ def index_to_action(idx: int, legal_moves: list[dict]) -> dict | None:
     return None
 
 
+def build_legal_index_map(legal_moves: list[dict]) -> dict[int, dict]:
+    """Return a dict mapping canonical action index → action dict for all legal moves."""
+    result: dict[int, dict] = {}
+    for action in legal_moves:
+        idx = action_to_index(action)
+        if idx is not None:
+            result[idx] = action
+    return result
+
+
 def build_legal_mask(legal_moves: list[dict]) -> np.ndarray:
     """Return a bool array of shape (3677,) with True at each legal action's index."""
     mask = np.zeros(ACTION_SPACE_SIZE, dtype=bool)

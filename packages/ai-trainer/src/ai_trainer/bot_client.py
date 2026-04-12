@@ -53,7 +53,7 @@ def _pick_action(
     ).unsqueeze(0)
 
     dist = model.masked_policy(obs_t, mask_t)
-    action_idx = int(dist.probs.argmax().item()) if greedy else int(dist.sample().item())
+    action_idx = int(dist.logits.argmax().item()) if greedy else int(dist.sample().item())
     return index_to_action(action_idx, legal_moves)
 
 
@@ -65,7 +65,12 @@ async def _take_turn(
     device: torch.device,
     greedy: bool,
 ) -> None:
-    legal_moves = _legal_moves_from_state(sim_url, state)
+    # Run the blocking HTTP call in a thread executor so the asyncio event loop
+    # is not blocked while waiting for the game-sim response.
+    loop = asyncio.get_running_loop()
+    legal_moves = await loop.run_in_executor(
+        None, lambda: _legal_moves_from_state(sim_url, state)
+    )
     if not legal_moves:
         return
     action = _pick_action(model, state, legal_moves, device, greedy)

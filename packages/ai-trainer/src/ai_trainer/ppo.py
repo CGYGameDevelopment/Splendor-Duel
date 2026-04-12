@@ -37,10 +37,19 @@ def _compute_gae(
     rewards: list[float],
     values: list[float],
     dones: list[bool],
+    player_ids: list[int],
     gamma: float,
     lam: float,
 ) -> tuple[list[float], list[float]]:
-    """Compute GAE advantages and discounted returns."""
+    """
+    Compute GAE advantages and discounted returns for a two-player zero-sum game.
+
+    Observations are always encoded from the current player's perspective, so
+    consecutive steps from different players have values in opposite frames:
+    V_opponent(s) ≈ -V_current(s).  When the next step belongs to the opponent,
+    both the bootstrap value and the accumulated GAE term must be negated to
+    convert them to the current player's perspective before computing the TD error.
+    """
     n = len(rewards)
     advantages = [0.0] * n
     returns = [0.0] * n
@@ -49,8 +58,16 @@ def _compute_gae(
 
     for t in reversed(range(n)):
         mask = 0.0 if dones[t] else 1.0
-        delta = rewards[t] + gamma * next_value * mask - values[t]
-        gae = delta + gamma * lam * mask * gae
+        # If the next step was taken by the opponent, its value estimate is from
+        # the opponent's frame.  Negate to convert to current player's frame.
+        if t + 1 < n and player_ids[t + 1] != player_ids[t]:
+            nv = -next_value
+            ng = -gae
+        else:
+            nv = next_value
+            ng = gae
+        delta = rewards[t] + gamma * nv * mask - values[t]
+        gae = delta + gamma * lam * mask * ng
         advantages[t] = gae
         returns[t] = advantages[t] + values[t]
         next_value = values[t]
@@ -82,8 +99,9 @@ def update(
         rewards = [t.reward for t in ep.transitions]
         values = [t.value for t in ep.transitions]
         dones = [t.done for t in ep.transitions]
+        player_ids = [t.player_id for t in ep.transitions]
 
-        advantages, returns = _compute_gae(rewards, values, dones, config.gamma, config.lam)
+        advantages, returns = _compute_gae(rewards, values, dones, player_ids, config.gamma, config.lam)
 
         for i, t in enumerate(ep.transitions):
             all_obs.append(t.obs)

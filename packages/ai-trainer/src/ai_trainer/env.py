@@ -21,8 +21,8 @@ from .sim_client import SimClient
 from .state_encoder import encode, STATE_DIM
 from .action_space import (
     ACTION_SPACE_SIZE,
+    build_legal_index_map,
     build_legal_mask,
-    index_to_action,
 )
 
 
@@ -39,6 +39,7 @@ class SplendorDuelEnv(gym.Env):
 
         self._session_id: str | None = None
         self._legal_moves: list[dict] = []
+        self._legal_index_map: dict[int, dict] = {}
         self._state: dict = {}
         self._winner: int | None = None
 
@@ -59,6 +60,7 @@ class SplendorDuelEnv(gym.Env):
         self._session_id = result["sessionId"]
         self._state = result["state"]
         self._legal_moves = result["legalMoves"]
+        self._legal_index_map = build_legal_index_map(self._legal_moves)
         self._winner = None
 
         obs = encode(self._state)
@@ -69,7 +71,7 @@ class SplendorDuelEnv(gym.Env):
         assert self._session_id is not None, "Call reset() before step()"
 
         # Map canonical index → concrete action dict
-        concrete = index_to_action(action, self._legal_moves)
+        concrete = self._legal_index_map.get(action)
         if concrete is None:
             # Illegal action selected — return current obs with negative reward
             obs = encode(self._state)
@@ -78,6 +80,7 @@ class SplendorDuelEnv(gym.Env):
         result = self.client.step(self._session_id, concrete)
         self._state = result["state"]
         self._legal_moves = result["legalMoves"]
+        self._legal_index_map = build_legal_index_map(self._legal_moves)
 
         done: bool = result["done"]
         winner: int | None = result["winner"]
@@ -87,9 +90,9 @@ class SplendorDuelEnv(gym.Env):
         reward = 0.0
         if done and winner is not None:
             # Reward from the perspective of the player who just moved.
-            # currentPlayer has already advanced to the next player after game over,
-            # so the player who just moved is 1 - current_player.
-            acting_player = 1 - current_player
+            # endTurn() does NOT advance currentPlayer on game_over — it stays as
+            # state.winner.  So the player who just moved is current_player itself.
+            acting_player = current_player
             reward = 1.0 if winner == acting_player else -1.0
 
         obs = encode(self._state)

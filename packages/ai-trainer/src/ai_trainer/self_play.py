@@ -30,6 +30,7 @@ class Transition:
     reward: float
     done: bool
     legal_mask: np.ndarray    # (3677,)
+    player_id: int            # 0 or 1 — index of the player who acted
 
 
 @dataclass
@@ -77,6 +78,8 @@ def collect_episodes(
             log_prob = dist.log_prob(action)
 
             action_int = int(action.item())
+            # Record the acting player BEFORE env.step() advances the state.
+            acting_player_id: int = info["state"].get("currentPlayer", 0)
             obs_np, reward, done, _, info = env.step(action_int)
 
             episode.transitions.append(
@@ -88,6 +91,7 @@ def collect_episodes(
                     reward=float(reward),
                     done=done,
                     legal_mask=mask_np,  # mask for the state where the action was taken
+                    player_id=acting_player_id,
                 )
             )
 
