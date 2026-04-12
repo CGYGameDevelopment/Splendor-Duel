@@ -144,49 +144,38 @@ function resolveRoyalAbility(state: GameState, playerId: PlayerId, card: Card): 
   }
 }
 
-function checkCrownMilestone(
-  state: GameState,
-  playerId: PlayerId,
-  prevCrowns: number,
-  newCrowns: number
-): GameState {
-  for (const milestone of CROWN_MILESTONES) {
-    if (prevCrowns < milestone && newCrowns >= milestone && state.royalDeck.length > 0) {
-      return { ...state, phase: 'choose_royal' };
-    }
-  }
-  return state;
-}
-
 // ─── Resolve card ability ─────────────────────────────────────────────────────
+// Returns updated state but does NOT call endTurn — the caller is responsible.
+// Interactive abilities (Token, Take, Bonus) set an intermediate phase; the
+// caller must handle endTurn after the player resolves those actions.
 
 function resolveAbility(state: GameState, card: Card): GameState {
-  if (!card.ability) return endTurn(state);
+  if (!card.ability) return state;
 
   switch (card.ability) {
     case 'Turn': {
-      return endTurn({
+      return {
         ...state,
         repeatTurn: true,
         pendingAbility: null,
         lastPurchasedCard: null,
-      });
+      };
     }
 
     case 'Privilege': {
       const { privileges, players } = grantPrivileges(state, state.currentPlayer, 1);
-      return endTurn({ ...state, privileges, players, pendingAbility: null });
+      return { ...state, privileges, players, pendingAbility: null };
     }
 
     case 'Token': {
       // Player must take 1 token matching the card's effective color from the board
       // If card has no gem color, skip the token effect
       if (card.color === 'joker' || card.color === null) {
-        return endTurn({ ...state, pendingAbility: null });
+        return { ...state, pendingAbility: null };
       }
       const color = card.color as TokenColor;
       const hasToken = state.board.some(cell => cell === color);
-      if (!hasToken) return endTurn({ ...state, pendingAbility: null });
+      if (!hasToken) return { ...state, pendingAbility: null };
       return { ...state, phase: 'resolve_ability', pendingAbility: 'Token', lastPurchasedCard: card };
     }
 
@@ -194,7 +183,7 @@ function resolveAbility(state: GameState, card: Card): GameState {
       const opp = (1 - state.currentPlayer) as PlayerId;
       const oppTokens = state.players[opp].tokens;
       const hasEligible = GEM_COLORS.some(c => oppTokens[c] > 0) || oppTokens.pearl > 0;
-      if (!hasEligible) return endTurn({ ...state, pendingAbility: null });
+      if (!hasEligible) return { ...state, pendingAbility: null };
       return { ...state, phase: 'resolve_ability', pendingAbility: 'Take', lastPurchasedCard: card };
     }
 
@@ -207,13 +196,13 @@ function resolveAbility(state: GameState, card: Card): GameState {
       );
       if (eligible.length === 0) {
         // Cannot purchase this card — this should be caught in legalMoves, but guard here
-        return endTurn({ ...state, pendingAbility: null });
+        return { ...state, pendingAbility: null };
       }
       return { ...state, phase: 'place_bonus', pendingAbility: card.ability, lastPurchasedCard: card };
     }
 
     default:
-      return endTurn({ ...state, pendingAbility: null });
+      return { ...state, pendingAbility: null };
   }
 }
 
@@ -419,12 +408,17 @@ export function reducer(state: GameState, action: Action): GameState {
         newState = refillPyramidSlot(newState, level, cardId);
       }
 
-      // Check crown milestones (3rd and 6th crown) — player must choose a royal card
-      newState = checkCrownMilestone(newState, cp, player.crowns, crowns);
-      if (newState.phase === 'choose_royal') return newState;
+      // Resolve purchased card's ability first
+      newState = resolveAbility(newState, purchasedCard);
 
-      // Resolve ability
-      return resolveAbility(newState, purchasedCard);
+      // Crown milestone check — after ability or deferred if ability needs player interaction
+      const milestoneCrossed = CROWN_MILESTONES.some(m => player.crowns < m && crowns >= m)
+        && newState.royalDeck.length > 0;
+      if (newState.phase === 'resolve_ability' || newState.phase === 'place_bonus') {
+        return milestoneCrossed ? { ...newState, pendingCrownCheck: true } : newState;
+      }
+      if (milestoneCrossed) return { ...newState, phase: 'choose_royal' };
+      return endTurn(newState);
     }
 
     // ── Choose Royal Card (crown milestone) ──────────────────────────────────
@@ -432,18 +426,15 @@ export function reducer(state: GameState, action: Action): GameState {
       const royalCard = state.royalDeck.find(c => c.id === action.cardId);
       if (!royalCard) return state;
 
-      const purchasedCard = state.lastPurchasedCard;
       const royalDeck = state.royalDeck.filter(c => c.id !== action.cardId);
 
       let newState = updatePlayer(state, cp, {
         royalCards: [...player.royalCards, royalCard],
         prestige: player.prestige + royalCard.points,
       });
-      newState = { ...newState, royalDeck };
+      newState = { ...newState, royalDeck, pendingCrownCheck: false };
       newState = resolveRoyalAbility(newState, cp, royalCard);
-
-      if (!purchasedCard) return endTurn(newState);
-      return resolveAbility(newState, purchasedCard);
+      return endTurn(newState);
     }
 
     // ── Ability: Place Bonus card on target ───────────────────────────────────
@@ -475,6 +466,7 @@ export function reducer(state: GameState, action: Action): GameState {
         newState = { ...newState, pendingAbility: null };
       }
 
+      if (newState.pendingCrownCheck) return { ...newState, phase: 'choose_royal', pendingCrownCheck: false };
       return endTurn(newState);
     }
 
@@ -492,6 +484,7 @@ export function reducer(state: GameState, action: Action): GameState {
       const playerTokens = { ...player.tokens, [color]: player.tokens[color] + 1 };
       let newState = updatePlayer(state, cp, { tokens: playerTokens });
       newState = { ...newState, board, pendingAbility: null, lastPurchasedCard: null };
+      if (newState.pendingCrownCheck) return { ...newState, phase: 'choose_royal', pendingCrownCheck: false };
       return endTurn(newState);
     }
 
@@ -510,6 +503,7 @@ export function reducer(state: GameState, action: Action): GameState {
       const newPlayerTokens = { ...newState.players[cp].tokens, [color]: newState.players[cp].tokens[color] + 1 };
       newState = updatePlayer(newState, cp, { tokens: newPlayerTokens });
       newState = { ...newState, pendingAbility: null, lastPurchasedCard: null };
+      if (newState.pendingCrownCheck) return { ...newState, phase: 'choose_royal', pendingCrownCheck: false };
       return endTurn(newState);
     }
 
