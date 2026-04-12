@@ -5,9 +5,11 @@ import {
   STARTING_GEM_COUNT, STARTING_PEARL_COUNT, STARTING_GOLD_COUNT, BOARD_SIZE,
   INITIAL_SECOND_PLAYER_PRIVILEGES, INITIAL_TABLE_PRIVILEGES_SECOND, INITIAL_TABLE_PRIVILEGES_FIRST,
 } from './helpers';
-import cardsData from './data/cards.json';
+import cardsData from './data/jewel-cards.json';
+import royalCardsData from './data/royal-cards.json';
 
 const ALL_CARDS: Card[] = cardsData as Card[];
+const ALL_ROYAL_CARDS: Card[] = royalCardsData as Card[];
 
 function makePlayer(): PlayerState {
   return {
@@ -35,7 +37,7 @@ export function createInitialState(secondPlayerGetsPrivilege = true): GameState 
   const level1 = shuffle(ALL_CARDS.filter(card => card.level === 1));
   const level2 = shuffle(ALL_CARDS.filter(card => card.level === 2));
   const level3 = shuffle(ALL_CARDS.filter(card => card.level === 3));
-  const royalDeck = shuffle(ALL_CARDS.filter(card => card.level === 'royal'));
+  const royalDeck = shuffle(ALL_ROYAL_CARDS);
 
   // Reveal pyramid: PYRAMID_LEVEL1_COUNT, PYRAMID_LEVEL2_COUNT, PYRAMID_LEVEL3_COUNT
   const pyramid = {

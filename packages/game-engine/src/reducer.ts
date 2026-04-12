@@ -109,7 +109,7 @@ function resolveRoyalAbility(state: GameState, playerId: PlayerId, card: Card): 
       return { ...state, privileges, players };
     }
     case 'Token': {
-      if (card.color === null || card.color === 'joker') return state;
+      if (card.color === null || card.color === 'wild') return state;
       const color = card.color as TokenColor;
       const hasToken = state.board.some(c => c === color);
       if (!hasToken) return state;
@@ -129,7 +129,7 @@ function resolveRoyalAbility(state: GameState, playerId: PlayerId, card: Card): 
 
 // ─── Resolve card ability ─────────────────────────────────────────────────────
 // Returns updated state but does NOT call endTurn — the caller is responsible.
-// Interactive abilities (Token, Take, Bonus) set an intermediate phase; the
+// Interactive abilities (Token, Take, Wild) set an intermediate phase; the
 // caller must handle endTurn after the player resolves those actions.
 
 function resolveAbility(state: GameState, card: Card): GameState {
@@ -153,7 +153,7 @@ function resolveAbility(state: GameState, card: Card): GameState {
     case 'Token': {
       // Player must take 1 token matching the card's effective color from the board
       // If card has no gem color, skip the token effect
-      if (card.color === 'joker' || card.color === null) {
+      if (card.color === 'wild' || card.color === null) {
         return { ...state, pendingAbility: null };
       }
       const color = card.color as TokenColor;
@@ -170,18 +170,18 @@ function resolveAbility(state: GameState, card: Card): GameState {
       return { ...state, phase: 'resolve_ability', pendingAbility: 'Take', lastPurchasedCard: card };
     }
 
-    case 'Bonus':
-    case 'Bonus/Turn': {
+    case 'Wild':
+    case 'Wild/Turn': {
       // Player must choose which card this overlaps — needs a card with a bonus to overlap (excluding itself)
       const player = state.players[state.currentPlayer];
       const eligible = player.purchasedCards.filter(
-        c => c.id !== card.id && c.color !== 'joker' && c.color !== null && c.bonus > 0 && c.overlappingCardId === null
+        c => c.id !== card.id && c.color !== 'wild' && c.color !== null && c.bonus > 0 && c.overlappingCardId === null
       );
       if (eligible.length === 0) {
         // Cannot purchase this card — this should be caught in legalMoves, but guard here
         return { ...state, pendingAbility: null };
       }
-      return { ...state, phase: 'place_bonus', pendingAbility: card.ability, lastPurchasedCard: card };
+      return { ...state, phase: 'assign_wild', pendingAbility: card.ability, lastPurchasedCard: card };
     }
 
     default:
@@ -331,7 +331,7 @@ export function reducer(state: GameState, action: Action): GameState {
 
     // ── Mandatory: Purchase Card ──────────────────────────────────────────────
     case 'PURCHASE_CARD': {
-      const { cardId, goldUsage, jokerColor } = action;
+      const { cardId, goldUsage, wildColor } = action;
 
       // Find card in pyramid or reserve
       let card: Card | undefined;
@@ -368,9 +368,9 @@ export function reducer(state: GameState, action: Action): GameState {
       bag = { ...bag, gold: bag.gold + goldSpent };
 
       // Add card to purchased, remove from source
-      // For joker cards, assign the chosen color immediately
-      const purchasedCard = card.color === 'joker' && jokerColor
-        ? { ...card, assignedColor: jokerColor }
+      // For Wild cards, assign the chosen color immediately
+      const purchasedCard = card.color === 'wild' && wildColor
+        ? { ...card, assignedColor: wildColor }
         : { ...card };
       const purchasedCards = [...player.purchasedCards, purchasedCard];
       const reservedCards = fromReserve
@@ -397,7 +397,7 @@ export function reducer(state: GameState, action: Action): GameState {
       // Crown milestone check — after ability or deferred if ability needs player interaction
       const milestoneCrossed = CROWN_MILESTONES.some(m => player.crowns < m && crowns >= m)
         && newState.royalDeck.length > 0;
-      if (newState.phase === 'resolve_ability' || newState.phase === 'place_bonus') {
+      if (newState.phase === 'resolve_ability' || newState.phase === 'assign_wild') {
         return milestoneCrossed ? { ...newState, pendingCrownCheck: true } : newState;
       }
       if (milestoneCrossed) return { ...newState, phase: 'choose_royal' };
@@ -421,30 +421,30 @@ export function reducer(state: GameState, action: Action): GameState {
       return endTurn(newState);
     }
 
-    // ── Ability: Place Bonus card on target ───────────────────────────────────
-    case 'PLACE_BONUS_CARD': {
-      const { bonusCardId, targetCardId } = action;
-      const bonusCard = player.purchasedCards.find(c => c.id === bonusCardId);
+    // ── Ability: Assign Wild card color from target ───────────────────────────
+    case 'PLACE_WILD_CARD': {
+      const { wildCardId, targetCardId } = action;
+      const wildCard = player.purchasedCards.find(c => c.id === wildCardId);
       const targetCard = player.purchasedCards.find(c => c.id === targetCardId);
 
-      if (!bonusCard || !targetCard) return state;
-      if (bonusCard.id === targetCard.id) return state;
-      if (targetCard.color === 'joker' || targetCard.color === null) return state;
+      if (!wildCard || !targetCard) return state;
+      if (wildCard.id === targetCard.id) return state;
+      if (targetCard.color === 'wild' || targetCard.color === null) return state;
       if (targetCard.bonus === 0) return state;
       if (targetCard.overlappingCardId !== null) return state;
-      if (bonusCard.overlappingCardId !== null) return state;
+      if (wildCard.overlappingCardId !== null) return state;
 
       const assignedColor = targetCard.color as GemColor;
       const updatedCards = player.purchasedCards.map(c => {
-        if (c.id === bonusCardId) return { ...c, assignedColor, overlappingCardId: targetCardId };
+        if (c.id === wildCardId) return { ...c, assignedColor, overlappingCardId: targetCardId };
         return c;
       });
 
       // Recompute prestige (bonus card contributes 0 prestige change, but color grouping changes)
       let newState = updatePlayer(state, cp, { purchasedCards: updatedCards });
 
-      // If Bonus/Turn, grant an extra turn
-      if (state.pendingAbility === 'Bonus/Turn') {
+      // If Wild/Turn, grant an extra turn
+      if (state.pendingAbility === 'Wild/Turn') {
         newState = { ...newState, repeatTurn: true, pendingAbility: null };
       } else {
         newState = { ...newState, pendingAbility: null };

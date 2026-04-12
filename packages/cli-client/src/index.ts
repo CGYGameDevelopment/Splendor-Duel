@@ -47,7 +47,7 @@ const TOKEN_ABBR: { [key: string]: string } = {
 
 const CARD_COLOR_ABBR: { [key: string]: string } = {
   black: 'bk', red: 'rd', green: 'gn', blue: 'bl',
-  white: 'wh', joker: 'jk', points: 'pt',
+  white: 'wh', wild: 'wi', points: 'pt',
 };
 
 const ALL_TOKEN_COLORS = ['black', 'red', 'green', 'blue', 'white', 'pearl', 'gold'];
@@ -56,7 +56,8 @@ function abbr(color: string): string {
   return TOKEN_ABBR[color] ?? color.slice(0, 2);
 }
 
-function cardColorAbbr(color: string): string {
+function cardColorAbbr(color: string | null): string {
+  if (color == null) return '--';
   return CARD_COLOR_ABBR[color] ?? color.slice(0, 2);
 }
 
@@ -144,7 +145,7 @@ function displayPlayers(state: GameState): void {
 
     const gems: { [key: string]: number } = {};
     for (const card of player.purchasedCards) {
-      if (card.color !== 'joker' && card.color !== 'points') {
+      if (card.color !== 'wild' && card.color !== 'points') {
         gems[card.color] = (gems[card.color] ?? 0) + card.bonus;
       }
     }
@@ -219,12 +220,12 @@ function describeMove(action: Action, state: GameState): string {
     case 'DISCARD_TOKENS':
       return `Discard: ${formatPool(action.tokens as { [key: string]: number })}`;
 
-    case 'PLACE_BONUS_CARD': {
-      const bonus = findCard(state, action.bonusCardId);
+    case 'PLACE_WILD_CARD': {
+      const wild = findCard(state, action.wildCardId);
       const target = findCard(state, action.targetCardId);
-      const bonusStr = bonus ? describeCard(bonus) : `#${action.bonusCardId}`;
+      const wildStr = wild ? describeCard(wild) : `#${action.wildCardId}`;
       const targetStr = target ? describeCard(target) : `#${action.targetCardId}`;
-      return `Place bonus card ${bonusStr} → on top of ${targetStr}`;
+      return `Assign Wild card ${wildStr} → color from ${targetStr}`;
     }
 
     case 'TAKE_TOKEN_FROM_BOARD':

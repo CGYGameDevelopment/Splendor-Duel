@@ -50,7 +50,7 @@ export function totalTokens(pool: TokenPool): number {
 
 /**
  * Returns the total gem bonuses a player has by color.
- * Joker/Bonus cards contribute as their assignedColor.
+ * Wild cards contribute as their assignedColor.
  */
 export function playerBonuses(player: PlayerState): Record<GemColor, number> {
   const bonuses: Record<GemColor, number> = { black: 0, red: 0, green: 0, blue: 0, white: 0 };
@@ -67,10 +67,10 @@ export function playerBonuses(player: PlayerState): Record<GemColor, number> {
 
 /**
  * Returns the effective gem color of a card for bonus purposes.
- * Joker cards use assignedColor; null-color cards have no gem color.
+ * Wild cards use assignedColor; null-color cards have no gem color.
  */
 export function effectiveCardColor(card: Card): GemColor | null {
-  if (card.color === 'joker') return card.assignedColor;
+  if (card.color === 'wild') return card.assignedColor;
   if (card.color === null) return null;
   return card.color;
 }

@@ -11,7 +11,7 @@ export function legalMoves(state: GameState): Action[] {
     case 'mandatory':            return mandatoryMoves(state);
     case 'choose_royal':         return chooseRoyalMoves(state);
     case 'resolve_ability':      return resolveAbilityMoves(state);
-    case 'place_bonus':          return placeBonusMoves(state);
+    case 'assign_wild':          return placeBonusMoves(state);
     case 'discard':              return discardMoves(state);
     default:                     return [];
   }
@@ -135,20 +135,20 @@ function purchaseMoves(state: GameState): Action[] {
 
   for (const card of candidates) {
     // Bonus cards require an eligible target card
-    if (card.ability === 'Bonus' || card.ability === 'Bonus/Turn') {
+    if (card.ability === 'Wild' || card.ability === 'Wild/Turn') {
       const eligible = player.purchasedCards.filter(
-        c => c.color !== 'joker' && c.color !== null && c.bonus > 0 && c.overlappingCardId === null
+        c => c.color !== 'wild' && c.color !== null && c.bonus > 0 && c.overlappingCardId === null
       );
       if (eligible.length === 0) continue;
     }
 
-    // Joker cards: player must own at least one card with an effective GemColor;
+    // Wild cards: player must own at least one card with an effective GemColor;
     // generate one move per available color.
-    if (card.color === 'joker') {
+    if (card.color === 'wild') {
       const ownedColors = new Set<GemColor>(
         player.purchasedCards.flatMap(c => {
-          if (c.color !== null && c.color !== 'joker') return [c.color];
-          if (c.color === 'joker' && c.assignedColor) return [c.assignedColor];
+          if (c.color !== null && c.color !== 'wild') return [c.color];
+          if (c.color === 'wild' && c.assignedColor) return [c.assignedColor];
           return [];
         })
       );
@@ -156,9 +156,9 @@ function purchaseMoves(state: GameState): Action[] {
       if (!canAfford(card, player)) continue;
       const cost = netCost(card, player);
       const goldOptions = goldUsageCombinations(cost, player.tokens);
-      for (const jokerColor of ownedColors) {
+      for (const wildColor of ownedColors) {
         for (const goldUsage of goldOptions) {
-          moves.push({ type: 'PURCHASE_CARD', cardId: card.id, goldUsage, jokerColor });
+          moves.push({ type: 'PURCHASE_CARD', cardId: card.id, goldUsage, wildColor });
         }
       }
       continue;
@@ -224,7 +224,7 @@ function resolveAbilityMoves(state: GameState): Action[] {
   if (!card) return [];
 
   if (state.pendingAbility === 'Token') {
-    if (!card.color || card.color === 'joker') return [{ type: 'END_OPTIONAL_PHASE' }];
+    if (!card.color || card.color === 'wild') return [{ type: 'END_OPTIONAL_PHASE' }];
     const color = card.color as TokenColor;
     const indices = state.board.reduce<number[]>((acc, c, i) => { if (c === color) acc.push(i); return acc; }, []);
     if (indices.length === 0) return [{ type: 'END_OPTIONAL_PHASE' }]; // auto-skipped in reducer, but guard
@@ -243,20 +243,20 @@ function resolveAbilityMoves(state: GameState): Action[] {
   return [];
 }
 
-// ─── Place Bonus ──────────────────────────────────────────────────────────────
+// ─── Assign Wild ─────────────────────────────────────────────────────────────
 
 function placeBonusMoves(state: GameState): Action[] {
   const player = state.players[state.currentPlayer];
-  const bonusCard = state.lastPurchasedCard;
-  if (!bonusCard) return [];
+  const wildCard = state.lastPurchasedCard;
+  if (!wildCard) return [];
 
   const eligible = player.purchasedCards.filter(
-    c => c.id !== bonusCard.id && c.color !== 'joker' && c.color !== null && c.bonus > 0 && c.overlappingCardId === null
+    c => c.id !== wildCard.id && c.color !== 'wild' && c.color !== null && c.bonus > 0 && c.overlappingCardId === null
   );
 
   return eligible.map(target => ({
-    type: 'PLACE_BONUS_CARD' as const,
-    bonusCardId: bonusCard.id,
+    type: 'PLACE_WILD_CARD' as const,
+    wildCardId: wildCard.id,
     targetCardId: target.id,
   }));
 }

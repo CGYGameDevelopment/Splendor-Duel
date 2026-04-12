@@ -1,0 +1,50 @@
+[
+  {
+    "id": 1,
+    "level": "royal",
+    "color": null,
+    "points": 3,
+    "bonus": 0,
+    "ability": null,
+    "crowns": 0,
+    "cost": {},
+    "assignedColor": null,
+    "overlappingCardId": null
+  },
+  {
+    "id": 2,
+    "level": "royal",
+    "color": null,
+    "points": 2,
+    "bonus": 0,
+    "ability": "Turn",
+    "crowns": 0,
+    "cost": {},
+    "assignedColor": null,
+    "overlappingCardId": null
+  },
+  {
+    "id": 3,
+    "level": "royal",
+    "color": null,
+    "points": 2,
+    "bonus": 0,
+    "ability": "Take",
+    "crowns": 0,
+    "cost": {},
+    "assignedColor": null,
+    "overlappingCardId": null
+  },
+  {
+    "id": 4,
+    "level": "royal",
+    "color": null,
+    "points": 2,
+    "bonus": 0,
+    "ability": "Privilege",
+    "crowns": 0,
+    "cost": {},
+    "assignedColor": null,
+    "overlappingCardId": null
+  }
+]

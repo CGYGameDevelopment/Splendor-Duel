@@ -74,10 +74,10 @@ describe('checkVictory', () => {
     expect(checkVictory(player)).toBe('color_prestige');
   });
 
-  it('counts joker card points under its assignedColor for color_prestige', () => {
+  it('counts Wild card points under its assignedColor for color_prestige', () => {
     const redCard = makeCard({ id: 1, color: 'red', points: 7 });
-    const jokerCard = makeCard({ id: 2, color: 'joker', points: 3, assignedColor: 'red' });
-    const player = makePlayer({ purchasedCards: [redCard, jokerCard] });
+    const wildCard = makeCard({ id: 2, color: 'wild', points: 3, assignedColor: 'red' });
+    const player = makePlayer({ purchasedCards: [redCard, wildCard] });
     expect(checkVictory(player)).toBe('color_prestige');
   });
 });

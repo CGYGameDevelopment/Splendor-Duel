@@ -7,9 +7,9 @@ export type TokenPool = Record<TokenColor, number>;
 
 // ─── Cards ───────────────────────────────────────────────────────────────────
 
-export type CardAbility = 'Turn' | 'Token' | 'Take' | 'Privilege' | 'Bonus' | 'Bonus/Turn';
+export type CardAbility = 'Turn' | 'Token' | 'Take' | 'Privilege' | 'Wild' | 'Wild/Turn';
 
-export type CardColor = GemColor | 'joker';
+export type CardColor = GemColor | 'wild';
 
 export type Cost = Partial<Record<TokenColor, number>>;
 
@@ -22,9 +22,9 @@ export interface Card {
   ability: CardAbility | null;
   crowns: number;
   cost: Cost;
-  // For Joker/Bonus cards: the color assigned when placed on another card
+  // For Wild cards: the color permanently assigned after placement
   assignedColor: GemColor | null;
-  // For Bonus cards: the id of the card this is overlapping
+  // For Wild cards: the id of the card this is overlapping
   overlappingCardId: number | null;
 }
 
@@ -71,7 +71,7 @@ export type Phase =
   | 'mandatory'               // must take tokens | reserve | purchase
   | 'choose_royal'            // must choose a royal card after hitting a crown milestone
   | 'resolve_ability'         // resolving a card ability (Turn, Token, Take, etc.)
-  | 'place_bonus'             // choosing which card a Bonus card overlaps
+  | 'assign_wild'             // choosing which card a Wild card takes its color from
   | 'discard'                 // must discard down to 10 tokens
   | 'game_over';
 
@@ -108,9 +108,9 @@ export type Action =
   | { type: 'TAKE_TOKENS'; indices: number[] }                // board cell indices (1–3, must be adjacent line)
   | { type: 'RESERVE_CARD_FROM_PYRAMID'; cardId: number }
   | { type: 'RESERVE_CARD'; source: 'pyramid_1' | 'pyramid_2' | 'pyramid_3' | 'deck_1' | 'deck_2' | 'deck_3' }
-  | { type: 'PURCHASE_CARD'; cardId: number; goldUsage: Partial<Record<GemColor | 'pearl', number>>; jokerColor?: GemColor }
+  | { type: 'PURCHASE_CARD'; cardId: number; goldUsage: Partial<Record<GemColor | 'pearl', number>>; wildColor?: GemColor }
   | { type: 'CHOOSE_ROYAL_CARD'; cardId: number }             // choose a royal card after crown milestone
   | { type: 'TAKE_TOKEN_FROM_BOARD'; index: number }          // Token ability resolution
   | { type: 'TAKE_TOKEN_FROM_OPPONENT'; color: TokenColor }   // Take ability resolution
-  | { type: 'PLACE_BONUS_CARD'; bonusCardId: number; targetCardId: number }
+  | { type: 'PLACE_WILD_CARD'; wildCardId: number; targetCardId: number }
   | { type: 'DISCARD_TOKENS'; tokens: Partial<Record<TokenColor, number>> };

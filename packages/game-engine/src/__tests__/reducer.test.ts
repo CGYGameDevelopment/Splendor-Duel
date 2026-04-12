@@ -310,8 +310,8 @@ describe('Token Ability', () => {
     expect(next.phase).toBe('optional_privilege');
   });
 
-  it('skips Token ability on a joker card (no color to match)', () => {
-    const card = makeCard({ id: 102, ability: 'Token', color: 'joker', cost: {} });
+  it('skips Token ability on a Wild card (no color to match)', () => {
+    const card = makeCard({ id: 102, ability: 'Token', color: 'wild', cost: {} });
     const state = createInitialState(false);
     const board = new Array(25).fill(null);
     board[5] = 'red';
@@ -433,17 +433,17 @@ describe('Privilege Ability', () => {
   });
 });
 
-// ─── CARD ABILITY: Bonus ──────────────────────────────────────────────────────
+// ─── CARD ABILITY: Wild ───────────────────────────────────────────────────────
 
-describe('Bonus Ability', () => {
-  it('enters place_bonus phase then places the card on the chosen target', () => {
-    const bonusCard = makeCard({ id: 110, ability: 'Bonus', color: 'joker', cost: {} });
+describe('Wild Ability', () => {
+  it('enters assign_wild phase then places the card on the chosen target', () => {
+    const wildCard = makeCard({ id: 110, ability: 'Wild', color: 'wild', cost: {} });
     const targetCard = makeCard({ id: 111, color: 'red', bonus: 1 });
     const state = createInitialState(false);
     const s: GameState = {
       ...state,
       phase: 'mandatory',
-      pyramid: { ...state.pyramid, level1: [bonusCard, ...state.pyramid.level1.slice(0, 4)] },
+      pyramid: { ...state.pyramid, level1: [wildCard, ...state.pyramid.level1.slice(0, 4)] },
       players: [
         makePlayer({ purchasedCards: [targetCard] }),
         makePlayer(),
@@ -451,22 +451,22 @@ describe('Bonus Ability', () => {
     };
 
     const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 110, goldUsage: {} });
-    expect(next.phase).toBe('place_bonus');
-    expect(next.pendingAbility).toBe('Bonus');
+    expect(next.phase).toBe('assign_wild');
+    expect(next.pendingAbility).toBe('Wild');
 
-    const resolved = reducer(next, { type: 'PLACE_BONUS_CARD', bonusCardId: 110, targetCardId: 111 });
+    const resolved = reducer(next, { type: 'PLACE_WILD_CARD', wildCardId: 110, targetCardId: 111 });
     expect(resolved.players[0].purchasedCards[1].overlappingCardId).toBe(111);
     expect(resolved.players[0].purchasedCards[1].assignedColor).toBe('red');
     expect(resolved.pendingAbility).toBeNull();
   });
 
-  it('skips Bonus ability when the player has no eligible target cards', () => {
-    const bonusCard = makeCard({ id: 112, ability: 'Bonus', color: 'joker', cost: {} });
+  it('skips Wild ability when the player has no eligible target cards', () => {
+    const wildCard = makeCard({ id: 112, ability: 'Wild', color: 'wild', cost: {} });
     const state = createInitialState(false);
     const s: GameState = {
       ...state,
       phase: 'mandatory',
-      pyramid: { ...state.pyramid, level1: [bonusCard, ...state.pyramid.level1.slice(0, 4)] },
+      pyramid: { ...state.pyramid, level1: [wildCard, ...state.pyramid.level1.slice(0, 4)] },
       players: [makePlayer({ purchasedCards: [] }), makePlayer()],
     };
 
@@ -476,23 +476,23 @@ describe('Bonus Ability', () => {
     expect(next.pendingAbility).toBeNull();
   });
 
-  it('skips Bonus ability when all owned cards are ineligible (no bonus, or already overlapped)', () => {
-    const bonusCard1 = makeCard({ id: 113, ability: 'Bonus', color: 'joker' });
-    const bonusCard2 = makeCard({ id: 114, ability: 'Bonus', color: 'joker' });
-    const bonusCard3 = makeCard({ id: 200, ability: 'Bonus', color: 'joker' });
+  it('skips Wild ability when all owned cards are ineligible (no bonus, or already overlapped)', () => {
+    const wildCard1 = makeCard({ id: 113, ability: 'Wild', color: 'wild' });
+    const wildCard2 = makeCard({ id: 114, ability: 'Wild', color: 'wild' });
+    const wildCard3 = makeCard({ id: 200, ability: 'Wild', color: 'wild' });
     const noBonus = makeCard({ id: 116, color: 'blue', bonus: 0 });
 
     const state = createInitialState(false);
     const s: GameState = {
       ...state,
       phase: 'mandatory',
-      pyramid: { ...state.pyramid, level1: [bonusCard3, ...state.pyramid.level1.slice(0, 4)] },
+      pyramid: { ...state.pyramid, level1: [wildCard3, ...state.pyramid.level1.slice(0, 4)] },
       players: [
         makePlayer({
           purchasedCards: [
             noBonus,
-            { ...bonusCard1, assignedColor: 'red', overlappingCardId: 999 },
-            { ...bonusCard2, assignedColor: 'blue', overlappingCardId: 998 },
+            { ...wildCard1, assignedColor: 'red', overlappingCardId: 999 },
+            { ...wildCard2, assignedColor: 'blue', overlappingCardId: 998 },
           ],
         }),
         makePlayer(),
@@ -505,17 +505,17 @@ describe('Bonus Ability', () => {
   });
 });
 
-// ─── CARD ABILITY: Bonus/Turn ─────────────────────────────────────────────────
+// ─── CARD ABILITY: Wild/Turn ──────────────────────────────────────────────────
 
-describe('Bonus/Turn Ability', () => {
-  it('places the bonus card and keeps the turn on the same player', () => {
-    const bonusCard = makeCard({ id: 120, ability: 'Bonus/Turn', color: 'joker', cost: {} });
+describe('Wild/Turn Ability', () => {
+  it('places the Wild card and keeps the turn on the same player', () => {
+    const wildCard = makeCard({ id: 120, ability: 'Wild/Turn', color: 'wild', cost: {} });
     const targetCard = makeCard({ id: 121, color: 'green', bonus: 1 });
     const state = createInitialState(false);
     const s: GameState = {
       ...state,
       phase: 'mandatory',
-      pyramid: { ...state.pyramid, level1: [bonusCard, ...state.pyramid.level1.slice(0, 4)] },
+      pyramid: { ...state.pyramid, level1: [wildCard, ...state.pyramid.level1.slice(0, 4)] },
       players: [
         makePlayer({ purchasedCards: [targetCard] }),
         makePlayer(),
@@ -523,9 +523,9 @@ describe('Bonus/Turn Ability', () => {
     };
 
     const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 120, goldUsage: {} });
-    expect(next.phase).toBe('place_bonus');
+    expect(next.phase).toBe('assign_wild');
 
-    const resolved = reducer(next, { type: 'PLACE_BONUS_CARD', bonusCardId: 120, targetCardId: 121 });
+    const resolved = reducer(next, { type: 'PLACE_WILD_CARD', wildCardId: 120, targetCardId: 121 });
     expect(resolved.repeatTurn).toBe(false);
     expect(resolved.currentPlayer).toBe(0);
     expect(resolved.phase).toBe('optional_privilege');
