@@ -11,6 +11,16 @@ interface Session {
   connections: [WebSocket | null, WebSocket | null];
   playerNames: [string, string | null];
   status: 'waiting' | 'playing' | 'finished';
+  cleanupTimer: ReturnType<typeof setTimeout> | null;
+}
+
+const FINISHED_SESSION_TTL_MS = 60_000; // 1 minute
+
+function scheduleCleanup(session: Session): void {
+  if (session.cleanupTimer !== null) return;
+  session.cleanupTimer = setTimeout(() => {
+    sessions.delete(session.id);
+  }, FINISHED_SESSION_TTL_MS);
 }
 
 const sessions = new Map<string, Session>();
@@ -78,6 +88,7 @@ export function createSession(playerName: string, ws: WebSocket): string | null 
     connections: [ws, null],
     playerNames: [playerName, null],
     status: 'waiting',
+    cleanupTimer: null,
   };
   sessions.set(id, session);
   send(ws, { type: 'SESSION_CREATED', sessionId: id, playerId: 0 });
@@ -164,6 +175,7 @@ export function dispatchAction(
   session.state = nextState;
   if (nextState.phase === 'game_over') {
     session.status = 'finished';
+    scheduleCleanup(session);
   }
 
   for (const pid of [0, 1] as PlayerId[]) {
@@ -189,9 +201,10 @@ export function handleDisconnect(sessionId: string, playerId: PlayerId): void {
   }
 
   // Remove sessions with no remaining connections, or waiting sessions where the host left
-  if (!session.connections[0] && !session.connections[1]) {
-    sessions.delete(sessionId);
-  } else if (session.status === 'waiting' && !session.connections[0]) {
+  const bothGone = !session.connections[0] && !session.connections[1];
+  const hostLeft = session.status === 'waiting' && !session.connections[0];
+  if (bothGone || hostLeft) {
+    if (session.cleanupTimer !== null) clearTimeout(session.cleanupTimer);
     sessions.delete(sessionId);
   }
 }
