@@ -468,16 +468,16 @@ describe('Privilege Ability', () => {
 // ─── CARD ABILITY: Wild ───────────────────────────────────────────────────────
 
 describe('Wild Ability', () => {
-  it('enters assign_wild phase then places the card on the chosen target', () => {
+  it('enters assign_wild phase then assigns the chosen color permanently', () => {
     const wildCard = makeCard({ id: 110, ability: 'Wild', color: 'wild', cost: {} });
-    const targetCard = makeCard({ id: 111, color: 'red', bonus: 1 });
+    const redCard = makeCard({ id: 111, color: 'red', bonus: 1 });
     const state = createInitialState(false);
     const s: GameState = {
       ...state,
       phase: 'mandatory',
       pyramid: { ...state.pyramid, level1: [wildCard, ...state.pyramid.level1.slice(0, 4)] },
       players: [
-        makePlayer({ purchasedCards: [targetCard] }),
+        makePlayer({ purchasedCards: [redCard] }),
         makePlayer(),
       ],
     };
@@ -486,8 +486,7 @@ describe('Wild Ability', () => {
     expect(next.phase).toBe('assign_wild');
     expect(next.pendingAbility).toBe('Wild');
 
-    const resolved = reducer(next, { type: 'PLACE_WILD_CARD', wildCardId: 110, targetCardId: 111 });
-    expect(resolved.players[0].purchasedCards[1].overlappingCardId).toBe(111);
+    const resolved = reducer(next, { type: 'ASSIGN_WILD_COLOR', wildCardId: 110, color: 'red' });
     expect(resolved.players[0].purchasedCards[1].assignedColor).toBe('red');
     expect(resolved.pendingAbility).toBeNull();
   });
@@ -508,11 +507,11 @@ describe('Wild Ability', () => {
     expect(next.pendingAbility).toBeNull();
   });
 
-  it('skips Wild ability when all owned cards are ineligible (no bonus, or already overlapped)', () => {
+  it('skips Wild ability when all owned cards are wild or uncolored', () => {
     const wildCard1 = makeCard({ id: 113, ability: 'Wild', color: 'wild' });
     const wildCard2 = makeCard({ id: 114, ability: 'Wild', color: 'wild' });
     const wildCard3 = makeCard({ id: 200, ability: 'Wild', color: 'wild' });
-    const noBonus = makeCard({ id: 116, color: 'blue', bonus: 0 });
+    const nullColor = makeCard({ id: 116, color: null });
 
     const state = createInitialState(false);
     const s: GameState = {
@@ -522,9 +521,9 @@ describe('Wild Ability', () => {
       players: [
         makePlayer({
           purchasedCards: [
-            noBonus,
-            { ...wildCard1, assignedColor: 'red', overlappingCardId: 999 },
-            { ...wildCard2, assignedColor: 'blue', overlappingCardId: 998 },
+            nullColor,
+            { ...wildCard1, assignedColor: 'red' },
+            { ...wildCard2, assignedColor: 'blue' },
           ],
         }),
         makePlayer(),
@@ -534,6 +533,25 @@ describe('Wild Ability', () => {
     const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 200, goldUsage: {} });
     expect(next.players[0].purchasedCards.some(c => c.id === 200)).toBe(true);
     expect(next.phase).toBe('optional_privilege');
+  });
+
+  it('ASSIGN_WILD_COLOR is rejected if the player does not own a card with that color', () => {
+    const wildCard = makeCard({ id: 115, ability: 'Wild', color: 'wild', cost: {} });
+    const redCard = makeCard({ id: 116, color: 'red', bonus: 1 });
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      phase: 'assign_wild',
+      pendingAbility: 'Wild',
+      lastPurchasedCard: wildCard,
+      players: [
+        makePlayer({ purchasedCards: [redCard, wildCard] }),
+        makePlayer(),
+      ],
+    };
+
+    const result = reducer(s, { type: 'ASSIGN_WILD_COLOR', wildCardId: 115, color: 'green' });
+    expect(result).toBe(s); // state unchanged
   });
 });
 
@@ -557,7 +575,7 @@ describe('Wild/Turn Ability', () => {
     const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 120, goldUsage: {} });
     expect(next.phase).toBe('assign_wild');
 
-    const resolved = reducer(next, { type: 'PLACE_WILD_CARD', wildCardId: 120, targetCardId: 121 });
+    const resolved = reducer(next, { type: 'ASSIGN_WILD_COLOR', wildCardId: 120, color: 'green' });
     expect(resolved.repeatTurn).toBe(false);
     expect(resolved.currentPlayer).toBe(0);
     expect(resolved.phase).toBe('optional_privilege');

@@ -25,9 +25,7 @@ function optionalPrivilegeMoves(state: GameState): Action[] {
   if (player.privileges === 0) return moves;
 
   // Collect all non-gold, non-null cell indices available on the board
-  const availableIndices = state.board
-    .map((cell, i) => (cell && cell !== 'gold' ? i : -1))
-    .filter(i => i !== -1);
+  const availableIndices = getAvailableBoardIndices(state.board);
 
   if (availableIndices.length === 0) return moves;
 
@@ -75,9 +73,7 @@ function takeTokenMoves(state: GameState): Action[] {
   const board = state.board;
 
   // Find all non-null, non-gold cell indices
-  const tokenIndices = board
-    .map((cell, i) => (cell && cell !== 'gold' ? i : -1))
-    .filter(i => i !== -1);
+  const tokenIndices = getAvailableBoardIndices(board);
 
   // Generate all valid lines of 1 through MAX_TOKENS_IN_LINE
   const seen = new Set<string>();
@@ -134,32 +130,17 @@ function purchaseMoves(state: GameState): Action[] {
   ];
 
   for (const card of candidates) {
-    // Bonus cards require an eligible target card
-    if (card.ability === 'Wild' || card.ability === 'Wild/Turn') {
-      const eligible = player.purchasedCards.filter(
-        c => c.color !== 'wild' && c.color !== null && c.bonus > 0 && c.overlappingCardId === null
-      );
-      if (eligible.length === 0) continue;
-    }
-
-    // Wild cards: player must own at least one card with an effective GemColor;
-    // generate one move per available color.
+    // Wild cards require the player to own at least one Jewel Card with a GemColor
     if (card.color === 'wild') {
-      const ownedColors = new Set<GemColor>(
-        player.purchasedCards.flatMap(c => {
-          if (c.color !== null && c.color !== 'wild') return [c.color];
-          if (c.color === 'wild' && c.assignedColor) return [c.assignedColor];
-          return [];
-        })
+      const hasColoredCard = player.purchasedCards.some(
+        c => c.color !== 'wild' && c.color !== null
       );
-      if (ownedColors.size === 0) continue;
+      if (!hasColoredCard) continue;
       if (!canAfford(card, player)) continue;
       const cost = netCost(card, player);
       const goldOptions = goldUsageCombinations(cost, player.tokens);
-      for (const wildColor of ownedColors) {
-        for (const goldUsage of goldOptions) {
-          moves.push({ type: 'PURCHASE_CARD', cardId: card.id, goldUsage, wildColor });
-        }
+      for (const goldUsage of goldOptions) {
+        moves.push({ type: 'PURCHASE_CARD', cardId: card.id, goldUsage });
       }
       continue;
     }
@@ -251,14 +232,16 @@ function placeBonusMoves(state: GameState): Action[] {
   const wildCard = state.lastPurchasedCard;
   if (!wildCard) return [];
 
-  const eligible = player.purchasedCards.filter(
-    c => c.id !== wildCard.id && c.color !== 'wild' && c.color !== null && c.bonus > 0 && c.overlappingCardId === null
+  const availableColors = new Set<GemColor>(
+    player.purchasedCards
+      .filter(c => c.id !== wildCard.id && c.color !== 'wild' && c.color !== null)
+      .map(c => c.color as GemColor)
   );
 
-  return eligible.map(target => ({
-    type: 'PLACE_WILD_CARD' as const,
+  return Array.from(availableColors).map(color => ({
+    type: 'ASSIGN_WILD_COLOR' as const,
     wildCardId: wildCard.id,
-    targetCardId: target.id,
+    color,
   }));
 }
 
@@ -296,6 +279,10 @@ function discardMoves(state: GameState): Action[] {
 }
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
+
+function getAvailableBoardIndices(board: GameState['board']): number[] {
+  return board.map((cell, i) => (cell && cell !== 'gold' ? i : -1)).filter(i => i !== -1);
+}
 
 function combinations<T>(arr: T[], k: number): T[][] {
   if (k === 0) return [[]];

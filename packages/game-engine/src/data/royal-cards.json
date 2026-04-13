@@ -8,8 +8,7 @@
     "ability": null,
     "crowns": 0,
     "cost": {},
-    "assignedColor": null,
-    "overlappingCardId": null
+    "assignedColor": null
   },
   {
     "id": 2,
@@ -20,8 +19,7 @@
     "ability": "Turn",
     "crowns": 0,
     "cost": {},
-    "assignedColor": null,
-    "overlappingCardId": null
+    "assignedColor": null
   },
   {
     "id": 3,
@@ -32,8 +30,7 @@
     "ability": "Take",
     "crowns": 0,
     "cost": {},
-    "assignedColor": null,
-    "overlappingCardId": null
+    "assignedColor": null
   },
   {
     "id": 4,
@@ -44,7 +41,6 @@
     "ability": "Privilege",
     "crowns": 0,
     "cost": {},
-    "assignedColor": null,
-    "overlappingCardId": null
+    "assignedColor": null
   }
 ]

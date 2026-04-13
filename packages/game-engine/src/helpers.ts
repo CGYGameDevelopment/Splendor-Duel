@@ -45,7 +45,6 @@ export function totalTokens(pool: TokenPool): number {
   return TOKEN_COLORS.reduce((sum, c) => sum + pool[c], 0);
 }
 
-
 // ─── Bonus helpers ────────────────────────────────────────────────────────────
 
 /**

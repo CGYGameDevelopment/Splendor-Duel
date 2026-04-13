@@ -7,9 +7,11 @@
     "bonus": 1,
     "ability": null,
     "crowns": 0,
-    "cost": { "green": 2, "red": 3 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "green": 2,
+      "red": 3
+    },
+    "assignedColor": null
   },
   {
     "id": 2,
@@ -19,9 +21,10 @@
     "bonus": 1,
     "ability": null,
     "crowns": 1,
-    "cost": { "blue": 3 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "blue": 3
+    },
+    "assignedColor": null
   },
   {
     "id": 3,
@@ -31,9 +34,12 @@
     "bonus": 1,
     "ability": "Turn",
     "crowns": 0,
-    "cost": { "blue": 2, "green": 2, "pearl": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "blue": 2,
+      "green": 2,
+      "pearl": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 4,
@@ -43,9 +49,11 @@
     "bonus": 1,
     "ability": "Token",
     "crowns": 0,
-    "cost": { "red": 2, "black": 2 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "red": 2,
+      "black": 2
+    },
+    "assignedColor": null
   },
   {
     "id": 5,
@@ -55,9 +63,13 @@
     "bonus": 1,
     "ability": null,
     "crowns": 0,
-    "cost": { "blue": 1, "green": 1, "red": 1, "black": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "blue": 1,
+      "green": 1,
+      "red": 1,
+      "black": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 6,
@@ -67,9 +79,11 @@
     "bonus": 1,
     "ability": null,
     "crowns": 0,
-    "cost": { "red": 2, "black": 3 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "red": 2,
+      "black": 3
+    },
+    "assignedColor": null
   },
   {
     "id": 7,
@@ -79,9 +93,10 @@
     "bonus": 1,
     "ability": null,
     "crowns": 1,
-    "cost": { "green": 3 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "green": 3
+    },
+    "assignedColor": null
   },
   {
     "id": 8,
@@ -91,9 +106,12 @@
     "bonus": 1,
     "ability": "Turn",
     "crowns": 0,
-    "cost": { "green": 2, "red": 2, "pearl": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "green": 2,
+      "red": 2,
+      "pearl": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 9,
@@ -103,9 +121,11 @@
     "bonus": 1,
     "ability": "Token",
     "crowns": 0,
-    "cost": { "white": 2, "black": 2 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "white": 2,
+      "black": 2
+    },
+    "assignedColor": null
   },
   {
     "id": 10,
@@ -115,9 +135,13 @@
     "bonus": 1,
     "ability": null,
     "crowns": 0,
-    "cost": { "white": 1, "green": 1, "red": 1, "black": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "white": 1,
+      "green": 1,
+      "red": 1,
+      "black": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 11,
@@ -127,9 +151,11 @@
     "bonus": 1,
     "ability": null,
     "crowns": 0,
-    "cost": { "white": 3, "black": 2 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "white": 3,
+      "black": 2
+    },
+    "assignedColor": null
   },
   {
     "id": 12,
@@ -139,9 +165,10 @@
     "bonus": 1,
     "ability": null,
     "crowns": 1,
-    "cost": { "red": 3 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "red": 3
+    },
+    "assignedColor": null
   },
   {
     "id": 13,
@@ -151,9 +178,12 @@
     "bonus": 1,
     "ability": "Turn",
     "crowns": 0,
-    "cost": { "red": 2, "black": 2, "pearl": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "red": 2,
+      "black": 2,
+      "pearl": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 14,
@@ -163,9 +193,11 @@
     "bonus": 1,
     "ability": "Token",
     "crowns": 0,
-    "cost": { "white": 2, "blue": 2 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "white": 2,
+      "blue": 2
+    },
+    "assignedColor": null
   },
   {
     "id": 15,
@@ -175,9 +207,13 @@
     "bonus": 1,
     "ability": null,
     "crowns": 0,
-    "cost": { "white": 1, "blue": 1, "red": 1, "black": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "white": 1,
+      "blue": 1,
+      "red": 1,
+      "black": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 16,
@@ -187,9 +223,11 @@
     "bonus": 1,
     "ability": null,
     "crowns": 0,
-    "cost": { "white": 2, "blue": 3 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "white": 2,
+      "blue": 3
+    },
+    "assignedColor": null
   },
   {
     "id": 17,
@@ -199,9 +237,10 @@
     "bonus": 1,
     "ability": null,
     "crowns": 1,
-    "cost": { "black": 3 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "black": 3
+    },
+    "assignedColor": null
   },
   {
     "id": 18,
@@ -211,9 +250,12 @@
     "bonus": 1,
     "ability": "Turn",
     "crowns": 0,
-    "cost": { "white": 2, "black": 2, "pearl": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "white": 2,
+      "black": 2,
+      "pearl": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 19,
@@ -223,9 +265,11 @@
     "bonus": 1,
     "ability": "Token",
     "crowns": 0,
-    "cost": { "blue": 2, "green": 2 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "blue": 2,
+      "green": 2
+    },
+    "assignedColor": null
   },
   {
     "id": 20,
@@ -235,9 +279,13 @@
     "bonus": 1,
     "ability": null,
     "crowns": 0,
-    "cost": { "white": 1, "blue": 1, "green": 1, "black": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "white": 1,
+      "blue": 1,
+      "green": 1,
+      "black": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 21,
@@ -247,9 +295,11 @@
     "bonus": 1,
     "ability": null,
     "crowns": 0,
-    "cost": { "blue": 2, "green": 3 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "blue": 2,
+      "green": 3
+    },
+    "assignedColor": null
   },
   {
     "id": 22,
@@ -259,9 +309,10 @@
     "bonus": 1,
     "ability": null,
     "crowns": 1,
-    "cost": { "white": 3 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "white": 3
+    },
+    "assignedColor": null
   },
   {
     "id": 23,
@@ -271,9 +322,12 @@
     "bonus": 1,
     "ability": "Turn",
     "crowns": 0,
-    "cost": { "white": 2, "blue": 2, "pearl": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "white": 2,
+      "blue": 2,
+      "pearl": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 24,
@@ -283,9 +337,11 @@
     "bonus": 1,
     "ability": "Token",
     "crowns": 0,
-    "cost": { "green": 2, "red": 2 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "green": 2,
+      "red": 2
+    },
+    "assignedColor": null
   },
   {
     "id": 25,
@@ -295,9 +351,13 @@
     "bonus": 1,
     "ability": null,
     "crowns": 0,
-    "cost": { "white": 1, "blue": 1, "green": 1, "red": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "white": 1,
+      "blue": 1,
+      "green": 1,
+      "red": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 26,
@@ -307,9 +367,11 @@
     "bonus": 0,
     "ability": null,
     "crowns": 0,
-    "cost": { "red": 4, "pearl": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "red": 4,
+      "pearl": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 27,
@@ -319,9 +381,13 @@
     "bonus": 1,
     "ability": "wild",
     "crowns": 0,
-    "cost": { "white": 2, "green": 2, "black": 1, "pearl": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "white": 2,
+      "green": 2,
+      "black": 1,
+      "pearl": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 28,
@@ -331,9 +397,13 @@
     "bonus": 1,
     "ability": "wild",
     "crowns": 0,
-    "cost": { "blue": 2, "red": 2, "black": 1, "pearl": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "blue": 2,
+      "red": 2,
+      "black": 1,
+      "pearl": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 29,
@@ -343,9 +413,11 @@
     "bonus": 1,
     "ability": "wild",
     "crowns": 0,
-    "cost": { "black": 4, "pearl": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "black": 4,
+      "pearl": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 30,
@@ -355,9 +427,12 @@
     "bonus": 1,
     "ability": "wild",
     "crowns": 1,
-    "cost": { "white": 4, "black": 1, "pearl": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "white": 4,
+      "black": 1,
+      "pearl": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 31,
@@ -367,9 +442,13 @@
     "bonus": 1,
     "ability": null,
     "crowns": 1,
-    "cost": { "green": 2, "red": 2, "black": 2, "pearl": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "green": 2,
+      "red": 2,
+      "black": 2,
+      "pearl": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 32,
@@ -379,9 +458,12 @@
     "bonus": 1,
     "ability": "Privilege",
     "crowns": 0,
-    "cost": { "white": 4, "black": 2, "pearl": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "white": 4,
+      "black": 2,
+      "pearl": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 33,
@@ -391,9 +473,11 @@
     "bonus": 2,
     "ability": null,
     "crowns": 0,
-    "cost": { "blue": 5, "green": 2 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "blue": 5,
+      "green": 2
+    },
+    "assignedColor": null
   },
   {
     "id": 34,
@@ -403,9 +487,11 @@
     "bonus": 1,
     "ability": "Take",
     "crowns": 0,
-    "cost": { "blue": 4, "red": 3 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "blue": 4,
+      "red": 3
+    },
+    "assignedColor": null
   },
   {
     "id": 35,
@@ -415,9 +501,13 @@
     "bonus": 1,
     "ability": null,
     "crowns": 1,
-    "cost": { "white": 2, "red": 2, "black": 2, "pearl": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "white": 2,
+      "red": 2,
+      "black": 2,
+      "pearl": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 36,
@@ -427,9 +517,12 @@
     "bonus": 1,
     "ability": "Privilege",
     "crowns": 0,
-    "cost": { "white": 2, "blue": 4, "pearl": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "white": 2,
+      "blue": 4,
+      "pearl": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 37,
@@ -439,9 +532,11 @@
     "bonus": 2,
     "ability": null,
     "crowns": 0,
-    "cost": { "green": 5, "red": 2 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "green": 5,
+      "red": 2
+    },
+    "assignedColor": null
   },
   {
     "id": 38,
@@ -451,9 +546,11 @@
     "bonus": 1,
     "ability": "Take",
     "crowns": 0,
-    "cost": { "green": 4, "black": 3 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "green": 4,
+      "black": 3
+    },
+    "assignedColor": null
   },
   {
     "id": 39,
@@ -463,9 +560,13 @@
     "bonus": 1,
     "ability": null,
     "crowns": 1,
-    "cost": { "white": 2, "blue": 2, "black": 2, "pearl": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "white": 2,
+      "blue": 2,
+      "black": 2,
+      "pearl": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 40,
@@ -475,9 +576,12 @@
     "bonus": 1,
     "ability": "Privilege",
     "crowns": 0,
-    "cost": { "blue": 2, "green": 4, "pearl": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "blue": 2,
+      "green": 4,
+      "pearl": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 41,
@@ -487,9 +591,11 @@
     "bonus": 2,
     "ability": null,
     "crowns": 0,
-    "cost": { "red": 5, "black": 2 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "red": 5,
+      "black": 2
+    },
+    "assignedColor": null
   },
   {
     "id": 42,
@@ -499,9 +605,11 @@
     "bonus": 1,
     "ability": "Take",
     "crowns": 0,
-    "cost": { "white": 3, "red": 4 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "white": 3,
+      "red": 4
+    },
+    "assignedColor": null
   },
   {
     "id": 43,
@@ -511,9 +619,13 @@
     "bonus": 1,
     "ability": null,
     "crowns": 1,
-    "cost": { "white": 2, "blue": 2, "green": 2, "pearl": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "white": 2,
+      "blue": 2,
+      "green": 2,
+      "pearl": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 44,
@@ -523,9 +635,12 @@
     "bonus": 1,
     "ability": "Privilege",
     "crowns": 0,
-    "cost": { "green": 2, "red": 4, "pearl": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "green": 2,
+      "red": 4,
+      "pearl": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 45,
@@ -535,9 +650,11 @@
     "bonus": 2,
     "ability": null,
     "crowns": 0,
-    "cost": { "white": 2, "black": 5 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "white": 2,
+      "black": 5
+    },
+    "assignedColor": null
   },
   {
     "id": 46,
@@ -547,9 +664,11 @@
     "bonus": 1,
     "ability": "Take",
     "crowns": 0,
-    "cost": { "blue": 3, "black": 4 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "blue": 3,
+      "black": 4
+    },
+    "assignedColor": null
   },
   {
     "id": 47,
@@ -559,9 +678,13 @@
     "bonus": 1,
     "ability": null,
     "crowns": 1,
-    "cost": { "blue": 2, "green": 2, "red": 2, "pearl": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "blue": 2,
+      "green": 2,
+      "red": 2,
+      "pearl": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 48,
@@ -571,9 +694,12 @@
     "bonus": 1,
     "ability": "Privilege",
     "crowns": 0,
-    "cost": { "red": 2, "black": 4, "pearl": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "red": 2,
+      "black": 4,
+      "pearl": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 49,
@@ -583,9 +709,11 @@
     "bonus": 2,
     "ability": null,
     "crowns": 0,
-    "cost": { "white": 5, "blue": 2 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "white": 5,
+      "blue": 2
+    },
+    "assignedColor": null
   },
   {
     "id": 50,
@@ -595,9 +723,11 @@
     "bonus": 1,
     "ability": "Take",
     "crowns": 0,
-    "cost": { "white": 4, "green": 3 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "white": 4,
+      "green": 3
+    },
+    "assignedColor": null
   },
   {
     "id": 51,
@@ -607,9 +737,11 @@
     "bonus": 0,
     "ability": null,
     "crowns": 0,
-    "cost": { "blue": 6, "pearl": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "blue": 6,
+      "pearl": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 52,
@@ -619,9 +751,11 @@
     "bonus": 1,
     "ability": "wild",
     "crowns": 0,
-    "cost": { "green": 6, "pearl": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "green": 6,
+      "pearl": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 53,
@@ -631,9 +765,11 @@
     "bonus": 1,
     "ability": "wild",
     "crowns": 2,
-    "cost": { "green": 6, "pearl": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "green": 6,
+      "pearl": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 54,
@@ -643,9 +779,11 @@
     "bonus": 1,
     "ability": "wild",
     "crowns": 2,
-    "cost": { "blue": 6, "pearl": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "blue": 6,
+      "pearl": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 55,
@@ -655,9 +793,12 @@
     "bonus": 1,
     "ability": null,
     "crowns": 0,
-    "cost": { "white": 6, "blue": 2, "black": 2 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "white": 6,
+      "blue": 2,
+      "black": 2
+    },
+    "assignedColor": null
   },
   {
     "id": 56,
@@ -667,9 +808,13 @@
     "bonus": 1,
     "ability": null,
     "crowns": 2,
-    "cost": { "blue": 3, "red": 5, "black": 3, "pearl": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "blue": 3,
+      "red": 5,
+      "black": 3,
+      "pearl": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 57,
@@ -679,9 +824,12 @@
     "bonus": 1,
     "ability": null,
     "crowns": 0,
-    "cost": { "white": 2, "blue": 6, "green": 2 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "white": 2,
+      "blue": 6,
+      "green": 2
+    },
+    "assignedColor": null
   },
   {
     "id": 58,
@@ -691,9 +839,13 @@
     "bonus": 1,
     "ability": null,
     "crowns": 2,
-    "cost": { "white": 3, "green": 3, "black": 5, "pearl": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "white": 3,
+      "green": 3,
+      "black": 5,
+      "pearl": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 59,
@@ -703,9 +855,12 @@
     "bonus": 1,
     "ability": null,
     "crowns": 0,
-    "cost": { "blue": 2, "green": 6, "red": 2 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "blue": 2,
+      "green": 6,
+      "red": 2
+    },
+    "assignedColor": null
   },
   {
     "id": 60,
@@ -715,9 +870,13 @@
     "bonus": 1,
     "ability": null,
     "crowns": 2,
-    "cost": { "white": 5, "blue": 3, "red": 3, "pearl": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "white": 5,
+      "blue": 3,
+      "red": 3,
+      "pearl": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 61,
@@ -727,9 +886,12 @@
     "bonus": 1,
     "ability": null,
     "crowns": 0,
-    "cost": { "green": 2, "red": 6, "black": 2 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "green": 2,
+      "red": 6,
+      "black": 2
+    },
+    "assignedColor": null
   },
   {
     "id": 62,
@@ -739,9 +901,13 @@
     "bonus": 1,
     "ability": null,
     "crowns": 2,
-    "cost": { "blue": 5, "green": 3, "black": 3, "pearl": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "blue": 5,
+      "green": 3,
+      "black": 3,
+      "pearl": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 63,
@@ -751,9 +917,12 @@
     "bonus": 1,
     "ability": null,
     "crowns": 0,
-    "cost": { "white": 2, "red": 2, "black": 6 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "white": 2,
+      "red": 2,
+      "black": 6
+    },
+    "assignedColor": null
   },
   {
     "id": 64,
@@ -763,9 +932,13 @@
     "bonus": 1,
     "ability": null,
     "crowns": 2,
-    "cost": { "white": 3, "green": 5, "red": 3, "pearl": 1 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "white": 3,
+      "green": 5,
+      "red": 3,
+      "pearl": 1
+    },
+    "assignedColor": null
   },
   {
     "id": 65,
@@ -775,9 +948,10 @@
     "bonus": 0,
     "ability": null,
     "crowns": 0,
-    "cost": { "white": 8 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "white": 8
+    },
+    "assignedColor": null
   },
   {
     "id": 66,
@@ -787,9 +961,10 @@
     "bonus": 1,
     "ability": "wild",
     "crowns": 3,
-    "cost": { "black": 8 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "black": 8
+    },
+    "assignedColor": null
   },
   {
     "id": 67,
@@ -799,8 +974,9 @@
     "bonus": 1,
     "ability": "wild and turn",
     "crowns": 0,
-    "cost": { "red": 8 },
-    "assignedColor": null,
-    "overlappingCardId": null
+    "cost": {
+      "red": 8
+    },
+    "assignedColor": null
   }
 ]

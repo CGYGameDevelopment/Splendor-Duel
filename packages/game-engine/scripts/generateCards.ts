@@ -68,7 +68,6 @@ function main() {
       crowns: num(crowns),
       cost,
       assignedColor: null,
-      overlappingCardId: null,
     };
   });
 

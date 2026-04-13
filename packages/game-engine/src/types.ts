@@ -22,10 +22,8 @@ export interface Card {
   ability: CardAbility | null;
   crowns: number;
   cost: Cost;
-  // For Wild cards: the color permanently assigned after placement
+  // For Wild cards: the GemColor permanently assigned during assign_wild phase
   assignedColor: GemColor | null;
-  // For Wild cards: the id of the card this is overlapping
-  overlappingCardId: number | null;
 }
 
 // ─── Board ───────────────────────────────────────────────────────────────────
@@ -109,9 +107,9 @@ export type Action =
   | { type: 'TAKE_TOKENS'; indices: number[] }                // board cell indices (1–3, must be adjacent line)
   | { type: 'RESERVE_CARD_FROM_PYRAMID'; cardId: number }
   | { type: 'RESERVE_CARD'; source: 'deck_1' | 'deck_2' | 'deck_3' }
-  | { type: 'PURCHASE_CARD'; cardId: number; goldUsage: Partial<Record<GemColor | 'pearl', number>>; wildColor?: GemColor }
+  | { type: 'PURCHASE_CARD'; cardId: number; goldUsage: Partial<Record<GemColor | 'pearl', number>> }
   | { type: 'CHOOSE_ROYAL_CARD'; cardId: number }             // choose a royal card after crown milestone
   | { type: 'TAKE_TOKEN_FROM_BOARD'; index: number }          // Token ability resolution
   | { type: 'TAKE_TOKEN_FROM_OPPONENT'; color: TokenColor }   // Take ability resolution
-  | { type: 'PLACE_WILD_CARD'; wildCardId: number; targetCardId: number }
+  | { type: 'ASSIGN_WILD_COLOR'; wildCardId: number; color: GemColor }
   | { type: 'DISCARD_TOKENS'; tokens: Partial<Record<TokenColor, number>> };

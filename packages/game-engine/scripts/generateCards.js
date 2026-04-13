@@ -98,7 +98,6 @@ function main() {
             crowns: num(crowns),
             cost,
             assignedColor: null,
-            overlappingCardId: null,
         };
     });
     fs.mkdirSync(path.dirname(OUT_PATH), { recursive: true });

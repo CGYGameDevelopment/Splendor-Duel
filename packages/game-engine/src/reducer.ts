@@ -56,6 +56,105 @@ function refillPyramidSlot(
   return { ...state, pyramid, decks };
 }
 
+// ─── Pyramid card lookup ──────────────────────────────────────────────────────
+
+function findCardInPyramid(
+  pyramid: GameState['pyramid'],
+  cardId: number
+): { card: Card; level: 1 | 2 | 3 } | null {
+  for (const lvl of CARD_LEVELS) {
+    const key = `level${lvl}` as 'level1' | 'level2' | 'level3';
+    const found = pyramid[key].find(c => c.id === cardId);
+    if (found) return { card: found, level: lvl };
+  }
+  return null;
+}
+
+function locateCardForPurchase(
+  pyramid: GameState['pyramid'],
+  reservedCards: Card[],
+  cardId: number
+): { card: Card; fromReserve: boolean; level?: 1 | 2 | 3 } | null {
+  const pyramidResult = findCardInPyramid(pyramid, cardId);
+  if (pyramidResult) return { card: pyramidResult.card, fromReserve: false, level: pyramidResult.level };
+  const found = reservedCards.find(c => c.id === cardId);
+  if (found) return { card: found, fromReserve: true };
+  return null;
+}
+
+// ─── Token cost deduction ─────────────────────────────────────────────────────
+
+function deductTokenCost(
+  playerTokens: TokenPool,
+  bag: TokenPool,
+  cost: Partial<Record<TokenColor, number>>,
+  goldUsage: Partial<Record<GemColor | 'pearl', number>>
+): { playerTokens: TokenPool; bag: TokenPool } {
+  let tokens = { ...playerTokens };
+  let newBag = { ...bag };
+  let goldSpent = 0;
+
+  for (const [colorStr, needed] of Object.entries(cost) as [TokenColor, number][]) {
+    const gold = goldUsage[colorStr as GemColor | 'pearl'] ?? 0;
+    const fromWallet = needed - gold;
+    tokens = { ...tokens, [colorStr]: tokens[colorStr] - fromWallet };
+    newBag = { ...newBag, [colorStr]: newBag[colorStr] + fromWallet };
+    goldSpent += gold;
+  }
+  tokens = { ...tokens, gold: tokens.gold - goldSpent };
+  newBag = { ...newBag, gold: newBag.gold + goldSpent };
+
+  return { playerTokens: tokens, bag: newBag };
+}
+
+// ─── Purchase application ─────────────────────────────────────────────────────
+
+// Applies the mechanical effects of buying a card: deducts tokens, updates player
+// stats, removes card from its source, and refills the pyramid slot if applicable.
+// Does NOT resolve abilities or check crown milestones — caller is responsible.
+function applyPurchase(
+  state: GameState,
+  cp: PlayerId,
+  purchasedCard: Card,
+  fromReserve: boolean,
+  level: 1 | 2 | 3 | undefined,
+  goldUsage: Partial<Record<GemColor | 'pearl', number>>
+): GameState {
+  const player = state.players[cp];
+  const cost = netCost(purchasedCard, player);
+  const { playerTokens, bag } = deductTokenCost(player.tokens, state.bag, cost, goldUsage);
+
+  const purchasedCards = [...player.purchasedCards, purchasedCard];
+  const reservedCards = fromReserve
+    ? player.reservedCards.filter(c => c.id !== purchasedCard.id)
+    : player.reservedCards;
+  const crowns = player.crowns + purchasedCard.crowns;
+  const prestige = player.prestige + purchasedCard.points;
+
+  let newState = updatePlayer(state, cp, { tokens: playerTokens, purchasedCards, reservedCards, crowns, prestige });
+  newState = { ...newState, bag, lastPurchasedCard: purchasedCard };
+
+  if (!fromReserve && level) {
+    newState = refillPyramidSlot(newState, level, purchasedCard.id);
+  }
+
+  return newState;
+}
+
+// ─── Post-purchase transition ─────────────────────────────────────────────────
+
+// Determines the next phase after a card purchase.
+// If an interactive ability is pending, defers the crown check via pendingCrownCheck.
+// Note: crossing both milestones (3 and 6) in a single purchase is impossible —
+// no card awards more than 3 crowns, so at most one milestone can cross per purchase.
+function postPurchaseTransition(state: GameState, milestoneCrossed: boolean): GameState {
+  if (state.phase === 'resolve_ability' || state.phase === 'assign_wild') {
+    return milestoneCrossed ? { ...state, pendingCrownCheck: true } : state;
+  }
+  if (milestoneCrossed) return { ...state, phase: 'choose_royal' };
+  return endOfTurnSequence(state);
+}
+
 // ─── Phase 4: End of Turn Sequence ───────────────────────────────────────────
 //
 // Mirrors the rulebook's Phase 4 order:
@@ -113,36 +212,6 @@ function endOfTurnSequence(state: GameState): GameState {
   return advanceTurn(state);
 }
 
-// ─── Crown milestone helpers ──────────────────────────────────────────────────
-
-// Returns updated state but does NOT call endOfTurnSequence — mirrors resolveAbility's contract.
-function resolveRoyalAbility(state: GameState, playerId: PlayerId, card: Card): GameState {
-  if (!card.ability) return state;
-
-  switch (card.ability) {
-    case 'Privilege': {
-      const { privileges, players } = grantPrivileges(state, playerId, 1);
-      return { ...state, privileges, players };
-    }
-    case 'Token': {
-      if (card.color === null || card.color === 'wild') return state;
-      const color = card.color as TokenColor;
-      const hasToken = state.board.some(c => c === color);
-      if (!hasToken) return state;
-      return { ...state, phase: 'resolve_ability', pendingAbility: 'Token', lastPurchasedCard: card };
-    }
-    case 'Take': {
-      const opp = (1 - playerId) as PlayerId;
-      const oppTokens = state.players[opp].tokens;
-      const hasEligible = GEM_COLORS.some(c => oppTokens[c] > 0) || oppTokens.pearl > 0;
-      if (!hasEligible) return state;
-      return { ...state, phase: 'resolve_ability', pendingAbility: 'Take', lastPurchasedCard: null };
-    }
-    default:
-      return state;
-  }
-}
-
 // ─── Resolve card ability ─────────────────────────────────────────────────────
 // Returns updated state but does NOT call endOfTurnSequence — the caller is responsible.
 // Interactive abilities (Token, Take, Wild) set an intermediate phase; the
@@ -188,13 +257,12 @@ function resolveAbility(state: GameState, card: Card): GameState {
 
     case 'Wild':
     case 'Wild/Turn': {
-      // Player must choose which card this overlaps — needs a card with a bonus to overlap (excluding itself)
+      // Player must own at least one Jewel Card with a GemColor to assign this wild
       const player = state.players[state.currentPlayer];
-      const eligible = player.purchasedCards.filter(
-        c => c.id !== card.id && c.color !== 'wild' && c.color !== null && c.bonus > 0 && c.overlappingCardId === null
+      const hasColoredCard = player.purchasedCards.some(
+        c => c.id !== card.id && c.color !== 'wild' && c.color !== null
       );
-      if (eligible.length === 0) {
-        // Cannot purchase this card — this should be caught in legalMoves, but guard here
+      if (!hasColoredCard) {
         return { ...state, pendingAbility: null };
       }
       return { ...state, phase: 'assign_wild', pendingAbility: card.ability, lastPurchasedCard: card };
@@ -317,14 +385,9 @@ export function reducer(state: GameState, action: Action): GameState {
       if (goldIdx === -1) return state;
 
       // Find card in pyramid
-      let card: Card | undefined;
-      let level: 1 | 2 | 3 | undefined;
-      for (const lvl of CARD_LEVELS) {
-        const key = `level${lvl}` as 'level1' | 'level2' | 'level3';
-        const found = state.pyramid[key].find(c => c.id === action.cardId);
-        if (found) { card = found; level = lvl; break; }
-      }
-      if (!card || !level) return state;
+      const pyramidResult = findCardInPyramid(state.pyramid, action.cardId);
+      if (!pyramidResult) return state;
+      const { card, level } = pyramidResult;
 
       board[goldIdx] = null;
       const playerTokens = { ...player.tokens, gold: player.tokens.gold + 1 };
@@ -345,9 +408,8 @@ export function reducer(state: GameState, action: Action): GameState {
       const goldIdx = board.findIndex(c => c === 'gold');
       if (goldIdx === -1) return state;
 
-      const levelMatch = action.source.match(/deck_(\d)/);
-      if (!levelMatch) return state;
-      const level = parseInt(levelMatch[1], 10) as 1 | 2 | 3;
+      const sourceToLevel: Record<'deck_1' | 'deck_2' | 'deck_3', 1 | 2 | 3> = { deck_1: 1, deck_2: 2, deck_3: 3 };
+      const level = sourceToLevel[action.source];
       const key = `level${level}` as 'level1' | 'level2' | 'level3';
 
       if (state.decks[key].length === 0) return state;
@@ -365,79 +427,24 @@ export function reducer(state: GameState, action: Action): GameState {
     // ── Mandatory: Purchase Card ──────────────────────────────────────────────
     case 'PURCHASE_CARD': {
       if (state.phase !== 'mandatory') return state;
-      const { cardId, goldUsage, wildColor } = action;
+      const { cardId, goldUsage } = action;
 
-      // Find card in pyramid or reserve
-      let card: Card | undefined;
-      let fromReserve = false;
-      let level: 1 | 2 | 3 | undefined;
-
-      for (const lvl of CARD_LEVELS) {
-        const key = `level${lvl}` as 'level1' | 'level2' | 'level3';
-        const found = state.pyramid[key].find(c => c.id === cardId);
-        if (found) { card = found; level = lvl; break; }
-      }
-      if (!card) {
-        const found = player.reservedCards.find(c => c.id === cardId);
-        if (found) { card = found; fromReserve = true; }
-      }
-      if (!card) return state;
+      const location = locateCardForPurchase(state.pyramid, player.reservedCards, cardId);
+      if (!location) return state;
+      const { card, fromReserve, level } = location;
 
       if (!canAfford(card, player, goldUsage)) return state;
 
-      // Deduct tokens
-      const cost = netCost(card, player);
-      let playerTokens = { ...player.tokens };
-      let bag = { ...state.bag };
-      let goldSpent = 0;
+      const purchasedCard = { ...card };
 
-      for (const [colorStr, needed] of Object.entries(cost) as [TokenColor, number][]) {
-        const gold = (goldUsage[colorStr as GemColor | 'pearl']) ?? 0;
-        const fromWallet = needed - gold;
-        playerTokens = { ...playerTokens, [colorStr]: playerTokens[colorStr] - fromWallet };
-        bag = { ...bag, [colorStr]: bag[colorStr] + fromWallet };
-        goldSpent += gold;
-      }
-      playerTokens = { ...playerTokens, gold: playerTokens.gold - goldSpent };
-      bag = { ...bag, gold: bag.gold + goldSpent };
+      const prevCrowns = player.crowns;
+      let newState = applyPurchase(state, cp, purchasedCard, fromReserve, level, goldUsage);
 
-      // Add card to purchased, remove from source
-      // For Wild cards, assign the chosen color immediately
-      const purchasedCard = card.color === 'wild' && wildColor
-        ? { ...card, assignedColor: wildColor }
-        : { ...card };
-      const purchasedCards = [...player.purchasedCards, purchasedCard];
-      const reservedCards = fromReserve
-        ? player.reservedCards.filter(c => c.id !== cardId)
-        : player.reservedCards;
-
-      // Update crowns and prestige
-      const crowns = player.crowns + card.crowns;
-      const prestige = player.prestige + card.points;
-
-      let newState = updatePlayer(state, cp, {
-        tokens: playerTokens, purchasedCards, reservedCards, crowns, prestige,
-      });
-      newState = { ...newState, bag, lastPurchasedCard: purchasedCard };
-
-      // Refill pyramid slot if bought from pyramid
-      if (!fromReserve && level) {
-        newState = refillPyramidSlot(newState, level, cardId);
-      }
-
-      // Resolve purchased card's ability first
-      newState = resolveAbility(newState, purchasedCard);
-
-      // Crown milestone check — after ability or deferred if ability needs player interaction
-      // Note: crossing both milestones (3 and 6) in a single purchase is impossible — no card
-      // awards more than 3 crowns, so at most one milestone can be crossed per purchase.
-      const milestoneCrossed = CROWN_MILESTONES.some(m => player.crowns < m && crowns >= m)
+      const milestoneCrossed = CROWN_MILESTONES.some(m => prevCrowns < m && newState.players[cp].crowns >= m)
         && newState.royalDeck.length > 0;
-      if (newState.phase === 'resolve_ability' || newState.phase === 'assign_wild') {
-        return milestoneCrossed ? { ...newState, pendingCrownCheck: true } : newState;
-      }
-      if (milestoneCrossed) return { ...newState, phase: 'choose_royal' };
-      return endOfTurnSequence(newState);
+
+      newState = resolveAbility(newState, purchasedCard);
+      return postPurchaseTransition(newState, milestoneCrossed);
     }
 
     // ── Choose Royal Card (crown milestone) ──────────────────────────────────
@@ -453,32 +460,27 @@ export function reducer(state: GameState, action: Action): GameState {
         prestige: player.prestige + royalCard.points,
       });
       newState = { ...newState, royalDeck, pendingCrownCheck: false };
-      newState = resolveRoyalAbility(newState, cp, royalCard);
+      newState = resolveAbility(newState, royalCard);
       if (newState.phase === 'resolve_ability') return newState;
       return endOfTurnSequence(newState);
     }
 
-    // ── Ability: Assign Wild card color from target ───────────────────────────
-    case 'PLACE_WILD_CARD': {
+    // ── Ability: Assign Wild card color ──────────────────────────────────────
+    case 'ASSIGN_WILD_COLOR': {
       if (state.phase !== 'assign_wild') return state;
-      const { wildCardId, targetCardId } = action;
+      const { wildCardId, color } = action;
       const wildCard = player.purchasedCards.find(c => c.id === wildCardId);
-      const targetCard = player.purchasedCards.find(c => c.id === targetCardId);
+      if (!wildCard || wildCard.color !== 'wild') return state;
 
-      if (!wildCard || !targetCard) return state;
-      if (wildCard.id === targetCard.id) return state;
-      if (targetCard.color === 'wild' || targetCard.color === null) return state;
-      if (targetCard.bonus === 0) return state;
-      if (targetCard.overlappingCardId !== null) return state;
-      if (wildCard.overlappingCardId !== null) return state;
+      // Validate: player owns at least one Jewel Card with this color
+      const hasColor = player.purchasedCards.some(
+        c => c.id !== wildCardId && c.color !== 'wild' && c.color !== null && c.color === color
+      );
+      if (!hasColor) return state;
 
-      const assignedColor = targetCard.color as GemColor;
-      const updatedCards = player.purchasedCards.map(c => {
-        if (c.id === wildCardId) return { ...c, assignedColor, overlappingCardId: targetCardId };
-        return c;
-      });
-
-      // Recompute prestige (bonus card contributes 0 prestige change, but color grouping changes)
+      const updatedCards = player.purchasedCards.map(c =>
+        c.id === wildCardId ? { ...c, assignedColor: color } : c
+      );
       let newState = updatePlayer(state, cp, { purchasedCards: updatedCards });
 
       // If Wild/Turn, grant an extra turn

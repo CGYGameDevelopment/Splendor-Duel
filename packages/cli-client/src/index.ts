@@ -220,12 +220,10 @@ function describeMove(action: Action, state: GameState): string {
     case 'DISCARD_TOKENS':
       return `Discard: ${formatPool(action.tokens as { [key: string]: number })}`;
 
-    case 'PLACE_WILD_CARD': {
+    case 'ASSIGN_WILD_COLOR': {
       const wild = findCard(state, action.wildCardId);
-      const target = findCard(state, action.targetCardId);
       const wildStr = wild ? describeCard(wild) : `#${action.wildCardId}`;
-      const targetStr = target ? describeCard(target) : `#${action.targetCardId}`;
-      return `Assign Wild card ${wildStr} → color from ${targetStr}`;
+      return `Assign Wild card ${wildStr} → ${action.color}`;
     }
 
     case 'TAKE_TOKEN_FROM_BOARD':

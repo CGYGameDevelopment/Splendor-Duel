@@ -4,7 +4,7 @@ import { emptyPool } from '../helpers';
 export function makeCard(overrides: Partial<Card> = {}): Card {
   return {
     id: 99, level: 1, color: 'black', points: 0, bonus: 1,
-    ability: null, crowns: 0, cost: {}, assignedColor: null, overlappingCardId: null,
+    ability: null, crowns: 0, cost: {}, assignedColor: null,
     ...overrides,
   };
 }
