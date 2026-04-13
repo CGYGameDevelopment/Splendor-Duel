@@ -1,5 +1,5 @@
 """
-SplendorDuelEnv: gymnasium.Env wrapping the game-sim HTTP server.
+SplendorDuelEnv: gymnasium.Env wrapping the ai-game-sim HTTP server.
 
 Observation space: Box(float32, shape=(858,))
 Action space:      Discrete(3677)

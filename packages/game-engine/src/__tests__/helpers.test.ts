@@ -88,3 +88,33 @@ describe('totalTokens', () => {
     expect(totalTokens(pool)).toBe(6);
   });
 });
+
+describe('checkVictory - edge cases', () => {
+  it('returns null when player has 19 prestige, 9 crowns, and no color prestige', () => {
+    const player = makePlayer({ prestige: 19, crowns: 9 });
+    expect(checkVictory(player)).toBeNull();
+  });
+
+  it('returns null when no single color reaches 10 prestige', () => {
+    const cards = [
+      makeCard({ id: 1, color: 'red', points: 5 }),
+      makeCard({ id: 2, color: 'blue', points: 9 }),
+    ];
+    const player = makePlayer({ purchasedCards: cards });
+    expect(checkVictory(player)).toBeNull();
+  });
+
+  it('excludes null-color cards from color prestige check', () => {
+    const nullCard = makeCard({ id: 1, color: null, points: 10 });
+    const player = makePlayer({ purchasedCards: [nullCard] });
+    expect(checkVictory(player)).toBeNull();
+  });
+
+  it('does not double-count a wild card assigned to one color against another', () => {
+    const redCard = makeCard({ id: 1, color: 'red', points: 5 });
+    const wildCard = makeCard({ id: 2, color: 'wild', points: 4, assignedColor: 'red' });
+    const player = makePlayer({ purchasedCards: [redCard, wildCard] });
+    // 5+4=9 for red, should not win
+    expect(checkVictory(player)).toBeNull();
+  });
+});

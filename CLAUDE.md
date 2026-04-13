@@ -1,8 +1,6 @@
-# Splendor Duel — Claude Instructions
+﻿# Splendor Duel — Claude Instructions
 
-## Project Overview
-
-A TypeScript monorepo implementing the **Splendor Duel** board game as a personal/hobby project. The goal is a correct, well-architected implementation — not speed of delivery.
+See `README.md` for project overview, setup, and run instructions.
 
 ## Monorepo Structure
 
@@ -11,19 +9,13 @@ A TypeScript monorepo implementing the **Splendor Duel** board game as a persona
 | `packages/game-engine` | Core game logic: state types, reducer, legal moves, board helpers |
 | `packages/server` | Express + WebSocket server for multiplayer sessions |
 | `packages/cli-client` | Terminal-based interactive client for local play |
-| `packages/game-sim` | HTTP server wrapping game-engine for Python AI training |
+| `packages/ai-game-sim` | HTTP server wrapping game-engine for Python AI training |
 | `packages/ai-trainer` | Python RL training pipeline (PPO, self-play, evaluation) |
 | `packages/client` | React + Vite frontend (not actively developed yet) |
 
-Build all packages: `npm run build`
-Run all tests: `npm run test`
-
-## Active Development Focus
-
-Only `game-engine` and `server` are being actively worked on. `cli-client`, `game-sim`, and `ai-trainer` exist and function. **Do not touch the client** until the game engine is complete and solid.
-
 ## Architecture Principles
 
+- The goal is a **correct, well-architected implementation** — not speed of delivery.
 - Prioritize **clean, maintainable code** with clear separation of concerns.
 - Game state is immutable — always return new state objects, never mutate in place.
 - Keep the reducer pure: no side effects, no I/O, deterministic given the same inputs.
@@ -32,7 +24,7 @@ Only `game-engine` and `server` are being actively worked on. `cli-client`, `gam
 ## Game Rules
 
 - **Always ask** before making any assumption about an ambiguous rule — even if a prior clarification exists in memory. Game correctness depends on exact rule interpretation.
-- The `rulebook.txt` at the project root is the authoritative source.
+- The `rulebook.md` at the project root is the authoritative source.
 - Memory may contain resolved clarifications, but confirm with the user before acting on them.
 
 ## Testing
@@ -45,7 +37,7 @@ Only `game-engine` and `server` are being actively worked on. `cli-client`, `gam
 
 ## What Not To Do
 
-- Do not work on `packages/client` until instructed.
 - Do not add speculative features or abstractions beyond what is asked.
 - Do not guess at game rules — stop and ask.
 - Do not commit unless explicitly asked.
+

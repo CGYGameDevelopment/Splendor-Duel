@@ -18,5 +18,17 @@ build/
 .ruff_cache/
 
 # AI trainer
-packages/ai-trainer/checkpoints/
+**/checkpoints/
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# Windows
+Thumbs.db
+Desktop.ini
+ehthumbs.db
 

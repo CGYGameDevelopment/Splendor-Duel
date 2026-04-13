@@ -10,7 +10,7 @@ Options:
   --eval-every INT          Evaluate vs random every N iterations  [default: 50]
   --checkpoint-every INT    Save latest checkpoint every N iterations  [default: 10]
   --sim-url TEXT            game-sim server URL  [default: http://127.0.0.1:3002]
-  --checkpoint-dir PATH     Directory for saving model checkpoints  [default: checkpoints]
+  --checkpoint-dir PATH     Directory for saving model checkpoints  [default: packages/ai-trainer/checkpoints]
   --lr FLOAT                Learning rate  [default: 3e-4]
   --resume PATH             Resume training from a checkpoint file
 """
@@ -59,7 +59,7 @@ def main(
     eval_every: int = typer.Option(50, help="Evaluate vs random every N iterations"),
     checkpoint_every: int = typer.Option(5, help="Save latest checkpoint every N iterations"),
     sim_url: str = typer.Option("http://127.0.0.1:3002", help="game-sim server URL"),
-    checkpoint_dir: Path = typer.Option(Path("checkpoints"), help="Checkpoint directory"),
+    checkpoint_dir: Path = typer.Option(Path(__file__).resolve().parent.parent.parent / "checkpoints", help="Checkpoint directory"),
     lr: float = typer.Option(3e-4, help="Learning rate"),
     resume: Path | None = typer.Option(None, help="Resume from checkpoint file"),
 ) -> None:

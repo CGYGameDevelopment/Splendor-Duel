@@ -42,18 +42,18 @@ function send(ws: WebSocket, msg: ClientMessage): void {
 
 const TOKEN_ABBR: { [key: string]: string } = {
   white: '{W}', blue: '{U}', black: '{B}', red: '{R}', green: '{G}',
-  pearl: '{-Pl}', gold: '{Gld}',
+  pearl: '{Pl}', gold: '{Au}',
 };
 
 const CARD_COLOR_ABBR: { [key: string]: string } = {
   white: '{W}', blue: '{U}', black: '{B}', red: '{R}', green: '{G}',
-  wild: 'wi', points: 'pt',
+  wild: 'wi',
 };
 
 const ALL_TOKEN_COLORS = ['white', 'blue', 'green', 'red', 'black', 'pearl', 'gold'];
 
 function abbr(color: string): string {
-  return TOKEN_ABBR[color] ?? color.slice(0, 2);
+  return TOKEN_ABBR[color] ?? color.slice(0, 3);
 }
 
 function cardColorAbbr(color: string | null): string {
@@ -97,6 +97,8 @@ function findCard(state: GameState, cardId: number): Card | undefined {
     ...state.players[1].reservedCards,
     ...state.players[0].purchasedCards,
     ...state.players[1].purchasedCards,
+    ...state.players[0].royalCards,
+    ...state.players[1].royalCards,
   ];
   return candidates.filter((c): c is Card => c !== null).find(c => c.id === cardId);
 }
@@ -149,11 +151,16 @@ function displayPlayers(state: GameState): void {
 
     const gems: { [key: string]: number } = {};
     for (const card of player.purchasedCards) {
-      if (card.color !== 'wild' && card.color !== 'points') {
+      if (card.color !== null && card.color !== 'wild') {
         gems[card.color] = (gems[card.color] ?? 0) + card.bonus;
       }
     }
     console.log(`  Gems (${player.purchasedCards.length} cards): ${formatPool(gems)}`);
+
+    const abilCards = player.purchasedCards.filter(c => c.ability !== null);
+    if (abilCards.length > 0) {
+      console.log(`  Abilities: ${abilCards.map(c => c.ability).join(', ')}`);
+    }
 
     if (isMe && player.reservedCards.length > 0) {
       const res = player.reservedCards.map(c => `[${describeCard(c)} cost:${formatCost(c.cost)}]`).join(' ');
@@ -186,6 +193,9 @@ function describeMove(action: Action, state: GameState): string {
   switch (action.type) {
     case 'END_OPTIONAL_PHASE':
       return 'Skip optional phase';
+
+    case 'SKIP_TO_MANDATORY':
+      return 'Skip all optional phases';
 
     case 'TAKE_TOKENS': {
       const tokens = action.indices
@@ -221,6 +231,11 @@ function describeMove(action: Action, state: GameState): string {
       return card ? `Reserve ${describeCard(card)}` : `Reserve card #${action.cardId} from pyramid`;
     }
 
+    case 'CHOOSE_ROYAL_CARD': {
+      const card = findCard(state, action.cardId);
+      return card ? `Choose royal: ${describeCard(card)}` : `Choose royal card #${action.cardId}`;
+    }
+
     case 'DISCARD_TOKENS':
       return `Discard: ${formatPool(action.tokens as { [key: string]: number })}`;
 
@@ -230,8 +245,10 @@ function describeMove(action: Action, state: GameState): string {
       return `Assign Wild card ${wildStr} → ${action.color}`;
     }
 
-    case 'TAKE_TOKEN_FROM_BOARD':
-      return `Take ${abbr(action.color)} token from board (Token ability)`;
+    case 'TAKE_TOKEN_FROM_BOARD': {
+      const cell = state.board[action.index];
+      return `Take ${cell ? abbr(cell) : '?'} token from board [${action.index}] (Token ability)`;
+    }
 
     case 'TAKE_TOKEN_FROM_OPPONENT':
       return `Take ${abbr(action.color)} token from opponent (Take ability)`;
@@ -246,8 +263,9 @@ function describeMove(action: Action, state: GameState): string {
 /**
  * Returns the TAKE_TOKENS moves in display order:
  *   1. All size-3 sets.
- *   2. Size-2 sets that are NOT a subset of any size-3 set.
- *   3. Size-1 sets whose cell has no adjacent non-gold token on the board.
+ *   2. Size-2 sets that are NOT a subset of any size-3 set (always keep 2-pearl).
+ *   3. Size-1 sets whose cell has no adjacent non-gold token on the board,
+ *      but only when larger moves also exist — never hide all token moves.
  */
 function orderedTokenMoves(tokenMoves: Action[], board: GameState['board']): Action[] {
   const size3 = tokenMoves.filter(m => m.type === 'TAKE_TOKENS' && m.indices.length === 3);
@@ -258,8 +276,6 @@ function orderedTokenMoves(tokenMoves: Action[], board: GameState['board']): Act
 
   const filtered2 = size2.filter(m => {
     const idxs = (m as Extract<Action, { type: 'TAKE_TOKENS' }>).indices;
-    // Always keep the 2-pearl move — it triggers a distinct rule (opponent gains a privilege)
-    // and must remain selectable even when it's a subset of a size-3 line.
     const isTwoPearls = idxs.every(i => board[i] === 'pearl');
     if (isTwoPearls) return true;
     return !indices3Sets.some(set => idxs.every(i => set.includes(i)));
@@ -273,10 +289,43 @@ function orderedTokenMoves(tokenMoves: Action[], board: GameState['board']): Act
     });
   });
 
-  return [...size3, ...filtered2, ...filtered1];
+  // Safety: never hide all token moves — if filtering removes everything, show all size-1s.
+  const result1 = (size3.length > 0 || filtered2.length > 0) ? filtered1 : size1;
+
+  return [...size3, ...filtered2, ...result1];
 }
 
 // ─── Move prompt ──────────────────────────────────────────────────────────────
+
+type MoveGroup = { label: string; moves: Action[] };
+
+function buildMoveGroups(allMoves: Action[], state: GameState): MoveGroup[] {
+  const tokenMoves = allMoves.filter(m => m.type === 'TAKE_TOKENS');
+  const rest = allMoves.filter(m => m.type !== 'TAKE_TOKENS');
+
+  const phaseCtrl  = rest.filter(m => m.type === 'END_OPTIONAL_PHASE' || m.type === 'SKIP_TO_MANDATORY' || m.type === 'REPLENISH_BOARD');
+  const tokens     = orderedTokenMoves(tokenMoves, state.board);
+  const privileges = rest.filter(m => m.type === 'USE_PRIVILEGE');
+  const purchases  = rest.filter(m => m.type === 'PURCHASE_CARD');
+  const reserves   = rest.filter(m => m.type === 'RESERVE_CARD' || m.type === 'RESERVE_CARD_FROM_PYRAMID');
+  const discards   = rest.filter(m => m.type === 'DISCARD_TOKENS');
+  const abilities  = rest.filter(m =>
+    m.type === 'TAKE_TOKEN_FROM_BOARD' ||
+    m.type === 'TAKE_TOKEN_FROM_OPPONENT' ||
+    m.type === 'ASSIGN_WILD_COLOR' ||
+    m.type === 'CHOOSE_ROYAL_CARD'
+  );
+
+  const groups: MoveGroup[] = [];
+  if (phaseCtrl.length)  groups.push({ label: 'Phase',         moves: phaseCtrl });
+  if (tokens.length)     groups.push({ label: 'Take tokens',   moves: tokens });
+  if (privileges.length) groups.push({ label: 'Use privilege', moves: privileges });
+  if (purchases.length)  groups.push({ label: 'Purchase',      moves: purchases });
+  if (reserves.length)   groups.push({ label: 'Reserve',       moves: reserves });
+  if (discards.length)   groups.push({ label: 'Discard',       moves: discards });
+  if (abilities.length)  groups.push({ label: 'Ability',       moves: abilities });
+  return groups;
+}
 
 async function promptMove(state: GameState, ws: WebSocket): Promise<void> {
   if (awaitingInput) return;
@@ -289,25 +338,23 @@ async function promptMove(state: GameState, ws: WebSocket): Promise<void> {
     return;
   }
 
-  const tokenMoves = allMoves.filter(m => m.type === 'TAKE_TOKENS');
-  const otherMoves = allMoves.filter(m => m.type !== 'TAKE_TOKENS');
-  const moves = [...orderedTokenMoves(tokenMoves, state.board), ...otherMoves];
+  const groups = buildMoveGroups(allMoves, state);
+  const moves = groups.flatMap(g => g.moves);
 
-  console.log(`\n── YOUR TURN (${state.phase}) ──`);
-  console.log(`Legal moves (${moves.length}):`);
-  for (let i = 0; i < moves.length; i++) {
-    console.log(`  ${String(i + 1).padStart(3)}. ${describeMove(moves[i], state)}`);
+  console.log(`\n── YOUR TURN (${state.phase}) ── ${moves.length} move${moves.length !== 1 ? 's' : ''}`);
+  let counter = 1;
+  for (const group of groups) {
+    console.log(`\n  ─ ${group.label} ─`);
+    for (const move of group.moves) {
+      console.log(`  ${String(counter).padStart(3)}. ${describeMove(move, state)}`);
+      counter++;
+    }
   }
 
   let chosen = -1;
   while (chosen < 0) {
-    const input = await question('\nMove number (or q to quit): ');
-    if (input.trim().toLowerCase() === 'q') {
-      ws.close();
-      rl.close();
-      process.exit(0);
-    }
-    const n = parseInt(input.trim(), 10);
+    const input = (await question('\nMove number: ')).trim();
+    const n = parseInt(input, 10);
     if (!isNaN(n) && n >= 1 && n <= moves.length) {
       chosen = n - 1;
     } else {

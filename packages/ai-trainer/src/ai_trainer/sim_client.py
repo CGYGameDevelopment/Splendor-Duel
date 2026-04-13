@@ -1,4 +1,4 @@
-"""HTTP client wrapping the game-sim server."""
+"""HTTP client wrapping the ai-game-sim server."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ _TIMEOUT = 10  # seconds — applied to all requests
 
 
 class SimClient:
-    """Thin synchronous HTTP wrapper around the game-sim server."""
+    """Thin synchronous HTTP wrapper around the ai-game-sim server."""
 
     def __init__(self, base_url: str = "http://127.0.0.1:3002"):
         self.base_url = base_url.rstrip("/")

@@ -889,3 +889,344 @@ describe('Conservation Invariants', () => {
     assertConserved(s, reducer(s, { type: 'PURCHASE_CARD', cardId: 140, goldUsage: {} }));
   });
 });
+
+// ─── Phase Transitions ────────────────────────────────────────────────────────
+
+describe('END_OPTIONAL_PHASE', () => {
+  it('transitions from optional_privilege to optional_replenish', () => {
+    const state = createInitialState(false);
+    const s: GameState = { ...state, phase: 'optional_privilege' };
+    const next = reducer(s, { type: 'END_OPTIONAL_PHASE' });
+    expect(next.phase).toBe('optional_replenish');
+  });
+
+  it('transitions from optional_replenish to mandatory', () => {
+    const state = createInitialState(false);
+    const s: GameState = { ...state, phase: 'optional_replenish' };
+    const next = reducer(s, { type: 'END_OPTIONAL_PHASE' });
+    expect(next.phase).toBe('mandatory');
+  });
+});
+
+describe('SKIP_TO_MANDATORY', () => {
+  it('jumps directly from optional_privilege to mandatory', () => {
+    const state = createInitialState(false);
+    const s: GameState = { ...state, phase: 'optional_privilege' };
+    const next = reducer(s, { type: 'SKIP_TO_MANDATORY' });
+    expect(next.phase).toBe('mandatory');
+  });
+
+  it('jumps directly from optional_replenish to mandatory', () => {
+    const state = createInitialState(false);
+    const s: GameState = { ...state, phase: 'optional_replenish' };
+    const next = reducer(s, { type: 'SKIP_TO_MANDATORY' });
+    expect(next.phase).toBe('mandatory');
+  });
+});
+
+// ─── Invalid Phase Rejection ──────────────────────────────────────────────────
+
+describe('Invalid phase rejection', () => {
+  it('TAKE_TOKENS in optional_privilege phase returns state unchanged', () => {
+    const state = createInitialState(false);
+    const board = new Array(25).fill(null);
+    board[12] = 'black';
+    const s: GameState = { ...state, board, phase: 'optional_privilege' };
+    const next = reducer(s, { type: 'TAKE_TOKENS', indices: [12] });
+    expect(next).toBe(s);
+  });
+
+  it('PURCHASE_CARD in optional_privilege phase returns state unchanged', () => {
+    const card = makeCard({ id: 50, cost: {} });
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      phase: 'optional_privilege',
+      pyramid: { ...state.pyramid, level1: [card, ...state.pyramid.level1.slice(0, 4)] },
+      players: [makePlayer(), makePlayer()],
+    };
+    const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 50, goldUsage: {} });
+    expect(next).toBe(s);
+  });
+
+  it('USE_PRIVILEGE in mandatory phase returns state unchanged', () => {
+    const board = new Array(25).fill(null);
+    board[5] = 'green';
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state, board, phase: 'mandatory',
+      players: [makePlayer({ privileges: 1 }), makePlayer()],
+    };
+    const next = reducer(s, { type: 'USE_PRIVILEGE', indices: [5] });
+    expect(next).toBe(s);
+  });
+});
+
+// ─── USE_PRIVILEGE validation ─────────────────────────────────────────────────
+
+describe('USE_PRIVILEGE validation', () => {
+  it('rejects when player has 0 privileges', () => {
+    const board = new Array(25).fill(null);
+    board[5] = 'green';
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state, board, phase: 'optional_privilege', privileges: 3,
+      players: [makePlayer({ privileges: 0 }), makePlayer()],
+    };
+    const next = reducer(s, { type: 'USE_PRIVILEGE', indices: [5] });
+    expect(next).toBe(s);
+  });
+
+  it('rejects targeting a gold cell', () => {
+    const board = new Array(25).fill(null);
+    board[5] = 'gold';
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state, board, phase: 'optional_privilege', privileges: 2,
+      players: [makePlayer({ privileges: 1 }), makePlayer()],
+    };
+    const next = reducer(s, { type: 'USE_PRIVILEGE', indices: [5] });
+    expect(next).toBe(s);
+  });
+});
+
+// ─── RESERVE_CARD_FROM_PYRAMID validation ─────────────────────────────────────
+
+describe('RESERVE_CARD_FROM_PYRAMID validation', () => {
+  it('rejects when no gold token is on the board', () => {
+    const card = makeCard({ id: 60 });
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      board: new Array(25).fill(null),
+      phase: 'mandatory',
+      pyramid: { ...state.pyramid, level1: [card, ...state.pyramid.level1.slice(0, 4)] },
+      players: [makePlayer(), makePlayer()],
+    };
+    const next = reducer(s, { type: 'RESERVE_CARD_FROM_PYRAMID', cardId: 60 });
+    expect(next).toBe(s);
+  });
+});
+
+// ─── RESERVE_CARD from deck ───────────────────────────────────────────────────
+
+describe('RESERVE_CARD from deck', () => {
+  it('takes the top deck card into reserve and grants gold', () => {
+    const deckCard = makeCard({ id: 70, level: 1 });
+    const state = createInitialState(false);
+    const board = new Array(25).fill(null);
+    board[12] = 'gold';
+    const s: GameState = {
+      ...state, board, phase: 'mandatory',
+      decks: { ...state.decks, level1: [deckCard, ...state.decks.level1] },
+      players: [makePlayer(), makePlayer()],
+    };
+
+    const next = reducer(s, { type: 'RESERVE_CARD', source: 'deck_1' });
+    expect(next.players[0].reservedCards.some(c => c.id === 70)).toBe(true);
+    expect(next.players[0].tokens.gold).toBe(1);
+    expect(next.board[12]).toBeNull();
+  });
+
+  it('rejects when player already has 3 reserved cards', () => {
+    const reserved = [60, 61, 62].map(id => makeCard({ id }));
+    const state = createInitialState(false);
+    const board = new Array(25).fill(null);
+    board[12] = 'gold';
+    const s: GameState = {
+      ...state, board, phase: 'mandatory',
+      players: [makePlayer({ reservedCards: reserved }), makePlayer()],
+    };
+    const next = reducer(s, { type: 'RESERVE_CARD', source: 'deck_1' });
+    expect(next).toBe(s);
+  });
+});
+
+// ─── PURCHASE_CARD from reserve ───────────────────────────────────────────────
+
+describe('PURCHASE_CARD from reserved cards', () => {
+  it('purchases a reserved card and removes it from reserve', () => {
+    const card = makeCard({ id: 90, color: 'red', points: 1, cost: { red: 1 } });
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      phase: 'mandatory',
+      players: [
+        makePlayer({ reservedCards: [card], tokens: { ...emptyPool(), red: 1 } }),
+        makePlayer(),
+      ],
+    };
+
+    const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 90, goldUsage: {} });
+    expect(next.players[0].purchasedCards.some(c => c.id === 90)).toBe(true);
+    expect(next.players[0].reservedCards).toHaveLength(0);
+    expect(next.players[0].prestige).toBe(1);
+  });
+});
+
+// ─── Victory condition in reducer ─────────────────────────────────────────────
+
+describe('Victory detection in reducer', () => {
+  it('sets game_over and winner when purchase pushes prestige to 20', () => {
+    const card = makeCard({ id: 95, color: 'black', points: 5, cost: {} });
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      phase: 'mandatory',
+      pyramid: { ...state.pyramid, level1: [card, ...state.pyramid.level1.slice(0, 4)] },
+      players: [makePlayer({ prestige: 15 }), makePlayer()],
+    };
+
+    const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 95, goldUsage: {} });
+    expect(next.phase).toBe('game_over');
+    expect(next.winner).toBe(0);
+    expect(next.winCondition).toBe('prestige');
+  });
+
+  it('sets game_over and winner when purchase gives 10th crown', () => {
+    const card = makeCard({ id: 96, crowns: 1, cost: {} });
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      phase: 'mandatory',
+      pyramid: { ...state.pyramid, level1: [card, ...state.pyramid.level1.slice(0, 4)] },
+      royalDeck: [],
+      players: [makePlayer({ crowns: 9 }), makePlayer()],
+    };
+
+    const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 96, goldUsage: {} });
+    expect(next.phase).toBe('game_over');
+    expect(next.winner).toBe(0);
+    expect(next.winCondition).toBe('crowns');
+  });
+});
+
+// ─── Privilege Ability: takes from opponent when table is empty ───────────────
+
+describe('Privilege Ability: fallback to opponent', () => {
+  it('takes from opponent when table has 0 privileges', () => {
+    const card = makeCard({ id: 108, ability: 'Privilege', cost: {} });
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      phase: 'mandatory',
+      privileges: 0,
+      pyramid: { ...state.pyramid, level1: [card, ...state.pyramid.level1.slice(0, 4)] },
+      players: [
+        makePlayer({ privileges: 0 }),
+        makePlayer({ privileges: 3 }),
+      ],
+    };
+
+    const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 108, goldUsage: {} });
+    expect(next.players[0].privileges).toBe(1);
+    expect(next.players[1].privileges).toBe(2);
+    expect(totalPrivileges(next)).toBe(3);
+  });
+
+  it('grants nothing when table and opponent both have 0 privileges', () => {
+    const card = makeCard({ id: 109, ability: 'Privilege', cost: {} });
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      phase: 'mandatory',
+      privileges: 0,
+      pyramid: { ...state.pyramid, level1: [card, ...state.pyramid.level1.slice(0, 4)] },
+      players: [
+        makePlayer({ privileges: 0 }),
+        makePlayer({ privileges: 0 }),
+      ],
+    };
+
+    const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 109, goldUsage: {} });
+    expect(next.players[0].privileges).toBe(0);
+    expect(totalPrivileges(next)).toBe(0);
+  });
+});
+
+// ─── REPLENISH_BOARD privilege cap ────────────────────────────────────────────
+
+describe('REPLENISH_BOARD privilege cap', () => {
+  it('does not give opponent a privilege beyond the cap of 3', () => {
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      board: new Array(25).fill(null),
+      bag: { ...emptyPool(), black: 3 },
+      phase: 'optional_replenish',
+      privileges: 0,
+      players: [makePlayer(), makePlayer({ privileges: 3 })],
+    };
+
+    const next = reducer(s, { type: 'REPLENISH_BOARD' });
+    expect(next.players[1].privileges).toBe(3);
+    expect(totalPrivileges(next)).toBe(3);
+  });
+});
+
+// ─── TAKE_TOKENS privilege cap ────────────────────────────────────────────────
+
+describe('TAKE_TOKENS privilege penalty cap', () => {
+  it('does not give opponent more than 3 privileges when already at cap', () => {
+    const state = createInitialState(false);
+    const board = new Array(25).fill(null);
+    board[0] = 'red'; board[1] = 'red'; board[2] = 'red';
+    const s: GameState = {
+      ...state, board, phase: 'mandatory',
+      privileges: 0,
+      players: [makePlayer(), makePlayer({ privileges: 3 })],
+    };
+
+    const next = reducer(s, { type: 'TAKE_TOKENS', indices: [0, 1, 2] });
+    expect(next.players[1].privileges).toBe(3);
+    expect(totalPrivileges(next)).toBe(3);
+  });
+});
+
+// ─── legalMoves ───────────────────────────────────────────────────────────────
+
+describe('legalMoves', () => {
+  it('returns empty array during game_over phase', () => {
+    const { legalMoves } = require('../legalMoves');
+    const state = createInitialState(false);
+    const s: GameState = { ...state, phase: 'game_over', winner: 0, winCondition: 'prestige' };
+    expect(legalMoves(s)).toHaveLength(0);
+  });
+
+  it('always includes END_OPTIONAL_PHASE and SKIP_TO_MANDATORY in optional_privilege phase', () => {
+    const { legalMoves } = require('../legalMoves');
+    const state = createInitialState(false);
+    const s: GameState = { ...state, phase: 'optional_privilege' };
+    const moves = legalMoves(s);
+    expect(moves.some((m: { type: string }) => m.type === 'END_OPTIONAL_PHASE')).toBe(true);
+    expect(moves.some((m: { type: string }) => m.type === 'SKIP_TO_MANDATORY')).toBe(true);
+  });
+
+  it('includes REPLENISH_BOARD in optional_replenish phase only when bag is non-empty', () => {
+    const { legalMoves } = require('../legalMoves');
+    const state = createInitialState(false);
+
+    const withTokens: GameState = { ...state, phase: 'optional_replenish', bag: { ...emptyPool(), black: 1 } };
+    expect(legalMoves(withTokens).some((m: { type: string }) => m.type === 'REPLENISH_BOARD')).toBe(true);
+
+    const withoutTokens: GameState = { ...state, phase: 'optional_replenish', bag: emptyPool() };
+    expect(legalMoves(withoutTokens).some((m: { type: string }) => m.type === 'REPLENISH_BOARD')).toBe(false);
+  });
+
+  it('forces REPLENISH_BOARD in mandatory phase when no other mandatory moves exist and bag is non-empty', () => {
+    const { legalMoves } = require('../legalMoves');
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      board: new Array(25).fill(null),
+      bag: { ...emptyPool(), black: 5 },
+      phase: 'mandatory',
+      pyramid: { level1: [], level2: [], level3: [] },
+      decks: { level1: [], level2: [], level3: [] },
+      players: [makePlayer(), makePlayer()],
+    };
+    const moves = legalMoves(s);
+    expect(moves).toHaveLength(1);
+    expect(moves[0].type).toBe('REPLENISH_BOARD');
+  });
+});
