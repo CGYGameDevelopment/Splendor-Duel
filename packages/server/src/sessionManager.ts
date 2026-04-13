@@ -179,8 +179,8 @@ export function dispatchAction(
   }
 
   for (const pid of [0, 1] as PlayerId[]) {
-    const ws = session.connections[pid];
-    if (ws) send(ws, { type: 'STATE_UPDATE', state: sanitizeStateFor(nextState, pid) });
+    const playerWs = session.connections[pid];
+    if (playerWs) send(playerWs, { type: 'STATE_UPDATE', state: sanitizeStateFor(nextState, pid) });
   }
 }
 
