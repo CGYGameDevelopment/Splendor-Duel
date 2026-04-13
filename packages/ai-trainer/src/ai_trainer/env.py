@@ -22,7 +22,6 @@ from .state_encoder import encode, STATE_DIM
 from .action_space import (
     ACTION_SPACE_SIZE,
     build_legal_index_map,
-    build_legal_mask,
 )
 
 
@@ -40,6 +39,7 @@ class SplendorDuelEnv(gym.Env):
         self._session_id: str | None = None
         self._legal_moves: list[dict] = []
         self._legal_index_map: dict[int, dict] = {}
+        self._legal_mask: np.ndarray = np.zeros(ACTION_SPACE_SIZE, dtype=bool)
         self._state: dict = {}
         self._winner: int | None = None
 
@@ -60,7 +60,7 @@ class SplendorDuelEnv(gym.Env):
         self._session_id = result["sessionId"]
         self._state = result["state"]
         self._legal_moves = result["legalMoves"]
-        self._legal_index_map = build_legal_index_map(self._legal_moves)
+        self._update_legal(self._legal_moves)
         self._winner = None
 
         obs = encode(self._state)
@@ -80,7 +80,7 @@ class SplendorDuelEnv(gym.Env):
         result = self.client.step(self._session_id, concrete)
         self._state = result["state"]
         self._legal_moves = result["legalMoves"]
-        self._legal_index_map = build_legal_index_map(self._legal_moves)
+        self._update_legal(self._legal_moves)
 
         done: bool = result["done"]
         winner: int | None = result["winner"]
@@ -106,9 +106,17 @@ class SplendorDuelEnv(gym.Env):
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
+    def _update_legal(self, legal_moves: list[dict]) -> None:
+        """Build index map and mask in one pass over legal_moves."""
+        self._legal_index_map = build_legal_index_map(legal_moves)
+        mask = np.zeros(ACTION_SPACE_SIZE, dtype=bool)
+        for idx in self._legal_index_map:
+            mask[idx] = True
+        self._legal_mask = mask
+
     def _make_info(self) -> dict:
         return {
-            "legal_mask": build_legal_mask(self._legal_moves),
+            "legal_mask": self._legal_mask,
             "state": self._state,
             "legal_moves": self._legal_moves,
             "winner": self._winner,

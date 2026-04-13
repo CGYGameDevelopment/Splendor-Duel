@@ -1,6 +1,6 @@
 // ─── Tokens ──────────────────────────────────────────────────────────────────
 
-export type GemColor = 'black' | 'red' | 'green' | 'blue' | 'white';
+export type GemColor = 'white' | 'blue' | 'green' | 'red' | 'black';
 export type TokenColor = GemColor | 'pearl' | 'gold';
 
 export type TokenPool = Record<TokenColor, number>;

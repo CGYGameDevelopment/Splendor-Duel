@@ -18,7 +18,7 @@ Layout (always from the current player's perspective):
   TOTAL: 858
 
 Per-card features (26):
-  [0..7]   color one-hot (8): black/red/green/blue/white/joker/points + absent=7
+  [0..7]   color one-hot (8): white/blue/green/red/black/joker/points + absent=7
   [8]      present bit
   [9]      points / 6
   [10]     bonus / 2
@@ -47,9 +47,9 @@ import numpy as np
 
 STATE_DIM = 858
 
-TOKEN_COLORS = ["black", "red", "green", "blue", "white", "pearl", "gold"]
-GEM_COLORS = ["black", "red", "green", "blue", "white"]
-CARD_COLORS = ["black", "red", "green", "blue", "white", "joker", "points"]  # index 7 = absent
+TOKEN_COLORS = ["white", "blue", "green", "red", "black", "pearl", "gold"]
+GEM_COLORS = ["white", "blue", "green", "red", "black"]
+CARD_COLORS = ["white", "blue", "green", "red", "black", "joker", "points"]  # index 7 = absent
 ABILITIES = ["Turn", "Token", "Bonus", "Take", "Privilege", "Bonus/Turn"]
 PHASES = [
     "optional_privilege",

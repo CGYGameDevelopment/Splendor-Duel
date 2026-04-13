@@ -1,4 +1,4 @@
-export type GemColor = 'black' | 'red' | 'green' | 'blue' | 'white';
+export type GemColor = 'white' | 'blue' | 'green' | 'red' | 'black';
 export type TokenColor = GemColor | 'pearl' | 'gold';
 export type TokenPool = Record<TokenColor, number>;
 export type CardAbility = 'Turn' | 'Token' | 'Take' | 'Privilege' | 'Bonus' | 'Bonus/Turn';

@@ -23,7 +23,7 @@ import numpy as np
 
 ACTION_SPACE_SIZE = 3677
 
-TOKEN_COLORS = ["black", "red", "green", "blue", "white", "pearl", "gold"]
+TOKEN_COLORS = ["white", "blue", "green", "red", "black", "pearl", "gold"]
 
 # ── Valid board lines ─────────────────────────────────────────────────────────
 

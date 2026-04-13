@@ -1,7 +1,7 @@
 import type { TokenPool, TokenColor, GemColor, PlayerState, Card, GameState, PlayerId } from './types';
 
-export const GEM_COLORS: GemColor[] = ['black', 'red', 'green', 'blue', 'white'];
-export const TOKEN_COLORS: TokenColor[] = ['black', 'red', 'green', 'blue', 'white', 'pearl', 'gold'];
+export const GEM_COLORS: GemColor[] = ['white', 'blue', 'green', 'red', 'black'];
+export const TOKEN_COLORS: TokenColor[] = ['white', 'blue', 'green', 'red', 'black', 'pearl', 'gold'];
 
 export const MAX_TOKENS = 10;
 export const MAX_RESERVED = 3;
@@ -38,7 +38,7 @@ export const PENALTY_PEARL_COUNT = 2;
 // ─── Token pool helpers ───────────────────────────────────────────────────────
 
 export function emptyPool(): TokenPool {
-  return { black: 0, red: 0, green: 0, blue: 0, white: 0, pearl: 0, gold: 0 };
+  return { white: 0, blue: 0, green: 0, red: 0, black: 0, pearl: 0, gold: 0 };
 }
 
 export function totalTokens(pool: TokenPool): number {
@@ -52,7 +52,7 @@ export function totalTokens(pool: TokenPool): number {
  * Wild cards contribute as their assignedColor.
  */
 export function playerBonuses(player: PlayerState): Record<GemColor, number> {
-  const bonuses: Record<GemColor, number> = { black: 0, red: 0, green: 0, blue: 0, white: 0 };
+  const bonuses: Record<GemColor, number> = { white: 0, blue: 0, green: 0, red: 0, black: 0 };
 
   for (const card of player.purchasedCards) {
     const color = effectiveCardColor(card);
