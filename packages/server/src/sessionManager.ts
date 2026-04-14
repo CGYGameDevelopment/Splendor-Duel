@@ -1,7 +1,7 @@
 import WebSocket from 'ws';
 import { createInitialState, reducer } from '@splendor-duel/game-engine';
 import type { Action, PlayerId } from '@splendor-duel/game-engine';
-import type { ClientGameState, ServerMessage, SessionInfo } from './protocol';
+import type { ClientGameState, ServerMessage, SessionInfo } from '@splendor-duel/protocol';
 
 // ─── Internal session shape ───────────────────────────────────────────────────
 

@@ -54,18 +54,20 @@ function send(ws, msg) {
 }
 // ─── Display helpers ──────────────────────────────────────────────────────────
 const TOKEN_ABBR = {
-    black: 'bk', red: 'rd', green: 'gn', blue: 'bl',
-    white: 'wh', pearl: 'pr', gold: 'gl',
+    white: '{W}', blue: '{U}', black: '{B}', red: '{R}', green: '{G}',
+    pearl: '{Pl}', gold: '{Au}',
 };
 const CARD_COLOR_ABBR = {
-    black: 'bk', red: 'rd', green: 'gn', blue: 'bl',
-    white: 'wh', joker: 'jk', points: 'pt',
+    white: '{W}', blue: '{U}', black: '{B}', red: '{R}', green: '{G}',
+    wild: 'wi',
 };
-const ALL_TOKEN_COLORS = ['black', 'red', 'green', 'blue', 'white', 'pearl', 'gold'];
+const ALL_TOKEN_COLORS = ['white', 'blue', 'green', 'red', 'black', 'pearl', 'gold'];
 function abbr(color) {
-    return TOKEN_ABBR[color] ?? color.slice(0, 2);
+    return TOKEN_ABBR[color] ?? color.slice(0, 3);
 }
 function cardColorAbbr(color) {
+    if (color == null)
+        return '--';
     return CARD_COLOR_ABBR[color] ?? color.slice(0, 2);
 }
 function formatPool(pool, showZero = false) {
@@ -83,8 +85,12 @@ function formatCost(cost) {
 function describeCard(card) {
     const level = card.level === 'royal' ? 'R ' : `L${card.level}`;
     const abil = card.ability ? ` [${card.ability}]` : '';
-    const crowns = card.crowns > 0 ? ` cr:${card.crowns}` : '';
-    return `#${card.id} ${level} ${cardColorAbbr(card.color)} ${card.points}pt ${card.bonus}b${crowns}${abil}`;
+    const crowns = card.crowns > 0 ? ` 👑${card.crowns}` : '';
+    const gemColors = ['white', 'blue', 'green', 'red', 'black'];
+    const colorStr = card.color !== null && gemColors.includes(card.color) && card.bonus > 0
+        ? cardColorAbbr(card.color).repeat(card.bonus)
+        : cardColorAbbr(card.color);
+    return `#${card.id} ${level} ${colorStr} ⭐${card.points}${crowns}${abil}`;
 }
 function findCard(state, cardId) {
     const candidates = [
@@ -97,6 +103,8 @@ function findCard(state, cardId) {
         ...state.players[1].reservedCards,
         ...state.players[0].purchasedCards,
         ...state.players[1].purchasedCards,
+        ...state.players[0].royalCards,
+        ...state.players[1].royalCards,
     ];
     return candidates.filter((c) => c !== null).find(c => c.id === cardId);
 }
@@ -106,14 +114,14 @@ function totalTokens(pool) {
 // ─── State display ────────────────────────────────────────────────────────────
 function displayBoard(board) {
     console.log('\nBOARD:');
-    console.log('     0    1    2    3    4');
+    console.log('      0      1      2      3      4');
     for (let row = 0; row < 5; row++) {
         const cells = [];
         for (let col = 0; col < 5; col++) {
             const cell = board[row * 5 + col];
-            cells.push(cell ? `[${abbr(cell).padEnd(2)}]` : '[ . ]');
+            cells.push(cell ? abbr(cell).padEnd(5) : ' .   ');
         }
-        console.log(`  ${row}: ${cells.join(' ')}`);
+        console.log(`  ${row}: ${cells.join('  ')}`);
     }
 }
 function displayPyramid(state) {
@@ -136,21 +144,20 @@ function displayPlayers(state) {
         const isMe = pid === myPlayerId;
         const name = isMe ? `YOU (${myName})` : `OPPONENT (${opponentName || `Player ${pid}`})`;
         const turnMark = state.currentPlayer === pid ? ' ◄ TURN' : '';
-        console.log(`\n${name} — ${player.prestige}pt | crowns:${player.crowns} | priv:${player.privileges}${turnMark}`);
+        console.log(`\n${name} — ⭐${player.prestige} | 👑${player.crowns} | 📜${player.privileges}${turnMark}`);
         const total = totalTokens(player.tokens);
-        if (isMe) {
-            console.log(`  Tokens (${total}): ${formatPool(player.tokens, true)}`);
-        }
-        else {
-            console.log(`  Tokens: ${total} total`);
-        }
+        console.log(`  Tokens (${total}): ${formatPool(player.tokens, true)}`);
         const gems = {};
         for (const card of player.purchasedCards) {
-            if (card.color !== 'joker' && card.color !== 'points') {
+            if (card.color !== null && card.color !== 'wild') {
                 gems[card.color] = (gems[card.color] ?? 0) + card.bonus;
             }
         }
         console.log(`  Gems (${player.purchasedCards.length} cards): ${formatPool(gems)}`);
+        const abilCards = player.purchasedCards.filter(c => c.ability !== null);
+        if (abilCards.length > 0) {
+            console.log(`  Abilities: ${abilCards.map(c => c.ability).join(', ')}`);
+        }
         if (isMe && player.reservedCards.length > 0) {
             const res = player.reservedCards.map(c => `[${describeCard(c)} cost:${formatCost(c.cost)}]`).join(' ');
             console.log(`  Reserved: ${res}`);
@@ -170,7 +177,7 @@ function displayState(state) {
     displayPlayers(state);
     const bagTotal = totalTokens(state.bag);
     const abil = state.pendingAbility ? ` (pending ability: ${state.pendingAbility})` : '';
-    console.log(`\nTable privileges: ${state.privileges} | Bag: ${bagTotal} tokens`);
+    console.log(`\nTable 📜: ${state.privileges} | Bag: ${bagTotal} tokens`);
     console.log(`Phase: ${state.phase}${abil}`);
     console.log('═'.repeat(70));
 }
@@ -179,6 +186,8 @@ function describeMove(action, state) {
     switch (action.type) {
         case 'END_OPTIONAL_PHASE':
             return 'Skip optional phase';
+        case 'SKIP_TO_MANDATORY':
+            return 'Skip all optional phases';
         case 'TAKE_TOKENS': {
             const tokens = action.indices
                 .map(i => { const cell = state.board[i]; return cell ? abbr(cell) : '?'; })
@@ -186,7 +195,10 @@ function describeMove(action, state) {
             return `Take tokens: cells [${action.indices.join(',')}] → ${tokens}`;
         }
         case 'USE_PRIVILEGE': {
-            return `Use privilege(s): take ${formatPool(action.tokens)}`;
+            const tokens = action.indices
+                .map(i => { const cell = state.board[i]; return cell ? `${abbr(cell)}[${i}]` : '?'; })
+                .join(' ');
+            return `Use privilege(s): take cells [${action.indices.join(',')}] → ${tokens}`;
         }
         case 'REPLENISH_BOARD':
             return 'Replenish board from bag';
@@ -204,17 +216,21 @@ function describeMove(action, state) {
             const card = findCard(state, action.cardId);
             return card ? `Reserve ${describeCard(card)}` : `Reserve card #${action.cardId} from pyramid`;
         }
+        case 'CHOOSE_ROYAL_CARD': {
+            const card = findCard(state, action.cardId);
+            return card ? `Choose royal: ${describeCard(card)}` : `Choose royal card #${action.cardId}`;
+        }
         case 'DISCARD_TOKENS':
             return `Discard: ${formatPool(action.tokens)}`;
-        case 'PLACE_BONUS_CARD': {
-            const bonus = findCard(state, action.bonusCardId);
-            const target = findCard(state, action.targetCardId);
-            const bonusStr = bonus ? describeCard(bonus) : `#${action.bonusCardId}`;
-            const targetStr = target ? describeCard(target) : `#${action.targetCardId}`;
-            return `Place bonus card ${bonusStr} → on top of ${targetStr}`;
+        case 'ASSIGN_WILD_COLOR': {
+            const wild = findCard(state, action.wildCardId);
+            const wildStr = wild ? describeCard(wild) : `#${action.wildCardId}`;
+            return `Assign Wild card ${wildStr} → ${action.color}`;
         }
-        case 'TAKE_TOKEN_FROM_BOARD':
-            return `Take ${abbr(action.color)} token from board (Token ability)`;
+        case 'TAKE_TOKEN_FROM_BOARD': {
+            const cell = state.board[action.index];
+            return `Take ${cell ? abbr(cell) : '?'} token from board [${action.index}] (Token ability)`;
+        }
         case 'TAKE_TOKEN_FROM_OPPONENT':
             return `Take ${abbr(action.color)} token from opponent (Take ability)`;
         default:
@@ -225,8 +241,9 @@ function describeMove(action, state) {
 /**
  * Returns the TAKE_TOKENS moves in display order:
  *   1. All size-3 sets.
- *   2. Size-2 sets that are NOT a subset of any size-3 set.
- *   3. Size-1 sets whose cell has no adjacent non-gold token on the board.
+ *   2. Size-2 sets that are NOT a subset of any size-3 set (always keep 2-pearl).
+ *   3. Size-1 sets whose cell has no adjacent non-gold token on the board,
+ *      but only when larger moves also exist — never hide all token moves.
  */
 function orderedTokenMoves(tokenMoves, board) {
     const size3 = tokenMoves.filter(m => m.type === 'TAKE_TOKENS' && m.indices.length === 3);
@@ -235,6 +252,9 @@ function orderedTokenMoves(tokenMoves, board) {
     const indices3Sets = size3.map(m => m.indices);
     const filtered2 = size2.filter(m => {
         const idxs = m.indices;
+        const isTwoPearls = idxs.every(i => board[i] === 'pearl');
+        if (isTwoPearls)
+            return true;
         return !indices3Sets.some(set => idxs.every(i => set.includes(i)));
     });
     const filtered1 = size1.filter(m => {
@@ -244,9 +264,40 @@ function orderedTokenMoves(tokenMoves, board) {
             return cell !== null && cell !== undefined && cell !== 'gold';
         });
     });
-    return [...size3, ...filtered2, ...filtered1];
+    // Safety: never hide all token moves — if filtering removes everything, show all size-1s.
+    const result1 = (size3.length > 0 || filtered2.length > 0) ? filtered1 : size1;
+    return [...size3, ...filtered2, ...result1];
 }
-// ─── Move prompt ──────────────────────────────────────────────────────────────
+function buildMoveGroups(allMoves, state) {
+    const tokenMoves = allMoves.filter(m => m.type === 'TAKE_TOKENS');
+    const rest = allMoves.filter(m => m.type !== 'TAKE_TOKENS');
+    const phaseCtrl = rest.filter(m => m.type === 'END_OPTIONAL_PHASE' || m.type === 'SKIP_TO_MANDATORY' || m.type === 'REPLENISH_BOARD');
+    const tokens = orderedTokenMoves(tokenMoves, state.board);
+    const privileges = rest.filter(m => m.type === 'USE_PRIVILEGE');
+    const purchases = rest.filter(m => m.type === 'PURCHASE_CARD');
+    const reserves = rest.filter(m => m.type === 'RESERVE_CARD' || m.type === 'RESERVE_CARD_FROM_PYRAMID');
+    const discards = rest.filter(m => m.type === 'DISCARD_TOKENS');
+    const abilities = rest.filter(m => m.type === 'TAKE_TOKEN_FROM_BOARD' ||
+        m.type === 'TAKE_TOKEN_FROM_OPPONENT' ||
+        m.type === 'ASSIGN_WILD_COLOR' ||
+        m.type === 'CHOOSE_ROYAL_CARD');
+    const groups = [];
+    if (phaseCtrl.length)
+        groups.push({ label: 'Phase', moves: phaseCtrl });
+    if (tokens.length)
+        groups.push({ label: 'Take tokens', moves: tokens });
+    if (privileges.length)
+        groups.push({ label: 'Use privilege', moves: privileges });
+    if (purchases.length)
+        groups.push({ label: 'Purchase', moves: purchases });
+    if (reserves.length)
+        groups.push({ label: 'Reserve', moves: reserves });
+    if (discards.length)
+        groups.push({ label: 'Discard', moves: discards });
+    if (abilities.length)
+        groups.push({ label: 'Ability', moves: abilities });
+    return groups;
+}
 async function promptMove(state, ws) {
     if (awaitingInput)
         return;
@@ -257,23 +308,21 @@ async function promptMove(state, ws) {
         awaitingInput = false;
         return;
     }
-    const tokenMoves = allMoves.filter(m => m.type === 'TAKE_TOKENS');
-    const otherMoves = allMoves.filter(m => m.type !== 'TAKE_TOKENS');
-    const moves = [...orderedTokenMoves(tokenMoves, state.board), ...otherMoves];
-    console.log(`\n── YOUR TURN (${state.phase}) ──`);
-    console.log(`Legal moves (${moves.length}):`);
-    for (let i = 0; i < moves.length; i++) {
-        console.log(`  ${String(i + 1).padStart(3)}. ${describeMove(moves[i], state)}`);
+    const groups = buildMoveGroups(allMoves, state);
+    const moves = groups.flatMap(g => g.moves);
+    console.log(`\n── YOUR TURN (${state.phase}) ── ${moves.length} move${moves.length !== 1 ? 's' : ''}`);
+    let counter = 1;
+    for (const group of groups) {
+        console.log(`\n  ─ ${group.label} ─`);
+        for (const move of group.moves) {
+            console.log(`  ${String(counter).padStart(3)}. ${describeMove(move, state)}`);
+            counter++;
+        }
     }
     let chosen = -1;
     while (chosen < 0) {
-        const input = await question('\nMove number (or q to quit): ');
-        if (input.trim().toLowerCase() === 'q') {
-            ws.close();
-            rl.close();
-            process.exit(0);
-        }
-        const n = parseInt(input.trim(), 10);
+        const input = (await question('\nMove number: ')).trim();
+        const n = parseInt(input, 10);
         if (!isNaN(n) && n >= 1 && n <= moves.length) {
             chosen = n - 1;
         }

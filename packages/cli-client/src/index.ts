@@ -1,29 +1,13 @@
 import WebSocket from 'ws';
 import * as readline from 'readline';
 import { legalMoves, adjacentCells } from '@splendor-duel/game-engine';
-import type { GameState, Action, PlayerId, Card } from '@splendor-duel/game-engine';
-
-// ─── Protocol types (mirrored from server/src/protocol.ts) ───────────────────
-
-type ClientMessage =
-  | { type: 'CREATE_SESSION'; playerName: string }
-  | { type: 'JOIN_SESSION'; sessionId: string; playerName: string }
-  | { type: 'DISPATCH_ACTION'; action: Action }
-  | { type: 'PING' };
-
-type ServerMessage =
-  | { type: 'SESSION_CREATED'; sessionId: string; playerId: 0 }
-  | { type: 'SESSION_JOINED'; sessionId: string; playerId: 1; state: GameState }
-  | { type: 'GAME_STARTED'; state: GameState; opponentName: string }
-  | { type: 'STATE_UPDATE'; state: GameState }
-  | { type: 'OPPONENT_DISCONNECTED' }
-  | { type: 'ERROR'; message: string }
-  | { type: 'PONG' };
+import type { Action, PlayerId, Card } from '@splendor-duel/game-engine';
+import type { ClientMessage, ServerMessage, ClientGameState } from '@splendor-duel/protocol';
 
 // ─── Session state ────────────────────────────────────────────────────────────
 
 let myPlayerId: PlayerId | null = null;
-let gameState: GameState | null = null;
+let gameState: ClientGameState | null = null;
 let myName = '';
 let opponentName = '';
 let awaitingInput = false;
@@ -86,7 +70,7 @@ function describeCard(card: Card): string {
   return `#${card.id} ${level} ${colorStr} ⭐${card.points}${crowns}${abil}`;
 }
 
-function findCard(state: GameState, cardId: number): Card | undefined {
+function findCard(state: ClientGameState, cardId: number): Card | undefined {
   const candidates: (Card | null)[] = [
     ...state.pyramid.level1,
     ...state.pyramid.level2,
@@ -109,7 +93,7 @@ function totalTokens(pool: { [key: string]: number | undefined }): number {
 
 // ─── State display ────────────────────────────────────────────────────────────
 
-function displayBoard(board: GameState['board']): void {
+function displayBoard(board: ClientGameState['board']): void {
   console.log('\nBOARD:');
   console.log('      0      1      2      3      4');
   for (let row = 0; row < 5; row++) {
@@ -122,7 +106,7 @@ function displayBoard(board: GameState['board']): void {
   }
 }
 
-function displayPyramid(state: GameState): void {
+function displayPyramid(state: ClientGameState): void {
   console.log('\nPYRAMID:');
   for (const level of [3, 2, 1] as const) {
     const key = `level${level}` as 'level1' | 'level2' | 'level3';
@@ -137,7 +121,7 @@ function displayPyramid(state: GameState): void {
   }
 }
 
-function displayPlayers(state: GameState): void {
+function displayPlayers(state: ClientGameState): void {
   for (const pid of [0, 1] as PlayerId[]) {
     const player = state.players[pid];
     const isMe = pid === myPlayerId;
@@ -166,7 +150,7 @@ function displayPlayers(state: GameState): void {
       const res = player.reservedCards.map(c => `[${describeCard(c)} cost:${formatCost(c.cost)}]`).join(' ');
       console.log(`  Reserved: ${res}`);
     } else if (!isMe) {
-      console.log(`  Reserved: ${player.reservedCards.length} (hidden)`);
+      console.log(`  Reserved: ${player.reservedCardCount} (hidden)`);
     }
 
     if (player.royalCards.length > 0) {
@@ -175,7 +159,7 @@ function displayPlayers(state: GameState): void {
   }
 }
 
-function displayState(state: GameState): void {
+function displayState(state: ClientGameState): void {
   console.log('\n' + '═'.repeat(70));
   displayBoard(state.board);
   displayPyramid(state);
@@ -189,7 +173,7 @@ function displayState(state: GameState): void {
 
 // ─── Move descriptions ────────────────────────────────────────────────────────
 
-function describeMove(action: Action, state: GameState): string {
+function describeMove(action: Action, state: ClientGameState): string {
   switch (action.type) {
     case 'END_OPTIONAL_PHASE':
       return 'Skip optional phase';
@@ -267,7 +251,7 @@ function describeMove(action: Action, state: GameState): string {
  *   3. Size-1 sets whose cell has no adjacent non-gold token on the board,
  *      but only when larger moves also exist — never hide all token moves.
  */
-function orderedTokenMoves(tokenMoves: Action[], board: GameState['board']): Action[] {
+function orderedTokenMoves(tokenMoves: Action[], board: ClientGameState['board']): Action[] {
   const size3 = tokenMoves.filter(m => m.type === 'TAKE_TOKENS' && m.indices.length === 3);
   const size2 = tokenMoves.filter(m => m.type === 'TAKE_TOKENS' && m.indices.length === 2);
   const size1 = tokenMoves.filter(m => m.type === 'TAKE_TOKENS' && m.indices.length === 1);
@@ -299,7 +283,7 @@ function orderedTokenMoves(tokenMoves: Action[], board: GameState['board']): Act
 
 type MoveGroup = { label: string; moves: Action[] };
 
-function buildMoveGroups(allMoves: Action[], state: GameState): MoveGroup[] {
+function buildMoveGroups(allMoves: Action[], state: ClientGameState): MoveGroup[] {
   const tokenMoves = allMoves.filter(m => m.type === 'TAKE_TOKENS');
   const rest = allMoves.filter(m => m.type !== 'TAKE_TOKENS');
 
@@ -327,7 +311,7 @@ function buildMoveGroups(allMoves: Action[], state: GameState): MoveGroup[] {
   return groups;
 }
 
-async function promptMove(state: GameState, ws: WebSocket): Promise<void> {
+async function promptMove(state: ClientGameState, ws: WebSocket): Promise<void> {
   if (awaitingInput) return;
   awaitingInput = true;
 
@@ -368,7 +352,7 @@ async function promptMove(state: GameState, ws: WebSocket): Promise<void> {
 
 // ─── Message handler ──────────────────────────────────────────────────────────
 
-async function onStateUpdate(state: GameState, ws: WebSocket): Promise<void> {
+async function onStateUpdate(state: ClientGameState, ws: WebSocket): Promise<void> {
   displayState(state);
   if (myPlayerId === null) return;
   if (state.phase === 'game_over') {

@@ -28,12 +28,12 @@ export declare function emptyPool(): TokenPool;
 export declare function totalTokens(pool: TokenPool): number;
 /**
  * Returns the total gem bonuses a player has by color.
- * Joker/Bonus cards contribute as their assignedColor.
+ * Wild cards contribute as their assignedColor.
  */
 export declare function playerBonuses(player: PlayerState): Record<GemColor, number>;
 /**
  * Returns the effective gem color of a card for bonus purposes.
- * Joker cards use assignedColor; Points cards have no gem color.
+ * Wild cards use assignedColor; null-color cards have no gem color.
  */
 export declare function effectiveCardColor(card: Card): GemColor | null;
 /**

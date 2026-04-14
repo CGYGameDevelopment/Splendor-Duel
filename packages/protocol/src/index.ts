@@ -1,4 +1,4 @@
-import type { GameState, PlayerState, Action, PlayerId } from '@splendor-duel/game-engine';
+import type { GameState, PlayerState, Action } from '@splendor-duel/game-engine';
 
 // ─── Sanitized state sent over the wire ──────────────────────────────────────
 

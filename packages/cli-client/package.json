@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@splendor-duel/game-engine": "*",
+    "@splendor-duel/protocol": "*",
     "ws": "^8.18.0"
   },
   "devDependencies": {

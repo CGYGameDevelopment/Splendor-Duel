@@ -3,7 +3,7 @@ import cors from 'cors';
 import http from 'http';
 import WebSocket, { WebSocketServer } from 'ws';
 import type { PlayerId } from '@splendor-duel/game-engine';
-import type { ClientMessage } from './protocol';
+import type { ClientMessage } from '@splendor-duel/protocol';
 import {
   createSession,
   joinSession,
