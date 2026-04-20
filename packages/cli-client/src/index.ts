@@ -207,7 +207,7 @@ function describeMove(action: Action, state: ClientGameState): string {
       return `Purchase ${info}${goldStr}`;
     }
 
-    case 'RESERVE_CARD':
+    case 'RESERVE_CARD_FROM_DECK':
       return `Reserve top card from ${action.source}`;
 
     case 'RESERVE_CARD_FROM_PYRAMID': {
@@ -291,7 +291,7 @@ function buildMoveGroups(allMoves: Action[], state: ClientGameState): MoveGroup[
   const tokens     = orderedTokenMoves(tokenMoves, state.board);
   const privileges = rest.filter(m => m.type === 'USE_PRIVILEGE');
   const purchases  = rest.filter(m => m.type === 'PURCHASE_CARD');
-  const reserves   = rest.filter(m => m.type === 'RESERVE_CARD' || m.type === 'RESERVE_CARD_FROM_PYRAMID');
+  const reserves   = rest.filter(m => m.type === 'RESERVE_CARD_FROM_DECK' || m.type === 'RESERVE_CARD_FROM_PYRAMID');
   const discards   = rest.filter(m => m.type === 'DISCARD_TOKENS');
   const abilities  = rest.filter(m =>
     m.type === 'TAKE_TOKEN_FROM_BOARD' ||

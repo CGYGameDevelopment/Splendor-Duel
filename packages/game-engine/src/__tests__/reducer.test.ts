@@ -155,7 +155,7 @@ describe('PURCHASE_CARD', () => {
   });
 });
 
-// ─── RESERVE_CARD ─────────────────────────────────────────────────────────────
+// ─── RESERVE_CARD_FROM_PYRAMID / RESERVE_CARD_FROM_DECK ───────────────────────
 
 describe('RESERVE_CARD_FROM_PYRAMID', () => {
   it('moves card to reserved, takes gold from board, and removes card from pyramid', () => {
@@ -197,7 +197,25 @@ describe('RESERVE_CARD_FROM_PYRAMID', () => {
 // ─── USE_PRIVILEGE ────────────────────────────────────────────────────────────
 
 describe('USE_PRIVILEGE', () => {
-  it('returns the privilege token to the table and takes the board token', () => {
+  it('advances to optional_replenish when player uses their last privilege and bag is non-empty', () => {
+    const board = new Array(25).fill(null);
+    board[5] = 'green';
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state, board, phase: 'optional_privilege', privileges: 2,
+      bag: { ...emptyPool(), black: 3 },
+      players: [makePlayer({ privileges: 1 }), makePlayer()],
+    };
+
+    const next = reducer(s, { type: 'USE_PRIVILEGE', indices: [5] });
+    expect(next.players[0].privileges).toBe(0);
+    expect(next.players[0].tokens.green).toBe(1);
+    expect(next.privileges).toBe(3);
+    expect(next.phase).toBe('optional_replenish');
+    expect(totalPrivileges(next)).toBe(3);
+  });
+
+  it('advances to mandatory when player uses their last privilege and bag is empty', () => {
     const board = new Array(25).fill(null);
     board[5] = 'green';
     const state = createInitialState(false);
@@ -208,9 +226,23 @@ describe('USE_PRIVILEGE', () => {
 
     const next = reducer(s, { type: 'USE_PRIVILEGE', indices: [5] });
     expect(next.players[0].privileges).toBe(0);
+    expect(next.phase).toBe('mandatory');
+  });
+
+  it('stays in optional_privilege when player still has privileges remaining', () => {
+    const board = new Array(25).fill(null);
+    board[5] = 'green';
+    board[6] = 'red';
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state, board, phase: 'optional_privilege', privileges: 1,
+      players: [makePlayer({ privileges: 2 }), makePlayer()],
+    };
+
+    const next = reducer(s, { type: 'USE_PRIVILEGE', indices: [5] });
+    expect(next.players[0].privileges).toBe(1);
     expect(next.players[0].tokens.green).toBe(1);
-    expect(next.privileges).toBe(3);
-    expect(totalPrivileges(next)).toBe(3);
+    expect(next.phase).toBe('optional_privilege');
   });
 });
 
@@ -784,7 +816,7 @@ describe('Conservation Invariants', () => {
     assertConserved(s, reducer(s, { type: 'RESERVE_CARD_FROM_PYRAMID', cardId: 60 }));
   });
 
-  it('RESERVE_CARD from deck conserves tokens and cards', () => {
+  it('RESERVE_CARD_FROM_DECK conserves tokens and cards', () => {
     const deckCard = makeCard({ id: 70 });
     const state = createInitialState(false);
     const board = new Array(25).fill(null);
@@ -794,7 +826,7 @@ describe('Conservation Invariants', () => {
       decks: { ...state.decks, level1: [deckCard, ...state.decks.level1] },
       players: [makePlayer(), makePlayer()],
     };
-    assertConserved(s, reducer(s, { type: 'RESERVE_CARD', source: 'deck_1' }));
+    assertConserved(s, reducer(s, { type: 'RESERVE_CARD_FROM_DECK', source: 'deck_1' }));
   });
 
   it('PURCHASE_CARD conserves tokens and cards', () => {
@@ -1017,9 +1049,9 @@ describe('RESERVE_CARD_FROM_PYRAMID validation', () => {
   });
 });
 
-// ─── RESERVE_CARD from deck ───────────────────────────────────────────────────
+// ─── RESERVE_CARD_FROM_DECK ───────────────────────────────────────────────────
 
-describe('RESERVE_CARD from deck', () => {
+describe('RESERVE_CARD_FROM_DECK', () => {
   it('takes the top deck card into reserve and grants gold', () => {
     const deckCard = makeCard({ id: 70, level: 1 });
     const state = createInitialState(false);
@@ -1031,7 +1063,7 @@ describe('RESERVE_CARD from deck', () => {
       players: [makePlayer(), makePlayer()],
     };
 
-    const next = reducer(s, { type: 'RESERVE_CARD', source: 'deck_1' });
+    const next = reducer(s, { type: 'RESERVE_CARD_FROM_DECK', source: 'deck_1' });
     expect(next.players[0].reservedCards.some(c => c.id === 70)).toBe(true);
     expect(next.players[0].tokens.gold).toBe(1);
     expect(next.board[12]).toBeNull();
@@ -1046,7 +1078,7 @@ describe('RESERVE_CARD from deck', () => {
       ...state, board, phase: 'mandatory',
       players: [makePlayer({ reservedCards: reserved }), makePlayer()],
     };
-    const next = reducer(s, { type: 'RESERVE_CARD', source: 'deck_1' });
+    const next = reducer(s, { type: 'RESERVE_CARD_FROM_DECK', source: 'deck_1' });
     expect(next).toBe(s);
   });
 });

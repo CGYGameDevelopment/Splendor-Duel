@@ -25,9 +25,9 @@ function makePlayer(): PlayerState {
 
 function shuffle<T>(arr: T[]): T[] {
   const array = [...arr];
-  for (let i = array.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [array[i], array[j]] = [array[j], array[i]];
+  for (let index = array.length - 1; index > 0; index--) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [array[index], array[swapIndex]] = [array[swapIndex], array[index]];
   }
   return array;
 }
@@ -65,13 +65,13 @@ export function createInitialState(secondPlayerGetsPrivilege = true): GameState 
   // Flatten tokens into a shuffled bag, then place on spiral
   const tokenList: Array<keyof TokenPool> = [];
   for (const [color, count] of Object.entries(startingTokens) as [keyof TokenPool, number][]) {
-    for (let i = 0; i < count; i++) tokenList.push(color);
+    for (let tokenIndex = 0; tokenIndex < count; tokenIndex++) tokenList.push(color);
   }
   const shuffledTokens = shuffle(tokenList);
 
   const board = new Array(BOARD_SIZE).fill(null);
-  for (let i = 0; i < Math.min(shuffledTokens.length, BOARD_SIZE); i++) {
-    board[SPIRAL_ORDER[i]] = shuffledTokens[i];
+  for (let spiralIndex = 0; spiralIndex < Math.min(shuffledTokens.length, BOARD_SIZE); spiralIndex++) {
+    board[SPIRAL_ORDER[spiralIndex]] = shuffledTokens[spiralIndex];
   }
 
   const bag = emptyPool(); // all tokens start on board

@@ -45,13 +45,13 @@ export function coordToIndex(row: number, col: number): number {
 export function adjacentCells(index: number): number[] {
   const [row, col] = indexToCoord(index);
   const neighbors: number[] = [];
-  for (let dr = -1; dr <= 1; dr++) {
-    for (let dc = -1; dc <= 1; dc++) {
-      if (dr === 0 && dc === 0) continue;
-      const r = row + dr;
-      const c = col + dc;
-      if (r >= 0 && r < BOARD_HEIGHT && c >= 0 && c < BOARD_WIDTH) {
-        neighbors.push(coordToIndex(r, c));
+  for (let deltaRow = -1; deltaRow <= 1; deltaRow++) {
+    for (let deltaCol = -1; deltaCol <= 1; deltaCol++) {
+      if (deltaRow === 0 && deltaCol === 0) continue;
+      const newRow = row + deltaRow;
+      const newCol = col + deltaCol;
+      if (newRow >= 0 && newRow < BOARD_HEIGHT && newCol >= 0 && newCol < BOARD_WIDTH) {
+        neighbors.push(coordToIndex(newRow, newCol));
       }
     }
   }
@@ -70,17 +70,17 @@ export function isValidTokenLine(indices: number[]): boolean {
   const coords = indices.map(indexToCoord);
 
   // Determine direction from first two cells
-  const dr = coords[1][0] - coords[0][0];
-  const dc = coords[1][1] - coords[0][1];
+  const deltaRow = coords[1][0] - coords[0][0];
+  const deltaCol = coords[1][1] - coords[0][1];
 
   // Direction must be unit step (-1, 0, or 1)
-  if (Math.abs(dr) > 1 || Math.abs(dc) > 1) return false;
-  if (dr === 0 && dc === 0) return false;
+  if (Math.abs(deltaRow) > 1 || Math.abs(deltaCol) > 1) return false;
+  if (deltaRow === 0 && deltaCol === 0) return false;
 
   // All subsequent cells must follow the same direction
-  for (let i = 2; i < coords.length; i++) {
-    if (coords[i][0] - coords[i - 1][0] !== dr) return false;
-    if (coords[i][1] - coords[i - 1][1] !== dc) return false;
+  for (let index = 2; index < coords.length; index++) {
+    if (coords[index][0] - coords[index - 1][0] !== deltaRow) return false;
+    if (coords[index][1] - coords[index - 1][1] !== deltaCol) return false;
   }
 
   return true;

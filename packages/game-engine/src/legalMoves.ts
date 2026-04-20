@@ -11,7 +11,7 @@ export function legalMoves(state: GameState): Action[] {
     case 'mandatory':            return mandatoryMoves(state);
     case 'choose_royal':         return chooseRoyalMoves(state);
     case 'resolve_ability':      return resolveAbilityMoves(state);
-    case 'assign_wild':          return placeBonusMoves(state);
+    case 'assign_wild':          return assignWildColorMoves(state);
     case 'discard':              return discardMoves(state);
     default:                     return [];
   }
@@ -29,8 +29,8 @@ function optionalPrivilegeMoves(state: GameState): Action[] {
 
   if (availableIndices.length === 0) return moves;
 
-  for (const idx of availableIndices) {
-    moves.push({ type: 'USE_PRIVILEGE', indices: [idx] });
+  for (const index of availableIndices) {
+    moves.push({ type: 'USE_PRIVILEGE', indices: [index] });
   }
 
   return moves;
@@ -41,7 +41,7 @@ function optionalPrivilegeMoves(state: GameState): Action[] {
 function optionalReplenishMoves(state: GameState): Action[] {
   const moves: Action[] = [{ type: 'END_OPTIONAL_PHASE' }, { type: 'SKIP_TO_MANDATORY' }];
   // Can only replenish if bag is non-empty
-  if (Object.values(state.bag).some(v => v > 0)) {
+  if (Object.values(state.bag).some(count => count > 0)) {
     moves.push({ type: 'REPLENISH_BOARD' });
   }
   return moves;
@@ -56,7 +56,7 @@ function mandatoryMoves(state: GameState): Action[] {
   moves.push(...purchaseMoves(state));
 
   // Special case: if no mandatory moves possible, must replenish first
-  if (moves.length === 0 && Object.values(state.bag).some(v => v > 0)) {
+  if (moves.length === 0 && Object.values(state.bag).some(count => count > 0)) {
     return [{ type: 'REPLENISH_BOARD' }];
   }
 
@@ -100,18 +100,18 @@ function reserveMoves(state: GameState): Action[] {
   if (player.reservedCards.length >= MAX_RESERVED) return [];
 
   const board = state.board;
-  const hasGold = board.some(c => c === 'gold');
+  const hasGold = board.some(token => token === 'gold');
   if (!hasGold) return [];
 
   const moves: Action[] = [];
 
   for (const level of CARD_LEVELS) {
-    const key = `level${level}` as 'level1' | 'level2' | 'level3';
-    for (const card of state.pyramid[key]) {
+    const levelKey = `level${level}` as 'level1' | 'level2' | 'level3';
+    for (const card of state.pyramid[levelKey]) {
       moves.push({ type: 'RESERVE_CARD_FROM_PYRAMID', cardId: card.id });
     }
-    if (state.decks[key].length > 0) {
-      moves.push({ type: 'RESERVE_CARD', source: `deck_${level}` as 'deck_1' | 'deck_2' | 'deck_3' });
+    if (state.decks[levelKey].length > 0) {
+      moves.push({ type: 'RESERVE_CARD_FROM_DECK', source: `deck_${level}` as 'deck_1' | 'deck_2' | 'deck_3' });
     }
   }
 
@@ -134,7 +134,7 @@ function purchaseMoves(state: GameState): Action[] {
     // Wild cards require the player to own at least one Jewel Card with a GemColor
     if (card.color === 'wild') {
       const hasColoredCard = player.purchasedCards.some(
-        c => c.color !== 'wild' && c.color !== null
+        ownedCard => ownedCard.color !== 'wild' && ownedCard.color !== null
       );
       if (!hasColoredCard) continue;
       if (!canAfford(card, player)) continue;
@@ -200,8 +200,8 @@ function chooseRoyalMoves(state: GameState): Action[] {
 // ─── Ability resolution ───────────────────────────────────────────────────────
 
 function resolveAbilityMoves(state: GameState): Action[] {
-  const cp = state.currentPlayer;
-  const player = state.players[cp];
+  const currentPlayerId = state.currentPlayer;
+  const player = state.players[currentPlayerId];
   const card = state.lastPurchasedCard;
   if (!card) return [];
 
@@ -210,15 +210,15 @@ function resolveAbilityMoves(state: GameState): Action[] {
     // and a matching token exists on the board, so the colorless/no-token cases
     // are unreachable here. Enumerate the valid target indices directly.
     const color = card.color as TokenColor;
-    const indices = state.board.reduce<number[]>((acc, c, i) => { if (c === color) acc.push(i); return acc; }, []);
-    return indices.map(index => ({ type: 'TAKE_TOKEN_FROM_BOARD', index }) as Action);
+    const boardIndices = state.board.reduce<number[]>((indices, cell, boardIndex) => { if (cell === color) indices.push(boardIndex); return indices; }, []);
+    return boardIndices.map(index => ({ type: 'TAKE_TOKEN_FROM_BOARD', index }) as Action);
   }
 
   if (state.pendingAbility === 'Take') {
-    const opp = (1 - cp) as 0 | 1;
-    const oppTokens = state.players[opp].tokens;
+    const opponentId = (1 - currentPlayerId) as 0 | 1;
+    const oppTokens = state.players[opponentId].tokens;
     const eligible = (GEM_COLORS as TokenColor[]).concat('pearl').filter(
-      c => oppTokens[c as TokenColor] > 0
+      color => oppTokens[color as TokenColor] > 0
     ) as TokenColor[];
     return eligible.map(color => ({ type: 'TAKE_TOKEN_FROM_OPPONENT', color }));
   }
@@ -228,15 +228,15 @@ function resolveAbilityMoves(state: GameState): Action[] {
 
 // ─── Assign Wild ─────────────────────────────────────────────────────────────
 
-function placeBonusMoves(state: GameState): Action[] {
+function assignWildColorMoves(state: GameState): Action[] {
   const player = state.players[state.currentPlayer];
   const wildCard = state.lastPurchasedCard;
   if (!wildCard) return [];
 
   const availableColors = new Set<GemColor>(
     player.purchasedCards
-      .filter(c => c.id !== wildCard.id && c.color !== 'wild' && c.color !== null)
-      .map(c => c.color as GemColor)
+      .filter(card => card.id !== wildCard.id && card.color !== 'wild' && card.color !== null)
+      .map(card => card.color as GemColor)
   );
 
   return Array.from(availableColors).map(color => ({

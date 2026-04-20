@@ -25,10 +25,10 @@ function replenishBoard(state: GameState): GameState {
   for (const index of SPIRAL_ORDER) {
     if (board[index] !== null) continue; // already occupied
     // Find a color available in bag
-    const available = TOKEN_COLORS.filter(c => bag[c] > 0);
+    const available = TOKEN_COLORS.filter(color => bag[color] > 0);
     if (available.length === 0) break;
-    // Pick randomly (deterministic in tests; real game shuffles)
-    const color = available[Math.floor(Math.random() * available.length)];
+    const pool = available.flatMap(c => Array(bag[c]).fill(c));
+    const color = pool[Math.floor(Math.random() * pool.length)] as TokenColor;
     board[index] = color;
     bag = { ...bag, [color]: bag[color] - 1 };
   }
@@ -44,13 +44,13 @@ function refillPyramidSlot(
   removedCardId: number
 ): GameState {
   const levelKey = `level${level}` as 'level1' | 'level2' | 'level3';
-  const pyramid = { ...state.pyramid, [levelKey]: state.pyramid[levelKey].filter(c => c.id !== removedCardId) };
+  const pyramid = { ...state.pyramid, [levelKey]: state.pyramid[levelKey].filter(card => card.id !== removedCardId) };
   const decks = { ...state.decks };
 
   if (decks[levelKey].length > 0) {
-    const [next, ...rest] = decks[levelKey];
-    pyramid[levelKey] = [...pyramid[levelKey], next];
-    decks[levelKey] = rest;
+    const [drawnCard, ...remainingDeck] = decks[levelKey];
+    pyramid[levelKey] = [...pyramid[levelKey], drawnCard];
+    decks[levelKey] = remainingDeck;
   }
 
   return { ...state, pyramid, decks };
@@ -62,10 +62,10 @@ function findCardInPyramid(
   pyramid: GameState['pyramid'],
   cardId: number
 ): { card: Card; level: 1 | 2 | 3 } | null {
-  for (const lvl of CARD_LEVELS) {
-    const key = `level${lvl}` as 'level1' | 'level2' | 'level3';
-    const found = pyramid[key].find(c => c.id === cardId);
-    if (found) return { card: found, level: lvl };
+  for (const level of CARD_LEVELS) {
+    const levelKey = `level${level}` as 'level1' | 'level2' | 'level3';
+    const found = pyramid[levelKey].find(card => card.id === cardId);
+    if (found) return { card: found, level };
   }
   return null;
 }
@@ -77,7 +77,7 @@ function locateCardForPurchase(
 ): { card: Card; fromReserve: boolean; level?: 1 | 2 | 3 } | null {
   const pyramidResult = findCardInPyramid(pyramid, cardId);
   if (pyramidResult) return { card: pyramidResult.card, fromReserve: false, level: pyramidResult.level };
-  const found = reservedCards.find(c => c.id === cardId);
+  const found = reservedCards.find(card => card.id === cardId);
   if (found) return { card: found, fromReserve: true };
   return null;
 }
@@ -96,9 +96,9 @@ function deductTokenCost(
 
   for (const [colorStr, needed] of Object.entries(cost) as [TokenColor, number][]) {
     const gold = goldUsage[colorStr as GemColor | 'pearl'] ?? 0;
-    const fromWallet = needed - gold;
-    tokens = { ...tokens, [colorStr]: tokens[colorStr] - fromWallet };
-    newBag = { ...newBag, [colorStr]: newBag[colorStr] + fromWallet };
+    const paidWithoutUsingGold = needed - gold;
+    tokens = { ...tokens, [colorStr]: tokens[colorStr] - paidWithoutUsingGold };
+    newBag = { ...newBag, [colorStr]: newBag[colorStr] + paidWithoutUsingGold };
     goldSpent += gold;
   }
   tokens = { ...tokens, gold: tokens.gold - goldSpent };
@@ -114,24 +114,24 @@ function deductTokenCost(
 // Does NOT resolve abilities or check crown milestones — caller is responsible.
 function applyPurchase(
   state: GameState,
-  cp: PlayerId,
+  currentPlayerId: PlayerId,
   purchasedCard: Card,
   fromReserve: boolean,
   level: 1 | 2 | 3 | undefined,
   goldUsage: Partial<Record<GemColor | 'pearl', number>>
 ): GameState {
-  const player = state.players[cp];
+  const player = state.players[currentPlayerId];
   const cost = netCost(purchasedCard, player);
   const { playerTokens, bag } = deductTokenCost(player.tokens, state.bag, cost, goldUsage);
 
   const purchasedCards = [...player.purchasedCards, purchasedCard];
   const reservedCards = fromReserve
-    ? player.reservedCards.filter(c => c.id !== purchasedCard.id)
+    ? player.reservedCards.filter(card => card.id !== purchasedCard.id)
     : player.reservedCards;
   const crowns = player.crowns + purchasedCard.crowns;
   const prestige = player.prestige + purchasedCard.points;
 
-  let newState = updatePlayer(state, cp, { tokens: playerTokens, purchasedCards, reservedCards, crowns, prestige });
+  let newState = updatePlayer(state, currentPlayerId, { tokens: playerTokens, purchasedCards, reservedCards, crowns, prestige });
   newState = { ...newState, bag, lastPurchasedCard: purchasedCard };
 
   if (!fromReserve && level) {
@@ -169,8 +169,8 @@ function postPurchaseTransition(state: GameState, milestoneCrossed: boolean): Ga
 
 // Phase 4.3 — repeat or switch player.
 function advanceTurn(state: GameState): GameState {
-  const cp = state.currentPlayer;
-  const nextPlayerId = state.repeatTurn ? cp : (1 - cp) as PlayerId;
+  const currentPlayerId = state.currentPlayer;
+  const nextPlayerId = state.repeatTurn ? currentPlayerId : (1 - currentPlayerId) as PlayerId;
   const nextPlayer = state.players[nextPlayerId];
   const bagEmpty = totalTokens(state.bag) === 0;
   const phase = nextPlayer.privileges > 0
@@ -185,8 +185,8 @@ function advanceTurn(state: GameState): GameState {
 
 // Phase 4 (full) — steps 4.1 → 4.2 → 4.3.
 function endOfTurnSequence(state: GameState): GameState {
-  const cp = state.currentPlayer;
-  const player = state.players[cp];
+  const currentPlayerId = state.currentPlayer;
+  const player = state.players[currentPlayerId];
 
   // 4.1 Victory Check
   const victoryCondition = checkVictory(player);
@@ -194,7 +194,7 @@ function endOfTurnSequence(state: GameState): GameState {
     return {
       ...state,
       phase: 'game_over',
-      winner: cp,
+      winner: currentPlayerId,
       winCondition: victoryCondition,
     };
   }
@@ -244,9 +244,9 @@ function resolveAbility(state: GameState, card: Card): GameState {
     }
 
     case 'Take': {
-      const opp = (1 - state.currentPlayer) as PlayerId;
-      const oppTokens = state.players[opp].tokens;
-      const hasEligible = GEM_COLORS.some(c => oppTokens[c] > 0) || oppTokens.pearl > 0;
+      const opponentId = (1 - state.currentPlayer) as PlayerId;
+      const opponentTokens = state.players[opponentId].tokens;
+      const hasEligible = GEM_COLORS.some(color => opponentTokens[color] > 0) || opponentTokens.pearl > 0;
       if (!hasEligible) return { ...state, pendingAbility: null };
       return { ...state, phase: 'resolve_ability', pendingAbility: 'Take', lastPurchasedCard: card };
     }
@@ -256,7 +256,7 @@ function resolveAbility(state: GameState, card: Card): GameState {
       // Player must own at least one Jewel Card with a GemColor to assign this wild
       const player = state.players[state.currentPlayer];
       const hasColoredCard = player.purchasedCards.some(
-        c => c.id !== card.id && c.color !== 'wild' && c.color !== null
+        ownedCard => ownedCard.id !== card.id && ownedCard.color !== 'wild' && ownedCard.color !== null
       );
       if (!hasColoredCard) {
         return { ...state, pendingAbility: null };
@@ -272,8 +272,8 @@ function resolveAbility(state: GameState, card: Card): GameState {
 // ─── Main reducer ─────────────────────────────────────────────────────────────
 
 export function reducer(state: GameState, action: Action): GameState {
-  const cp = state.currentPlayer;
-  const player = state.players[cp];
+  const currentPlayerId = state.currentPlayer;
+  const player = state.players[currentPlayerId];
 
   switch (action.type) {
 
@@ -308,24 +308,20 @@ export function reducer(state: GameState, action: Action): GameState {
       let playerTokens = { ...player.tokens };
       const tablePrivileges = state.privileges + privilegesUsed;
 
-      for (const idx of indices) {
-        const cell = board[idx];
+      for (const index of indices) {
+        const cell = board[index];
         if (!cell || cell === 'gold') return state; // cell must have a non-gold token
-        board[idx] = null;
+        board[index] = null;
         playerTokens = { ...playerTokens, [cell]: playerTokens[cell] + 1 };
       }
 
       const newPrivileges = player.privileges - privilegesUsed;
-      let newState = updatePlayer(state, cp, { tokens: playerTokens, privileges: newPrivileges });
+      let newState = updatePlayer(state, currentPlayerId, { tokens: playerTokens, privileges: newPrivileges });
       newState = { ...newState, board, privileges: tablePrivileges };
 
-      // Stay in optional_privilege phase so the player can use additional privileges one at a time.
-      // The rulebook says "Return 1 or more Privilege Scrolls" as a single decision, which could
-      // imply the player must commit all scrolls upfront. However, allowing sequential single-scroll
-      // actions is intentional here: legalMoves already generates all multi-index combinations for
-      // AI/automated clients that want to commit atomically, and the small information advantage this
-      // gives a human player is acceptable for this implementation.
-      return newState;
+      if (newPrivileges > 0) return newState; // player may use another privilege
+      const bagEmpty = totalTokens(newState.bag) === 0;
+      return { ...newState, phase: bagEmpty ? 'mandatory' : 'optional_replenish' };
     }
 
     // ── Optional: Replenish Board ─────────────────────────────────────────────
@@ -334,8 +330,8 @@ export function reducer(state: GameState, action: Action): GameState {
       if (totalTokens(state.bag) === 0) return state;
       let newState = replenishBoard(state);
       // Opponent gets 1 privilege as penalty
-      const opp = (1 - cp) as PlayerId;
-      const { privileges, players } = grantPrivileges(newState, opp, 1);
+      const opponentId = (1 - currentPlayerId) as PlayerId;
+      const { privileges, players } = grantPrivileges(newState, opponentId, 1);
       newState = { ...newState, privileges, players, phase: 'mandatory' };
       return newState;
     }
@@ -350,23 +346,23 @@ export function reducer(state: GameState, action: Action): GameState {
       let playerTokens = { ...player.tokens };
       const taken: TokenColor[] = [];
 
-      for (const idx of indices) {
-        const color = board[idx];
+      for (const index of indices) {
+        const color = board[index];
         if (!color || color === 'gold') return state;
-        board[idx] = null;
+        board[index] = null;
         playerTokens = { ...playerTokens, [color]: playerTokens[color] + 1 };
         taken.push(color);
       }
 
       // Penalty: PENALTY_SAME_COLOR_COUNT same color or PENALTY_PEARL_COUNT pearls → opponent gets 1 privilege
-      const allSame = taken.length === PENALTY_SAME_COLOR_COUNT && taken.every(c => c === taken[0]);
-      const twoPearls = taken.filter(c => c === 'pearl').length >= PENALTY_PEARL_COUNT;
-      let newState = updatePlayer(state, cp, { tokens: playerTokens });
+      const allSame = taken.length === PENALTY_SAME_COLOR_COUNT && taken.every(color => color === taken[0]);
+      const twoPearls = taken.filter(color => color === 'pearl').length >= PENALTY_PEARL_COUNT;
+      let newState = updatePlayer(state, currentPlayerId, { tokens: playerTokens });
       newState = { ...newState, board };
 
       if (allSame || twoPearls) {
-        const opp = (1 - cp) as PlayerId;
-        const { privileges, players } = grantPrivileges(newState, opp, 1);
+        const opponentId = (1 - currentPlayerId) as PlayerId;
+        const { privileges, players } = grantPrivileges(newState, opponentId, 1);
         newState = { ...newState, privileges, players };
       }
 
@@ -379,46 +375,46 @@ export function reducer(state: GameState, action: Action): GameState {
       if (player.reservedCards.length >= MAX_RESERVED) return state;
 
       const board = [...state.board];
-      const goldIdx = board.findIndex(c => c === 'gold');
-      if (goldIdx === -1) return state;
+      const goldTokenIndex = board.findIndex(token => token === 'gold');
+      if (goldTokenIndex === -1) return state;
 
       // Find card in pyramid
       const pyramidResult = findCardInPyramid(state.pyramid, action.cardId);
       if (!pyramidResult) return state;
       const { card, level } = pyramidResult;
 
-      board[goldIdx] = null;
+      board[goldTokenIndex] = null;
       const playerTokens = { ...player.tokens, gold: player.tokens.gold + 1 };
       const reservedCards = [...player.reservedCards, card];
 
-      let newState = updatePlayer(state, cp, { tokens: playerTokens, reservedCards });
+      let newState = updatePlayer(state, currentPlayerId, { tokens: playerTokens, reservedCards });
       newState = { ...newState, board };
       newState = refillPyramidSlot(newState, level, card.id);
       return endOfTurnSequence(newState);
     }
 
     // ── Mandatory: Reserve Card (from deck top) ───────────────────────────────
-    case 'RESERVE_CARD': {
+    case 'RESERVE_CARD_FROM_DECK': {
       if (state.phase !== 'mandatory') return state;
       if (player.reservedCards.length >= MAX_RESERVED) return state;
 
       const board = [...state.board];
-      const goldIdx = board.findIndex(c => c === 'gold');
-      if (goldIdx === -1) return state;
+      const goldTokenIndex = board.findIndex(token => token === 'gold');
+      if (goldTokenIndex === -1) return state;
 
       const sourceToLevel: Record<'deck_1' | 'deck_2' | 'deck_3', 1 | 2 | 3> = { deck_1: 1, deck_2: 2, deck_3: 3 };
       const level = sourceToLevel[action.source];
-      const key = `level${level}` as 'level1' | 'level2' | 'level3';
+      const levelKey = `level${level}` as 'level1' | 'level2' | 'level3';
 
-      if (state.decks[key].length === 0) return state;
-      const [card, ...rest] = state.decks[key];
+      if (state.decks[levelKey].length === 0) return state;
+      const [card, ...remainingDeck] = state.decks[levelKey];
 
-      board[goldIdx] = null;
+      board[goldTokenIndex] = null;
       const playerTokens = { ...player.tokens, gold: player.tokens.gold + 1 };
       const reservedCards = [...player.reservedCards, card];
 
-      let newState = updatePlayer(state, cp, { tokens: playerTokens, reservedCards });
-      newState = { ...newState, board, decks: { ...state.decks, [key]: rest } };
+      let newState = updatePlayer(state, currentPlayerId, { tokens: playerTokens, reservedCards });
+      newState = { ...newState, board, decks: { ...state.decks, [levelKey]: remainingDeck } };
       return endOfTurnSequence(newState);
     }
 
@@ -436,9 +432,9 @@ export function reducer(state: GameState, action: Action): GameState {
       const purchasedCard = { ...card };
 
       const prevCrowns = player.crowns;
-      let newState = applyPurchase(state, cp, purchasedCard, fromReserve, level, goldUsage);
+      let newState = applyPurchase(state, currentPlayerId, purchasedCard, fromReserve, level, goldUsage);
 
-      const milestoneCrossed = CROWN_MILESTONES.some(m => prevCrowns < m && newState.players[cp].crowns >= m)
+      const milestoneCrossed = CROWN_MILESTONES.some(milestone => prevCrowns < milestone && newState.players[currentPlayerId].crowns >= milestone)
         && newState.royalDeck.length > 0;
 
       newState = resolveAbility(newState, purchasedCard);
@@ -448,12 +444,12 @@ export function reducer(state: GameState, action: Action): GameState {
     // ── Choose Royal Card (crown milestone) ──────────────────────────────────
     case 'CHOOSE_ROYAL_CARD': {
       if (state.phase !== 'choose_royal') return state;
-      const royalCard = state.royalDeck.find(c => c.id === action.cardId);
+      const royalCard = state.royalDeck.find(card => card.id === action.cardId);
       if (!royalCard) return state;
 
-      const royalDeck = state.royalDeck.filter(c => c.id !== action.cardId);
+      const royalDeck = state.royalDeck.filter(card => card.id !== action.cardId);
 
-      let newState = updatePlayer(state, cp, {
+      let newState = updatePlayer(state, currentPlayerId, {
         royalCards: [...player.royalCards, royalCard],
         prestige: player.prestige + royalCard.points,
       });
@@ -467,19 +463,19 @@ export function reducer(state: GameState, action: Action): GameState {
     case 'ASSIGN_WILD_COLOR': {
       if (state.phase !== 'assign_wild') return state;
       const { wildCardId, color } = action;
-      const wildCard = player.purchasedCards.find(c => c.id === wildCardId);
+      const wildCard = player.purchasedCards.find(card => card.id === wildCardId);
       if (!wildCard || wildCard.color !== 'wild') return state;
 
       // Validate: player owns at least one Jewel Card with this color
       const hasColor = player.purchasedCards.some(
-        c => c.id !== wildCardId && c.color !== 'wild' && c.color !== null && c.color === color
+        card => card.id !== wildCardId && card.color !== 'wild' && card.color !== null && card.color === color
       );
       if (!hasColor) return state;
 
-      const updatedCards = player.purchasedCards.map(c =>
-        c.id === wildCardId ? { ...c, assignedColor: color } : c
+      const updatedCards = player.purchasedCards.map(card =>
+        card.id === wildCardId ? { ...card, assignedColor: color } : card
       );
-      let newState = updatePlayer(state, cp, { purchasedCards: updatedCards });
+      let newState = updatePlayer(state, currentPlayerId, { purchasedCards: updatedCards });
 
       // If Wild/Turn, grant an extra turn
       if (state.pendingAbility === 'Wild/Turn') {
@@ -505,7 +501,7 @@ export function reducer(state: GameState, action: Action): GameState {
 
       board[index] = null;
       const playerTokens = { ...player.tokens, [color]: player.tokens[color] + 1 };
-      let newState = updatePlayer(state, cp, { tokens: playerTokens });
+      let newState = updatePlayer(state, currentPlayerId, { tokens: playerTokens });
       newState = { ...newState, board, pendingAbility: null, lastPurchasedCard: null };
       if (newState.pendingCrownCheck) return { ...newState, phase: 'choose_royal', pendingCrownCheck: false };
       return endOfTurnSequence(newState);
@@ -517,15 +513,15 @@ export function reducer(state: GameState, action: Action): GameState {
       const { color } = action;
       if (color === 'gold') return state;
 
-      const opp = (1 - cp) as PlayerId;
-      const oppTokens = state.players[opp].tokens;
-      if (oppTokens[color] === 0) return state;
+      const opponentId = (1 - currentPlayerId) as PlayerId;
+      const opponentTokens = state.players[opponentId].tokens;
+      if (opponentTokens[color] === 0) return state;
 
-      let newState = updatePlayer(state, opp, {
-        tokens: { ...oppTokens, [color]: oppTokens[color] - 1 },
+      let newState = updatePlayer(state, opponentId, {
+        tokens: { ...opponentTokens, [color]: opponentTokens[color] - 1 },
       });
-      const newPlayerTokens = { ...newState.players[cp].tokens, [color]: newState.players[cp].tokens[color] + 1 };
-      newState = updatePlayer(newState, cp, { tokens: newPlayerTokens });
+      const newPlayerTokens = { ...newState.players[currentPlayerId].tokens, [color]: newState.players[currentPlayerId].tokens[color] + 1 };
+      newState = updatePlayer(newState, currentPlayerId, { tokens: newPlayerTokens });
       newState = { ...newState, pendingAbility: null, lastPurchasedCard: null };
       if (newState.pendingCrownCheck) return { ...newState, phase: 'choose_royal', pendingCrownCheck: false };
       return endOfTurnSequence(newState);
@@ -551,7 +547,7 @@ export function reducer(state: GameState, action: Action): GameState {
       playerTokens = { ...playerTokens, [color]: playerTokens[color] - 1 };
       bag = { ...bag, [color]: bag[color] + 1 };
 
-      let newState = updatePlayer(state, cp, { tokens: playerTokens });
+      let newState = updatePlayer(state, currentPlayerId, { tokens: playerTokens });
       newState = { ...newState, bag };
 
       if (totalTokens(playerTokens) > MAX_TOKENS) return { ...newState, phase: 'discard' };

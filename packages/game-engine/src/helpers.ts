@@ -42,7 +42,7 @@ export function emptyPool(): TokenPool {
 }
 
 export function totalTokens(pool: TokenPool): number {
-  return TOKEN_COLORS.reduce((sum, c) => sum + pool[c], 0);
+  return TOKEN_COLORS.reduce((total, color) => total + pool[color], 0);
 }
 
 // ─── Bonus helpers ────────────────────────────────────────────────────────────
@@ -86,8 +86,8 @@ export function netCost(card: Card, player: PlayerState): Partial<Record<TokenCo
 
   for (const [colorStr, amount] of Object.entries(card.cost) as [TokenColor, number][]) {
     const bonus = GEM_COLORS.includes(colorStr as GemColor) ? (bonuses[colorStr as GemColor] ?? 0) : 0;
-    const net = Math.max(0, amount - bonus);
-    if (net > 0) result[colorStr] = net;
+    const netAmount = Math.max(0, amount - bonus);
+    if (netAmount > 0) result[colorStr] = netAmount;
   }
 
   return result;
@@ -174,16 +174,16 @@ export function grantPrivileges(
     { ...state.players[1] },
   ];
 
-  for (let i = 0; i < amount; i++) {
+  for (let grantIndex = 0; grantIndex < amount; grantIndex++) {
     if (players[to].privileges >= MAX_PRIVILEGES) break; // already maxed
 
     if (tablePrivileges > 0) {
       tablePrivileges--;
       players[to] = { ...players[to], privileges: players[to].privileges + 1 };
     } else {
-      const opp = (1 - to) as PlayerId;
-      if (players[opp].privileges > 0) {
-        players[opp] = { ...players[opp], privileges: players[opp].privileges - 1 };
+      const opponentId = (1 - to) as PlayerId;
+      if (players[opponentId].privileges > 0) {
+        players[opponentId] = { ...players[opponentId], privileges: players[opponentId].privileges - 1 };
         players[to] = { ...players[to], privileges: players[to].privileges + 1 };
       }
       // If neither table nor opponent has privileges, nothing happens

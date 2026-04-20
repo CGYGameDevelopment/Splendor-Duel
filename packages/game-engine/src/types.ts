@@ -106,7 +106,7 @@ export type Action =
   | { type: 'REPLENISH_BOARD' }
   | { type: 'TAKE_TOKENS'; indices: number[] }                // board cell indices (1–3, must be adjacent line)
   | { type: 'RESERVE_CARD_FROM_PYRAMID'; cardId: number }
-  | { type: 'RESERVE_CARD'; source: 'deck_1' | 'deck_2' | 'deck_3' }
+  | { type: 'RESERVE_CARD_FROM_DECK'; source: 'deck_1' | 'deck_2' | 'deck_3' }
   | { type: 'PURCHASE_CARD'; cardId: number; goldUsage: Partial<Record<GemColor | 'pearl', number>> }
   | { type: 'CHOOSE_ROYAL_CARD'; cardId: number }             // choose a royal card after crown milestone
   | { type: 'TAKE_TOKEN_FROM_BOARD'; index: number }          // Token ability resolution
