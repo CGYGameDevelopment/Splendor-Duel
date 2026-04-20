@@ -2,7 +2,7 @@
 ActorCriticNet: shared-trunk policy + value network for Splendor Duel.
 
 Input:  state tensor (858,)
-Output: (logits (3677,), value scalar)
+Output: (logits (3981,), value scalar)
 
 The policy head outputs raw logits. The caller is responsible for applying
 the legal mask (set illegal logits to -inf) before computing the softmax.
@@ -37,7 +37,7 @@ class ActorCriticNet(nn.Module):
         Args:
             obs: float tensor of shape (..., 858)
         Returns:
-            logits: shape (..., 3677)  — raw, unmasked
+            logits: shape (..., 3980)  — raw, unmasked
             value:  shape (..., 1)
         """
         h = self.trunk(obs)
@@ -53,7 +53,7 @@ class ActorCriticNet(nn.Module):
 
         Args:
             obs:        shape (..., 858)
-            legal_mask: bool tensor of shape (..., 3677); True = legal
+            legal_mask: bool tensor of shape (..., 3980); True = legal
         """
         logits, _ = self.forward(obs)
         logits = logits.masked_fill(~legal_mask, float("-inf"))

@@ -64,6 +64,11 @@ function mandatoryMoves(state: GameState): Action[] {
     return [{ type: 'REPLENISH_BOARD' }];
   }
 
+  // Last resort: truly no moves — player passes mandatory step (turn ends, discard if needed)
+  if (moves.length === 0) {
+    return [{ type: 'PASS_MANDATORY' }];
+  }
+
   return moves;
 }
 

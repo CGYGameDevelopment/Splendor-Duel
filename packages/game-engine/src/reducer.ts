@@ -533,6 +533,12 @@ export function reducer(state: GameState, action: Action): GameState {
       return endOfTurnSequence(newState);
     }
 
+    // ── Pass mandatory (deadlock — no legal moves exist) ─────────────────────
+    case 'PASS_MANDATORY': {
+      if (state.phase !== 'mandatory') return state;
+      return endOfTurnSequence(state);
+    }
+
     // ── Discard tokens ────────────────────────────────────────────────────────
     case 'DISCARD_TOKENS': {
       if (state.phase !== 'discard') return state;

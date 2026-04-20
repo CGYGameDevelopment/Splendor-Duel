@@ -29,7 +29,7 @@ class Transition:
     value: float
     reward: float
     done: bool
-    legal_mask: np.ndarray    # (3677,)
+    legal_mask: np.ndarray    # (3981,)
     player_id: int            # 0 or 1 — index of the player who acted
 
 
@@ -96,7 +96,7 @@ def collect_episodes(
                     obs=obs_t.squeeze(0).cpu().numpy(),
                     action=action_int,
                     log_prob=float(log_prob.item()),
-                    value=float(value_t.squeeze().item()),
+                    value=value_t.item(),
                     reward=float(reward),
                     done=done,
                     legal_mask=mask_np,  # mask for the state where the action was taken

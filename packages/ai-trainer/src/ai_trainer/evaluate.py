@@ -9,30 +9,33 @@ import torch
 
 from .env import SplendorDuelEnv
 from .model import ActorCriticNet
-from .random_agent import RandomAgent
+from .random_agent import GreedyPurchaseAgent
 
 MAX_EVAL_STEPS = 2_000
 
 
 @torch.no_grad()
-def win_rate_vs_random(
+def win_rate_vs_greedy(
     model: ActorCriticNet,
     env: SplendorDuelEnv,
     n_games: int = 100,
     device: torch.device | None = None,
 ) -> float:
     """
-    Play n_games against a random agent and return the model's win rate.
+    Play n_games against a greedy-purchase agent and return the model's win rate.
 
-    To eliminate first-player bias the model alternates sides: it plays as
-    player 0 for the first half of the games and player 1 for the second half.
+    The opponent always buys the highest-level pyramid card it can afford;
+    otherwise it picks a random legal action.
+
+    To eliminate first-player bias the model alternates sides each game.
     MAX_EVAL_STEPS caps each game to guard against infinite loops.
     """
+    assert n_games > 0, "n_games must be positive"
     if device is None:
         device = next(model.parameters()).device
 
     model.eval()
-    random_agent = RandomAgent()
+    opponent = GreedyPurchaseAgent()
     wins = 0
 
     for game_idx in range(n_games):
@@ -53,7 +56,7 @@ def win_rate_vs_random(
                 dist = model.masked_policy(obs_t, mask_t)
                 action = int(dist.sample().item())
             else:
-                action = random_agent.act(legal_mask)
+                action = opponent.act(info["legal_moves"], legal_mask, state)
 
             obs_np, _, done, _, info = env.step(action)
             step += 1
@@ -78,6 +81,7 @@ def win_rate_vs_model(
     Sides alternate each game to eliminate first-player bias.
     MAX_EVAL_STEPS caps each game to guard against infinite loops.
     """
+    assert n_games > 0, "n_games must be positive"
     if device is None:
         device = next(model_a.parameters()).device
 

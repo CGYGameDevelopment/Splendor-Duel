@@ -68,8 +68,9 @@ async def _take_turn(
     # Run the blocking HTTP call in a thread executor so the asyncio event loop
     # is not blocked while waiting for the game-sim response.
     loop = asyncio.get_running_loop()
-    legal_moves = await loop.run_in_executor(
-        None, lambda: _legal_moves_from_state(sim_url, state)
+    legal_moves = await asyncio.wait_for(
+        loop.run_in_executor(None, lambda: _legal_moves_from_state(sim_url, state)),
+        timeout=30.0,
     )
     if not legal_moves:
         return

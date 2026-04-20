@@ -30,9 +30,12 @@ from .env import SplendorDuelEnv
 from .model import ActorCriticNet
 from .ppo import PPOConfig, update
 from .self_play import collect_episodes
-from .evaluate import win_rate_vs_random, win_rate_vs_model
+from .evaluate import win_rate_vs_greedy, win_rate_vs_model
 
 app = typer.Typer(add_completion=False)
+
+
+CHECKPOINT_VERSION = 1
 
 
 def _save_checkpoint(
@@ -43,6 +46,7 @@ def _save_checkpoint(
     win_rate: float | None = None,
 ) -> None:
     payload: dict = {
+        "version": CHECKPOINT_VERSION,
         "iteration": iteration,
         "model_state": model.state_dict(),
         "optimizer_state": optimizer.state_dict(),
@@ -86,8 +90,17 @@ def main(
             typer.echo(f"ERROR: checkpoint not found: {resume}", err=True)
             raise typer.Exit(code=1)
         ckpt = torch.load(resume, map_location=device, weights_only=True)
-        model.load_state_dict(ckpt["model_state"])
-        optimizer.load_state_dict(ckpt["optimizer_state"])
+        ckpt_version = ckpt.get("version", 0)
+        if ckpt_version != CHECKPOINT_VERSION:
+            typer.echo(
+                f"WARNING: checkpoint version mismatch (file={ckpt_version}, "
+                f"expected={CHECKPOINT_VERSION}). Weights loaded but optimizer state skipped.",
+                err=True,
+            )
+            model.load_state_dict(ckpt["model_state"])
+        else:
+            model.load_state_dict(ckpt["model_state"])
+            optimizer.load_state_dict(ckpt["optimizer_state"])
         start_iteration = ckpt["iteration"] + 1
         typer.echo(f"Resumed from {resume} (iteration {ckpt['iteration']})")
 
@@ -112,73 +125,87 @@ def main(
     log_path = checkpoint_dir / "training_log.csv"
     log_existed = log_path.exists()
 
-    with open(log_path, "a", newline="") as log_file:
-        writer = csv.writer(log_file)
-        if not log_existed:
-            writer.writerow(["iteration", "transitions", "policy_loss", "value_loss", "entropy", "win_rate"])
+    try:
+        with open(log_path, "a", newline="") as log_file:
+            writer = csv.writer(log_file)
+            if not log_existed:
+                writer.writerow(["iteration", "transitions", "policy_loss", "value_loss", "entropy", "win_rate"])
 
-        for iteration in range(start_iteration, start_iteration + iterations):
-            try:
-                episodes = collect_episodes(model, env, episodes_per_iter, device=device)
-            except requests.RequestException as exc:
-                typer.echo(
-                    f"\nERROR: game-sim server became unreachable at iteration {iteration}: {exc}\n"
-                    "Save the latest checkpoint and restart the server, then resume with --resume.",
-                    err=True,
-                )
-                _save_checkpoint(checkpoint_dir / "latest.pt", iteration - 1, model, optimizer)
-                raise typer.Exit(code=1)
-
-            losses = update(model, optimizer, episodes, config=config, device=device)
-
-            n_transitions = sum(len(ep) for ep in episodes)
-            typer.echo(
-                f"[{iteration:4d}] "
-                f"transitions={n_transitions:5d}  "
-                f"policy_loss={losses['policy_loss']:.4f}  "
-                f"value_loss={losses['value_loss']:.4f}  "
-                f"entropy={losses['entropy']:.4f}"
-            )
-
-            win_rate: float | None = None
-
-            if iteration % eval_every == 0:
+            for iteration in range(start_iteration, start_iteration + iterations):
                 try:
-                    win_rate = win_rate_vs_random(model, env, n_games=100, device=device)
-                    typer.echo(f"  >> Win rate vs random: {win_rate:.1%}")
-
-                    if prev_model is not None:
-                        wr_vs_prev = win_rate_vs_model(model, prev_model, env, n_games=50, device=device)
-                        typer.echo(f"  >> Win rate vs prev checkpoint: {wr_vs_prev:.1%}")
+                    episodes = collect_episodes(model, env, episodes_per_iter, device=device)
                 except requests.RequestException as exc:
-                    typer.echo(f"  >> Evaluation skipped (server error): {exc}", err=True)
+                    typer.echo(
+                        f"\nERROR: game-sim server became unreachable at iteration {iteration}: {exc}\n"
+                        "Save the latest checkpoint and restart the server, then resume with --resume.",
+                        err=True,
+                    )
+                    _save_checkpoint(checkpoint_dir / "latest.pt", iteration - 1, model, optimizer)
+                    raise typer.Exit(code=1)
 
-                ckpt_path = checkpoint_dir / f"model_iter{iteration:04d}_wr{win_rate:.2f}.pt"
-                _save_checkpoint(ckpt_path, iteration, model, optimizer, win_rate)
-                typer.echo(f"  >> Checkpoint saved: {ckpt_path}")
+                losses = update(model, optimizer, episodes, config=config, device=device)
 
-                if win_rate is not None and win_rate > best_win_rate:
-                    best_win_rate = win_rate
-                    _save_checkpoint(checkpoint_dir / "best.pt", iteration, model, optimizer, win_rate)
-                    typer.echo(f"  >> New best model (win rate: {win_rate:.1%})")
+                n_transitions = sum(len(ep) for ep in episodes)
+                n_episodes = len(episodes)
+                p0_wins = sum(
+                    1 for ep in episodes
+                    if ep.transitions and (
+                        (ep.transitions[-1].reward > 0 and ep.transitions[-1].player_id == 0)
+                        or (ep.transitions[-1].reward < 0 and ep.transitions[-1].player_id == 1)
+                    )
+                )
+                avg_moves = n_transitions / n_episodes if n_episodes else 0
+                typer.echo(
+                    f"[{iteration:4d}] "
+                    f"transitions={n_transitions:5d}  "
+                    f"won={p0_wins}/{n_episodes}  "
+                    f"moves={avg_moves:.0f}  "
+                    f"policy_loss={losses['policy_loss']:.4f}  "
+                    f"value_loss={losses['value_loss']:.4f}  "
+                    f"entropy={losses['entropy']:.4f}"
+                )
 
-                # Snapshot current model for next checkpoint comparison
-                prev_model = ActorCriticNet().to(device)
-                prev_model.load_state_dict(copy.deepcopy(model.state_dict()))
-                prev_model.eval()
+                win_rate: float | None = None
 
-            elif iteration % checkpoint_every == 0:
-                _save_checkpoint(checkpoint_dir / "latest.pt", iteration, model, optimizer)
+                if iteration % eval_every == 0:
+                    try:
+                        win_rate = win_rate_vs_greedy(model, env, n_games=100, device=device)
+                        typer.echo(f"  >> Win rate vs greedy: {win_rate:.1%}")
 
-            writer.writerow([
-                iteration,
-                n_transitions,
-                f"{losses['policy_loss']:.6f}",
-                f"{losses['value_loss']:.6f}",
-                f"{losses['entropy']:.6f}",
-                f"{win_rate:.4f}" if win_rate is not None else "",
-            ])
-            log_file.flush()
+                        if prev_model is not None:
+                            wr_vs_prev = win_rate_vs_model(model, prev_model, env, n_games=50, device=device)
+                            typer.echo(f"  >> Win rate vs prev checkpoint: {wr_vs_prev:.1%}")
+                    except requests.RequestException as exc:
+                        typer.echo(f"  >> Evaluation skipped (server error): {exc}", err=True)
 
-    env.close()
+                    wr_str = f"{win_rate:.2f}" if win_rate is not None else "na"
+                    ckpt_path = checkpoint_dir / f"model_iter{iteration:04d}_wr{wr_str}.pt"
+                    _save_checkpoint(ckpt_path, iteration, model, optimizer, win_rate)
+                    typer.echo(f"  >> Checkpoint saved: {ckpt_path}")
+
+                    if win_rate is not None and win_rate > best_win_rate:
+                        best_win_rate = win_rate
+                        _save_checkpoint(checkpoint_dir / "best.pt", iteration, model, optimizer, win_rate)
+                        typer.echo(f"  >> New best model (win rate: {win_rate:.1%})")
+
+                    # Snapshot current model for next checkpoint comparison
+                    prev_model = ActorCriticNet().to(device)
+                    prev_model.load_state_dict(copy.deepcopy(model.state_dict()))
+                    prev_model.eval()
+
+                elif iteration % checkpoint_every == 0:
+                    _save_checkpoint(checkpoint_dir / "latest.pt", iteration, model, optimizer)
+
+                writer.writerow([
+                    iteration,
+                    n_transitions,
+                    f"{losses['policy_loss']:.6f}",
+                    f"{losses['value_loss']:.6f}",
+                    f"{losses['entropy']:.6f}",
+                    f"{win_rate:.4f}" if win_rate is not None else "",
+                ])
+                log_file.flush()
+    finally:
+        env.close()
+
     typer.echo("Training complete.")

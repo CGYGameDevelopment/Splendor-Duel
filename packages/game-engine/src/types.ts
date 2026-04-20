@@ -112,4 +112,5 @@ export type Action =
   | { type: 'TAKE_TOKEN_FROM_BOARD'; index: number }          // Token ability resolution
   | { type: 'TAKE_TOKEN_FROM_OPPONENT'; color: TokenColor }   // Take ability resolution
   | { type: 'ASSIGN_WILD_COLOR'; wildCardId: number; color: GemColor }
-  | { type: 'DISCARD_TOKENS'; tokens: Partial<Record<TokenColor, number>> };
+  | { type: 'DISCARD_TOKENS'; tokens: Partial<Record<TokenColor, number>> }
+  | { type: 'PASS_MANDATORY' };                                              // no legal moves exist; end mandatory step

@@ -222,4 +222,5 @@ def encode(state: dict) -> np.ndarray:
     else:
         out[857] = 1.0  # none
 
+    assert out.shape == (STATE_DIM,), f"State encoder output shape {out.shape} != ({STATE_DIM},)"
     return out

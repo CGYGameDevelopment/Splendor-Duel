@@ -2,10 +2,10 @@
 SplendorDuelEnv: gymnasium.Env wrapping the ai-game-sim HTTP server.
 
 Observation space: Box(float32, shape=(858,))
-Action space:      Discrete(3677)
+Action space:      Discrete(3981)
 
 Each step's info dict contains:
-  legal_mask: np.ndarray[3677, bool]  — True at each legal action index
+  legal_mask: np.ndarray[3981, bool]  — True at each legal action index
   state:      dict                   — raw GameState from the server
   legal_moves: list[dict]            — raw legal moves from the server
   winner:     int | None             — winning player index, or None if game not over
@@ -28,9 +28,14 @@ from .action_space import (
 class SplendorDuelEnv(gym.Env):
     metadata = {"render_modes": []}
 
-    def __init__(self, sim_url: str = "http://127.0.0.1:3002"):
+    def __init__(
+        self,
+        sim_url: str = "http://127.0.0.1:3002",
+        illegal_action_penalty: float = -1.0,
+    ):
         super().__init__()
         self.client = SimClient(base_url=sim_url)
+        self._illegal_action_penalty = illegal_action_penalty
         self.observation_space = spaces.Box(
             low=0.0, high=1.0, shape=(STATE_DIM,), dtype=np.float32
         )
@@ -73,9 +78,9 @@ class SplendorDuelEnv(gym.Env):
         # Map canonical index → concrete action dict
         concrete = self._legal_index_map.get(action)
         if concrete is None:
-            # Illegal action selected — return current obs with negative reward
+            # Illegal action selected — return current obs with configurable penalty
             obs = encode(self._state)
-            return obs, -1.0, False, False, self._make_info()
+            return obs, self._illegal_action_penalty, False, False, self._make_info()
 
         result = self.client.step(self._session_id, concrete)
         self._state = result["state"]

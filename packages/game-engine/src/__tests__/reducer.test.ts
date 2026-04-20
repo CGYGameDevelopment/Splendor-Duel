@@ -1229,4 +1229,61 @@ describe('legalMoves', () => {
     expect(moves).toHaveLength(1);
     expect(moves[0].type).toBe('REPLENISH_BOARD');
   });
+
+  it('returns only PASS_MANDATORY when bag is also empty and no mandatory moves exist', () => {
+    const { legalMoves } = require('../legalMoves');
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      board: new Array(25).fill(null),
+      bag: emptyPool(),
+      phase: 'mandatory',
+      pyramid: { level1: [], level2: [], level3: [] },
+      decks: { level1: [], level2: [], level3: [] },
+      players: [makePlayer(), makePlayer()],
+    };
+    const moves = legalMoves(s);
+    expect(moves).toHaveLength(1);
+    expect(moves[0].type).toBe('PASS_MANDATORY');
+  });
+});
+
+// ─── PASS_MANDATORY ───────────────────────────────────────────────────────────
+
+describe('PASS_MANDATORY', () => {
+  it('advances the turn when the player is within the token limit', () => {
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      phase: 'mandatory',
+      players: [makePlayer({ tokens: { ...emptyPool(), black: 5 } }), makePlayer()],
+    };
+
+    const next = reducer(s, { type: 'PASS_MANDATORY' });
+    expect(next.phase).toBe('optional_privilege');
+    expect(next.currentPlayer).toBe(1);
+  });
+
+  it('triggers discard phase when the player holds more than 10 tokens', () => {
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      phase: 'mandatory',
+      players: [
+        makePlayer({ tokens: { ...emptyPool(), white: 2, blue: 2, green: 4, red: 4 } }),
+        makePlayer(),
+      ],
+    };
+
+    const next = reducer(s, { type: 'PASS_MANDATORY' });
+    expect(next.phase).toBe('discard');
+    expect(next.currentPlayer).toBe(0);
+  });
+
+  it('is rejected outside mandatory phase', () => {
+    const state = createInitialState(false);
+    const s: GameState = { ...state, phase: 'optional_privilege' };
+    const next = reducer(s, { type: 'PASS_MANDATORY' });
+    expect(next).toBe(s);
+  });
 });

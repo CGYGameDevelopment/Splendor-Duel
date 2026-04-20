@@ -31,6 +31,7 @@ class PPOConfig:
     lam: float = 0.95
     n_epochs: int = 4
     batch_size: int = 256
+    max_grad_norm: float = 0.5
 
 
 def _compute_gae(
@@ -113,7 +114,8 @@ def update(
 
     # Normalise advantages globally across the entire rollout batch
     adv_arr = np.array(all_advantages, dtype=np.float32)
-    adv_arr = (adv_arr - adv_arr.mean()) / (adv_arr.std() + 1e-8)
+    adv_arr = (adv_arr - adv_arr.mean()) / (adv_arr.std() + 1e-6)
+    adv_arr = np.clip(adv_arr, -5.0, 5.0)
     all_advantages = adv_arr.tolist()
 
     obs_t = torch.tensor(np.array(all_obs), dtype=torch.float32, device=device)
@@ -156,7 +158,7 @@ def update(
 
             optimizer.zero_grad()
             loss.backward()
-            nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.5)
+            nn.utils.clip_grad_norm_(model.parameters(), max_norm=config.max_grad_norm)
             optimizer.step()
 
             total_policy_loss += policy_loss.item()
