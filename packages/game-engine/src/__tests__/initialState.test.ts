@@ -28,9 +28,9 @@ describe('createInitialState', () => {
     expect(state.pyramid.level3).toHaveLength(PYRAMID_LEVEL3_COUNT);
   });
 
-  it('starts in optional_privilege phase with player 0 as current player', () => {
+  it('starts in mandatory phase with player 0 as current player (bag empty, no privileges)', () => {
     const state = createInitialState(false);
-    expect(state.phase).toBe('optional_privilege');
+    expect(state.phase).toBe('mandatory');
     expect(state.currentPlayer).toBe(0);
   });
 

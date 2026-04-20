@@ -29,12 +29,8 @@ function optionalPrivilegeMoves(state: GameState): Action[] {
 
   if (availableIndices.length === 0) return moves;
 
-  // Generate all combinations of 1..maxPrivileges distinct cell indices
-  const maxPrivileges = Math.min(player.privileges, availableIndices.length);
-  for (let len = 1; len <= maxPrivileges; len++) {
-    for (const combo of combinations(availableIndices, len)) {
-      moves.push({ type: 'USE_PRIVILEGE', indices: combo });
-    }
+  for (const idx of availableIndices) {
+    moves.push({ type: 'USE_PRIVILEGE', indices: [idx] });
   }
 
   return moves;
@@ -257,29 +253,15 @@ function discardMoves(state: GameState): Action[] {
   const excess = totalTokens(player.tokens) - MAX_TOKENS;
   if (excess <= 0) return [];
 
-  // Generate all ways to discard exactly `excess` tokens
   const moves: Action[] = [];
   const pool = player.tokens;
 
-  function recurse(
-    remaining: number,
-    current: Partial<Record<TokenColor, number>>,
-    colorIdx: number
-  ) {
-    if (remaining === 0) { moves.push({ type: 'DISCARD_TOKENS', tokens: { ...current } }); return; }
-    if (colorIdx >= TOKEN_COLORS.length) return;
-
-    const color = TOKEN_COLORS[colorIdx];
-    const have = pool[color];
-
-    for (let discard = 0; discard <= Math.min(have, remaining); discard++) {
-      if (discard > 0) current[color] = discard;
-      recurse(remaining - discard, current, colorIdx + 1);
-      delete current[color];
+  for (const color of TOKEN_COLORS) {
+    if (pool[color] > 0) {
+      moves.push({ type: 'DISCARD_TOKENS', tokens: { [color]: 1 } });
     }
   }
 
-  recurse(excess, {}, 0);
   return moves;
 }
 

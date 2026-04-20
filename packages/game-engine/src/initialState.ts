@@ -93,7 +93,7 @@ export function createInitialState(secondPlayerGetsPrivilege = true): GameState 
     privileges: tablePrivileges,
     players,
     currentPlayer: 0,
-    phase: 'optional_privilege',
+    phase: 'mandatory',
     repeatTurn: false,
     pendingCrownCheck: false,
     pendingAbility: null,

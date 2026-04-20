@@ -127,7 +127,7 @@ describe('PURCHASE_CARD', () => {
 
     const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 52, goldUsage: {} });
     expect(next.currentPlayer).toBe(0);
-    expect(next.phase).toBe('optional_privilege');
+    expect(next.phase).toBe('mandatory');
     expect(next.repeatTurn).toBe(false);
     expect(next.pendingAbility).toBeNull();
     expect(next.lastPurchasedCard).toBeNull();
@@ -232,7 +232,7 @@ describe('DISCARD_TOKENS', () => {
     expect(next.currentPlayer).toBe(1);
   });
 
-  it('rejects a discard that would leave the player still over the 10-token limit', () => {
+  it('stays in discard phase when still over the 10-token limit after discarding one', () => {
     const state = createInitialState(false);
     const s: GameState = {
       ...state, phase: 'discard',
@@ -240,7 +240,9 @@ describe('DISCARD_TOKENS', () => {
     };
 
     const next = reducer(s, { type: 'DISCARD_TOKENS', tokens: { black: 1 } });
-    expect(next).toBe(s);
+    expect(next.players[0].tokens.black).toBe(11);
+    expect(next.phase).toBe('discard');
+    expect(next.currentPlayer).toBe(0);
   });
 });
 
@@ -323,7 +325,7 @@ describe('Token Ability', () => {
     expect(resolved.board[5]).toBeNull();
     expect(resolved.players[0].tokens.red).toBe(1);
     expect(resolved.pendingAbility).toBeNull();
-    expect(resolved.phase).toBe('optional_privilege');
+    expect(resolved.phase).toBe('mandatory');
   });
 
   it('skips Token ability when no matching color token is on the board', () => {
@@ -339,7 +341,7 @@ describe('Token Ability', () => {
 
     const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 101, goldUsage: {} });
     expect(next.pendingAbility).toBeNull();
-    expect(next.phase).toBe('optional_privilege');
+    expect(next.phase).toBe('mandatory');
   });
 
   it('skips Token ability on a Wild card (no color to match)', () => {
@@ -357,7 +359,7 @@ describe('Token Ability', () => {
 
     const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 102, goldUsage: {} });
     expect(next.pendingAbility).toBeNull();
-    expect(next.phase).toBe('optional_privilege');
+    expect(next.phase).toBe('mandatory');
   });
 });
 
@@ -402,7 +404,7 @@ describe('Take Ability', () => {
 
     const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 104, goldUsage: {} });
     expect(next.pendingAbility).toBeNull();
-    expect(next.phase).toBe('optional_privilege');
+    expect(next.phase).toBe('mandatory');
   });
 
   it('cannot steal gold via Take ability', () => {
@@ -440,7 +442,7 @@ describe('Privilege Ability', () => {
     const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 106, goldUsage: {} });
     expect(next.players[0].privileges).toBe(1);
     expect(next.privileges).toBe(2);
-    expect(next.phase).toBe('optional_privilege');
+    expect(next.phase).toBe('mandatory');
     expect(totalPrivileges(next)).toBe(3);
   });
 
@@ -503,7 +505,7 @@ describe('Wild Ability', () => {
 
     const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 112, goldUsage: {} });
     expect(next.players[0].purchasedCards.some(c => c.id === 112)).toBe(true);
-    expect(next.phase).toBe('optional_privilege');
+    expect(next.phase).toBe('mandatory');
     expect(next.pendingAbility).toBeNull();
   });
 
@@ -532,7 +534,7 @@ describe('Wild Ability', () => {
 
     const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 200, goldUsage: {} });
     expect(next.players[0].purchasedCards.some(c => c.id === 200)).toBe(true);
-    expect(next.phase).toBe('optional_privilege');
+    expect(next.phase).toBe('mandatory');
   });
 
   it('ASSIGN_WILD_COLOR is rejected if the player does not own a card with that color', () => {
@@ -578,7 +580,7 @@ describe('Wild/Turn Ability', () => {
     const resolved = reducer(next, { type: 'ASSIGN_WILD_COLOR', wildCardId: 120, color: 'green' });
     expect(resolved.repeatTurn).toBe(false);
     expect(resolved.currentPlayer).toBe(0);
-    expect(resolved.phase).toBe('optional_privilege');
+    expect(resolved.phase).toBe('mandatory');
   });
 });
 
@@ -598,7 +600,7 @@ describe('Turn Ability Chaining', () => {
     const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 130, goldUsage: {} });
     expect(next.repeatTurn).toBe(false);
     expect(next.currentPlayer).toBe(0);
-    expect(next.phase).toBe('optional_privilege');
+    expect(next.phase).toBe('mandatory');
   });
 
   it('chains multiple Turn abilities by repeating the same player each time', () => {
@@ -616,14 +618,14 @@ describe('Turn Ability Chaining', () => {
     const next1 = reducer(s, { type: 'PURCHASE_CARD', cardId: 131, goldUsage: {} });
     expect(next1.repeatTurn).toBe(false);
     expect(next1.currentPlayer).toBe(0);
-    expect(next1.phase).toBe('optional_privilege');
+    expect(next1.phase).toBe('mandatory');
 
     // During that extra turn, buy a second Turn card — player 0 gets yet another turn
     const next2: GameState = { ...next1, phase: 'mandatory', pyramid: { ...next1.pyramid, level1: [turnCard2, ...next1.pyramid.level1.slice(0, 4)] } };
     const next3 = reducer(next2, { type: 'PURCHASE_CARD', cardId: 132, goldUsage: {} });
     expect(next3.repeatTurn).toBe(false);
     expect(next3.currentPlayer).toBe(0);
-    expect(next3.phase).toBe('optional_privilege');
+    expect(next3.phase).toBe('mandatory');
   });
 });
 
@@ -727,7 +729,7 @@ describe('Multi-ability Sequences', () => {
     const next1 = reducer(s, { type: 'PURCHASE_CARD', cardId: 150, goldUsage: {} });
     expect(next1.repeatTurn).toBe(false);
     expect(next1.currentPlayer).toBe(0);
-    expect(next1.phase).toBe('optional_privilege');
+    expect(next1.phase).toBe('mandatory');
 
     const next2 = {
       ...next1,
@@ -893,11 +895,18 @@ describe('Conservation Invariants', () => {
 // ─── Phase Transitions ────────────────────────────────────────────────────────
 
 describe('END_OPTIONAL_PHASE', () => {
-  it('transitions from optional_privilege to optional_replenish', () => {
+  it('transitions from optional_privilege to optional_replenish when bag is non-empty', () => {
     const state = createInitialState(false);
-    const s: GameState = { ...state, phase: 'optional_privilege' };
+    const s: GameState = { ...state, phase: 'optional_privilege', bag: { ...emptyPool(), black: 3 } };
     const next = reducer(s, { type: 'END_OPTIONAL_PHASE' });
     expect(next.phase).toBe('optional_replenish');
+  });
+
+  it('skips optional_replenish and goes to mandatory when bag is empty', () => {
+    const state = createInitialState(false);
+    const s: GameState = { ...state, phase: 'optional_privilege', bag: emptyPool() };
+    const next = reducer(s, { type: 'END_OPTIONAL_PHASE' });
+    expect(next.phase).toBe('mandatory');
   });
 
   it('transitions from optional_replenish to mandatory', () => {
@@ -1260,7 +1269,7 @@ describe('PASS_MANDATORY', () => {
     };
 
     const next = reducer(s, { type: 'PASS_MANDATORY' });
-    expect(next.phase).toBe('optional_privilege');
+    expect(next.phase).toBe('mandatory');
     expect(next.currentPlayer).toBe(1);
   });
 
@@ -1285,5 +1294,56 @@ describe('PASS_MANDATORY', () => {
     const s: GameState = { ...state, phase: 'optional_privilege' };
     const next = reducer(s, { type: 'PASS_MANDATORY' });
     expect(next).toBe(s);
+  });
+});
+
+// ─── Turn Transition Phase Selection ─────────────────────────────────────────
+
+describe('Turn transition phase selection', () => {
+  it('starts at optional_privilege when the next player has privileges', () => {
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state, phase: 'mandatory',
+      players: [makePlayer(), makePlayer({ privileges: 1 })],
+    };
+    const next = reducer(s, { type: 'PASS_MANDATORY' });
+    expect(next.currentPlayer).toBe(1);
+    expect(next.phase).toBe('optional_privilege');
+  });
+
+  it('starts at optional_replenish when the next player has no privileges and bag is non-empty', () => {
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state, phase: 'mandatory',
+      bag: { ...emptyPool(), black: 3 },
+      players: [makePlayer(), makePlayer()],
+    };
+    const next = reducer(s, { type: 'PASS_MANDATORY' });
+    expect(next.currentPlayer).toBe(1);
+    expect(next.phase).toBe('optional_replenish');
+  });
+
+  it('starts at mandatory when the next player has no privileges and bag is empty', () => {
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state, phase: 'mandatory',
+      players: [makePlayer(), makePlayer()],
+    };
+    const next = reducer(s, { type: 'PASS_MANDATORY' });
+    expect(next.currentPlayer).toBe(1);
+    expect(next.phase).toBe('mandatory');
+  });
+
+  it('starts at optional_privilege on repeat turn when the current player has privileges', () => {
+    const turnCard = makeCard({ id: 160, ability: 'Turn', cost: {} });
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state, phase: 'mandatory',
+      pyramid: { ...state.pyramid, level1: [turnCard, ...state.pyramid.level1.slice(0, 4)] },
+      players: [makePlayer({ privileges: 2 }), makePlayer()],
+    };
+    const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 160, goldUsage: {} });
+    expect(next.currentPlayer).toBe(0);
+    expect(next.phase).toBe('optional_privilege');
   });
 });

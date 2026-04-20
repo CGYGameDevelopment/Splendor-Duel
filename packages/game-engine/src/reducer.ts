@@ -170,21 +170,17 @@ function postPurchaseTransition(state: GameState, milestoneCrossed: boolean): Ga
 // Phase 4.3 — repeat or switch player.
 function advanceTurn(state: GameState): GameState {
   const cp = state.currentPlayer;
+  const nextPlayerId = state.repeatTurn ? cp : (1 - cp) as PlayerId;
+  const nextPlayer = state.players[nextPlayerId];
+  const bagEmpty = totalTokens(state.bag) === 0;
+  const phase = nextPlayer.privileges > 0
+    ? 'optional_privilege'
+    : bagEmpty ? 'mandatory' : 'optional_replenish';
+
   if (state.repeatTurn) {
-    return {
-      ...state,
-      repeatTurn: false,
-      phase: 'optional_privilege',
-      lastPurchasedCard: null,
-    };
+    return { ...state, repeatTurn: false, phase, lastPurchasedCard: null };
   }
-  const next = (1 - cp) as PlayerId;
-  return {
-    ...state,
-    currentPlayer: next,
-    phase: 'optional_privilege',
-    lastPurchasedCard: null,
-  };
+  return { ...state, currentPlayer: nextPlayerId, phase, lastPurchasedCard: null };
 }
 
 // Phase 4 (full) — steps 4.1 → 4.2 → 4.3.
@@ -282,7 +278,9 @@ export function reducer(state: GameState, action: Action): GameState {
   switch (action.type) {
 
     case 'END_OPTIONAL_PHASE': {
-      if (state.phase === 'optional_privilege') return { ...state, phase: 'optional_replenish' };
+      if (state.phase === 'optional_privilege') {
+        return { ...state, phase: totalTokens(state.bag) === 0 ? 'mandatory' : 'optional_replenish' };
+      }
       if (state.phase === 'optional_replenish') return { ...state, phase: 'mandatory' };
       return state;
     }
@@ -545,16 +543,18 @@ export function reducer(state: GameState, action: Action): GameState {
       let playerTokens = { ...player.tokens };
       let bag = { ...state.bag };
 
-      for (const [colorStr, amount] of Object.entries(action.tokens) as [TokenColor, number][]) {
-        if (playerTokens[colorStr] < amount) return state;
-        playerTokens = { ...playerTokens, [colorStr]: playerTokens[colorStr] - amount };
-        bag = { ...bag, [colorStr]: bag[colorStr] + amount };
-      }
+      const colors = Object.keys(action.tokens) as TokenColor[];
+      if (colors.length !== 1 || action.tokens[colors[0]] !== 1) return state;
+      const color = colors[0];
+      if (playerTokens[color] < 1) return state;
 
-      if (totalTokens(playerTokens) > MAX_TOKENS) return state; // still too many
+      playerTokens = { ...playerTokens, [color]: playerTokens[color] - 1 };
+      bag = { ...bag, [color]: bag[color] + 1 };
 
       let newState = updatePlayer(state, cp, { tokens: playerTokens });
       newState = { ...newState, bag };
+
+      if (totalTokens(playerTokens) > MAX_TOKENS) return { ...newState, phase: 'discard' };
 
       return advanceTurn(newState);
     }
