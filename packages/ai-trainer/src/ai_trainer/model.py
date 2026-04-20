@@ -2,7 +2,7 @@
 ActorCriticNet: shared-trunk policy + value network for Splendor Duel.
 
 Input:  state tensor (858,)
-Output: (logits (3981,), value scalar)
+Output: (logits (688,), value scalar)
 
 The policy head outputs raw logits. The caller is responsible for applying
 the legal mask (set illegal logits to -inf) before computing the softmax.

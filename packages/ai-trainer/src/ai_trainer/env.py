@@ -2,10 +2,10 @@
 SplendorDuelEnv: gymnasium.Env wrapping the ai-game-sim HTTP server.
 
 Observation space: Box(float32, shape=(858,))
-Action space:      Discrete(3981)
+Action space:      Discrete(688)
 
 Each step's info dict contains:
-  legal_mask: np.ndarray[3981, bool]  — True at each legal action index
+  legal_mask: np.ndarray[688, bool]  — True at each legal action index
   state:      dict                   — raw GameState from the server
   legal_moves: list[dict]            — raw legal moves from the server
   winner:     int | None             — winning player index, or None if game not over

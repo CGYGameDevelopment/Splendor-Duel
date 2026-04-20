@@ -29,7 +29,7 @@ class Transition:
     value: float
     reward: float
     done: bool
-    legal_mask: np.ndarray    # (3981,)
+    legal_mask: np.ndarray    # (688,)
     player_id: int            # 0 or 1 — index of the player who acted
 
 

@@ -1,22 +1,22 @@
 """
-Fixed canonical action vocabulary of size 3981.
+Fixed canonical action vocabulary of size 688.
 
 Index ranges:
   [0..144]    TAKE_TOKENS               — 145 valid board lines (1-3 cells)
   [145..211]  PURCHASE_CARD             — card id 1..67  (id-1 → offset)
   [212..278]  RESERVE_CARD_FROM_PYRAMID — card id 1..67
-  [279..281]  RESERVE_CARD (deck)       — deck_1=279, deck_2=280, deck_3=281
+  [279..281]  RESERVE_CARD_FROM_DECK    — deck_1=279, deck_2=280, deck_3=281
   [282..616]  ASSIGN_WILD_COLOR         — 67 card ids × 5 gem colors (white/blue/green/red/black)
                                           index = 282 + (cardId-1)*5 + color_idx
-  [617..761]  USE_PRIVILEGE             — 145 valid board lines (same order as TAKE_TOKENS)
-  [762]       REPLENISH_BOARD
-  [763]       END_OPTIONAL_PHASE
-  [764]       SKIP_TO_MANDATORY
-  [765..3943] DISCARD_TOKENS            — 3179 precomputed discard combos (excess 1-7, max 4 per color)
-  [3944..3968] TAKE_TOKEN_FROM_BOARD    — 25 board positions (index 0-24)
-  [3969..3975] TAKE_TOKEN_FROM_OPPONENT — 7 token colors
-  [3976..3979] CHOOSE_ROYAL_CARD        — royal card id 1..4
-  [3980]       PASS_MANDATORY           — no legal moves; end mandatory step (triggers discard if needed)
+  [617..641]  USE_PRIVILEGE             — 25 single board cell indices (0-24)
+  [642]       REPLENISH_BOARD
+  [643]       END_OPTIONAL_PHASE
+  [644]       SKIP_TO_MANDATORY
+  [645..651]  DISCARD_TOKENS            — 7 token colors (discard exactly 1 of that color)
+  [652..676]  TAKE_TOKEN_FROM_BOARD     — 25 board positions (index 0-24)
+  [677..682]  TAKE_TOKEN_FROM_OPPONENT  — 6 token colors (white,blue,green,red,black,pearl)
+  [683..686]  CHOOSE_ROYAL_CARD         — royal card id 1..4
+  [687]       PASS_MANDATORY
 """
 
 from __future__ import annotations
@@ -25,10 +25,11 @@ from itertools import combinations as _combinations
 
 import numpy as np
 
-ACTION_SPACE_SIZE = 3981
+ACTION_SPACE_SIZE = 688
 
 TOKEN_COLORS = ["white", "blue", "green", "red", "black", "pearl", "gold"]
-GEM_COLORS = ["white", "blue", "green", "red", "black"]  # valid colors for ASSIGN_WILD_COLOR
+GEM_COLORS = ["white", "blue", "green", "red", "black"]
+TAKE_FROM_OPPONENT_COLORS = ["white", "blue", "green", "red", "black", "pearl"]
 
 # ── Valid board lines ─────────────────────────────────────────────────────────
 
@@ -66,42 +67,6 @@ def _build_valid_lines() -> list[tuple[int, ...]]:
 VALID_LINES: list[tuple[int, ...]] = _build_valid_lines()
 LINE_TO_IDX: dict[tuple[int, ...], int] = {line: i for i, line in enumerate(VALID_LINES)}
 
-# ── Valid discard combos ──────────────────────────────────────────────────────
-
-def _build_discard_combos() -> list[dict[str, int]]:
-    """
-    All ways to discard 1-7 tokens distributed across 7 colors (max 4 per color).
-
-    Max excess of 7 covers the worst case: 3 privileges + 3 TAKE_TOKENS + 1 ability token.
-    Max 4 per color matches STARTING_GEM_COUNT (the most tokens of any one color in the game).
-    Produces exactly 3179 entries.
-    """
-    combos: list[dict[str, int]] = []
-
-    def recurse(remaining: int, color_idx: int, current: dict) -> None:
-        if remaining == 0:
-            combos.append(dict(current))
-            return
-        if color_idx >= 7:
-            return
-        color = TOKEN_COLORS[color_idx]
-        for d in range(min(remaining, 4) + 1):
-            if d > 0:
-                current[color] = d
-            recurse(remaining - d, color_idx + 1, current)
-            if d > 0:
-                del current[color]
-
-    for excess in range(1, 8):
-        recurse(excess, 0, {})
-    return combos  # exactly 3179 entries
-
-
-DISCARD_COMBOS: list[dict[str, int]] = _build_discard_combos()
-DISCARD_TO_IDX: dict[tuple[tuple[str, int], ...], int] = {
-    tuple(sorted(d.items())): i for i, d in enumerate(DISCARD_COMBOS)
-}
-
 # ── Offset constants ──────────────────────────────────────────────────────────
 
 OFFSET_TAKE_TOKENS = 0        # 0..144
@@ -109,15 +74,15 @@ OFFSET_PURCHASE_CARD = 145    # 145..211   (card id 1..67)
 OFFSET_RESERVE_PYRAMID = 212  # 212..278   (card id 1..67)
 OFFSET_RESERVE_DECK = 279     # 279..281
 OFFSET_ASSIGN_WILD = 282      # 282..616   (card id 1..67, color idx 0..4; stride 5)
-OFFSET_USE_PRIVILEGE = 617    # 617..761
-OFFSET_REPLENISH = 762        # 762
-OFFSET_END_OPTIONAL = 763     # 763
-OFFSET_SKIP_TO_MANDATORY = 764  # 764
-OFFSET_DISCARD = 765          # 765..3943  (3179 combos)
-OFFSET_TAKE_FROM_BOARD = 3944  # 3944..3968  (25 board positions)
-OFFSET_TAKE_FROM_OPPONENT = 3969  # 3969..3975
-OFFSET_CHOOSE_ROYAL = 3976        # 3976..3979  (royal card id 1..4)
-OFFSET_PASS_MANDATORY = 3980      # 3980
+OFFSET_USE_PRIVILEGE = 617    # 617..641   (single board cell 0-24)
+OFFSET_REPLENISH = 642        # 642
+OFFSET_END_OPTIONAL = 643     # 643
+OFFSET_SKIP_TO_MANDATORY = 644  # 644
+OFFSET_DISCARD = 645          # 645..651   (one entry per token color)
+OFFSET_TAKE_FROM_BOARD = 652  # 652..676   (25 board positions)
+OFFSET_TAKE_FROM_OPPONENT = 677  # 677..682  (6 colors: gem colors + pearl)
+OFFSET_CHOOSE_ROYAL = 683        # 683..686  (royal card id 1..4)
+OFFSET_PASS_MANDATORY = 687      # 687
 
 _DECK_TO_IDX = {"deck_1": 279, "deck_2": 280, "deck_3": 281}
 
@@ -142,7 +107,7 @@ def action_to_index(action: dict) -> int | None:
         if 1 <= card_id <= 67:
             return OFFSET_RESERVE_PYRAMID + (card_id - 1)
 
-    if t == "RESERVE_CARD":
+    if t == "RESERVE_CARD_FROM_DECK":
         source = action.get("source", "")
         return _DECK_TO_IDX.get(source)
 
@@ -153,9 +118,9 @@ def action_to_index(action: dict) -> int | None:
             return OFFSET_ASSIGN_WILD + (card_id - 1) * 5 + GEM_COLORS.index(color)
 
     if t == "USE_PRIVILEGE":
-        key = tuple(sorted(action.get("indices", [])))
-        idx = LINE_TO_IDX.get(key)
-        return None if idx is None else OFFSET_USE_PRIVILEGE + idx
+        indices = action.get("indices", [])
+        if len(indices) == 1 and 0 <= indices[0] <= 24:
+            return OFFSET_USE_PRIVILEGE + indices[0]
 
     if t == "REPLENISH_BOARD":
         return OFFSET_REPLENISH
@@ -167,9 +132,11 @@ def action_to_index(action: dict) -> int | None:
         return OFFSET_SKIP_TO_MANDATORY
 
     if t == "DISCARD_TOKENS":
-        key = tuple(sorted(action.get("tokens", {}).items()))
-        idx = DISCARD_TO_IDX.get(key)
-        return None if idx is None else OFFSET_DISCARD + idx
+        tokens = action.get("tokens", {})
+        if len(tokens) == 1:
+            color = next(iter(tokens))
+            if tokens[color] == 1 and color in TOKEN_COLORS:
+                return OFFSET_DISCARD + TOKEN_COLORS.index(color)
 
     if t == "TAKE_TOKEN_FROM_BOARD":
         idx = action.get("index")
@@ -178,8 +145,8 @@ def action_to_index(action: dict) -> int | None:
 
     if t == "TAKE_TOKEN_FROM_OPPONENT":
         color = action.get("color", "")
-        if color in TOKEN_COLORS:
-            return OFFSET_TAKE_FROM_OPPONENT + TOKEN_COLORS.index(color)
+        if color in TAKE_FROM_OPPONENT_COLORS:
+            return OFFSET_TAKE_FROM_OPPONENT + TAKE_FROM_OPPONENT_COLORS.index(color)
 
     if t == "CHOOSE_ROYAL_CARD":
         card_id = action.get("cardId", 0)
