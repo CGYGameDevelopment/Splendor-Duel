@@ -4,6 +4,7 @@ Evaluate the trained model against baselines.
 
 from __future__ import annotations
 
+import logging
 import numpy as np
 import torch
 
@@ -12,6 +13,7 @@ from .model import ActorCriticNet
 from .random_agent import GreedyPurchaseAgent
 
 MAX_EVAL_STEPS = 2_000
+_FIRST_PLAYER_BIAS_THRESHOLD = 0.1  # warn if P0 vs P1 win-rate gap exceeds 10%
 
 
 @torch.no_grad()
@@ -76,9 +78,8 @@ def win_rate_vs_greedy(
     wr_p0 = wins_as_p0 / games_as_p0 if games_as_p0 else 0.0
     wr_p1 = wins_as_p1 / games_as_p1 if games_as_p1 else 0.0
     bias = abs(wr_p0 - wr_p1)
-    if bias > 0.1:
-        import logging as _logging
-        _logging.getLogger(__name__).warning(
+    if bias > _FIRST_PLAYER_BIAS_THRESHOLD:
+        logging.getLogger(__name__).warning(
             "win_rate_vs_greedy: first-player bias detected — "
             "win rate as P0=%.1f%%, as P1=%.1f%% (gap %.1f%%)",
             wr_p0 * 100, wr_p1 * 100, bias * 100,

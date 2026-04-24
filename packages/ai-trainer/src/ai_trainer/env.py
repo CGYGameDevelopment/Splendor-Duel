@@ -13,6 +13,7 @@ Each step's info dict contains:
 
 from __future__ import annotations
 
+import logging
 import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
@@ -73,7 +74,8 @@ class SplendorDuelEnv(gym.Env):
         return obs, info
 
     def step(self, action: int) -> tuple[np.ndarray, float, bool, bool, dict]:
-        assert self._session_id is not None, "Call reset() before step()"
+        if self._session_id is None:
+            raise RuntimeError("Call reset() before step()")
 
         # Map canonical index → concrete action dict
         concrete = self._legal_index_map.get(action)
@@ -105,8 +107,7 @@ class SplendorDuelEnv(gym.Env):
             # silently flip reward attribution.
             current_player: int = self._state.get("currentPlayer", 0)
             if current_player != winner:
-                import logging as _logging
-                _logging.getLogger(__name__).warning(
+                logging.getLogger(__name__).warning(
                     "env.step: currentPlayer=%s != winner=%s on game_over; "
                     "attributing reward to winner regardless.",
                     current_player, winner,

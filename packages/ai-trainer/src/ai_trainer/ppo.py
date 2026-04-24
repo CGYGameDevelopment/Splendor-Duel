@@ -21,6 +21,9 @@ import torch.optim as optim
 from .self_play import Episode
 from .model import ActorCriticNet
 
+_ADV_STD_EPSILON = 1e-6   # prevents division by zero in advantage normalisation
+_ADV_CLIP_RANGE = 5.0     # clip normalised advantages to ±5σ
+
 
 @dataclass
 class PPOConfig:
@@ -118,9 +121,9 @@ def update(
 
     # Normalise advantages globally across the entire rollout batch.
     adv_arr = np.asarray(all_advantages, dtype=np.float32)
-    adv_arr = (adv_arr - adv_arr.mean()) / (adv_arr.std() + 1e-6)
-    adv_clip_hits = int(((adv_arr > 5.0) | (adv_arr < -5.0)).sum())
-    np.clip(adv_arr, -5.0, 5.0, out=adv_arr)
+    adv_arr = (adv_arr - adv_arr.mean()) / (adv_arr.std() + _ADV_STD_EPSILON)
+    adv_clip_hits = int(((adv_arr > _ADV_CLIP_RANGE) | (adv_arr < -_ADV_CLIP_RANGE)).sum())
+    np.clip(adv_arr, -_ADV_CLIP_RANGE, _ADV_CLIP_RANGE, out=adv_arr)
 
     # Single-copy transfer: list-of-arrays → stacked numpy → torch on device.
     obs_t = torch.from_numpy(np.stack(all_obs).astype(np.float32, copy=False)).to(

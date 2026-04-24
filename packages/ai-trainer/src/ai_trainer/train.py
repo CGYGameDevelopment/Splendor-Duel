@@ -134,15 +134,14 @@ def main(
             raise typer.Exit(code=1)
         ckpt = torch.load(resume, map_location=device, weights_only=True)
         ckpt_version = ckpt.get("version", 0)
+        model.load_state_dict(ckpt["model_state"])
         if ckpt_version != CHECKPOINT_VERSION:
             typer.echo(
                 f"WARNING: checkpoint version mismatch (file={ckpt_version}, "
                 f"expected={CHECKPOINT_VERSION}). Weights loaded but optimizer state skipped.",
                 err=True,
             )
-            model.load_state_dict(ckpt["model_state"])
         else:
-            model.load_state_dict(ckpt["model_state"])
             optimizer.load_state_dict(ckpt["optimizer_state"])
         start_iteration = ckpt["iteration"] + 1
         typer.echo(f"Resumed from {resume} (iteration {ckpt['iteration']})")

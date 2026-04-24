@@ -50,6 +50,7 @@ types.ts). The encoder matches what actually appears at runtime.
 
 from __future__ import annotations
 
+import logging
 import numpy as np
 
 STATE_DIM = 859
@@ -262,11 +263,10 @@ def encode(state: dict) -> np.ndarray:
         new_indices = [i for i in bad_indices.tolist() if i not in _warned_indices]
         if new_indices:
             _warned_indices.update(new_indices)
-            import logging as _logging
             samples = ", ".join(
                 f"[{i}]={out[i]:.3f} ({_describe_index(int(i))})" for i in new_indices[:6]
             )
-            _logging.getLogger(__name__).warning(
+            logging.getLogger(__name__).warning(
                 "state_encoder: %d new out-of-range indices (over=%d, under=%d). "
                 "Samples: %s. Clamping to [0, 1].",
                 len(new_indices), int(over_mask.sum()), int(under_mask.sum()), samples,

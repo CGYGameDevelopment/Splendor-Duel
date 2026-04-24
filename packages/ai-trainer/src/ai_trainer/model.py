@@ -37,7 +37,7 @@ class ActorCriticNet(nn.Module):
         Args:
             obs: float tensor of shape (..., STATE_DIM)
         Returns:
-            logits: shape (..., 3980)  — raw, unmasked
+            logits: shape (..., ACTION_SPACE_SIZE)  — raw, unmasked
             value:  shape (..., 1)
         """
         h = self.trunk(obs)
@@ -53,7 +53,7 @@ class ActorCriticNet(nn.Module):
 
         Args:
             obs:        shape (..., STATE_DIM)
-            legal_mask: bool tensor of shape (..., 3980); True = legal
+            legal_mask: bool tensor of shape (..., ACTION_SPACE_SIZE); True = legal
         """
         logits, _ = self.forward(obs)
         logits = logits.masked_fill(~legal_mask, float("-inf"))
