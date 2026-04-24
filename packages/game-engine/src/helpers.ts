@@ -66,12 +66,10 @@ export function playerBonuses(player: PlayerState): Record<GemColor, number> {
 
 /**
  * Returns the effective gem color of a card for bonus purposes.
- * Wild cards use assignedColor; null-color cards have no gem color.
+ * Wild cards use assignedColor (null until assigned); null-color cards have no gem color.
  */
 export function effectiveCardColor(card: Card): GemColor | null {
-  if (card.color === 'wild') return card.assignedColor;
-  if (card.color === null) return null;
-  return card.color;
+  return card.assignedColor ?? card.color;
 }
 
 // ─── Cost calculation ─────────────────────────────────────────────────────────
@@ -96,6 +94,11 @@ export function netCost(card: Card, player: PlayerState): Partial<Record<TokenCo
 /**
  * Returns true if the player can afford the card (with given gold substitutions).
  * goldUsage maps each color to how many gold tokens are used for that color.
+ *
+ * The goldUsage must be well-formed: for each color in the net cost, the gold
+ * assigned to it must be in [0, needed]. Rejecting overallocation (gold > needed)
+ * and negative allocations is what prevents the reducer from "minting" tokens
+ * when it applies the purchase — you cannot gain tokens by spending gold.
  */
 export function canAfford(
   card: Card,
@@ -108,6 +111,9 @@ export function canAfford(
   for (const [colorStr, needed] of Object.entries(cost) as [TokenColor, number][]) {
     const have = player.tokens[colorStr] ?? 0;
     const gold = (goldUsage[colorStr as GemColor | 'pearl']) ?? 0;
+    // Reject ill-formed gold allocations: negative values, or more gold than this
+    // color actually needs (which would refund tokens during deduction).
+    if (gold < 0 || gold > needed) return false;
     if (have + gold < needed) return false;
     goldUsed += gold;
   }

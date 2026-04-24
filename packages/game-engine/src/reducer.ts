@@ -24,13 +24,23 @@ function replenishBoard(state: GameState): GameState {
 
   for (const index of SPIRAL_ORDER) {
     if (board[index] !== null) continue; // already occupied
-    // Find a color available in bag
-    const available = TOKEN_COLORS.filter(color => bag[color] > 0);
-    if (available.length === 0) break;
-    const pool = available.flatMap(c => Array(bag[c]).fill(c));
-    const color = pool[Math.floor(Math.random() * pool.length)] as TokenColor;
-    board[index] = color;
-    bag = { ...bag, [color]: bag[color] - 1 };
+
+    // Count remaining tokens in the bag and draw one by weighted index —
+    // equivalent to "shuffle the bag and take the next one" per the rulebook.
+    let remaining = 0;
+    for (const color of TOKEN_COLORS) remaining += bag[color];
+    if (remaining === 0) break;
+
+    let draw = Math.floor(Math.random() * remaining);
+    let picked: TokenColor | null = null;
+    for (const color of TOKEN_COLORS) {
+      if (draw < bag[color]) { picked = color; break; }
+      draw -= bag[color];
+    }
+    if (!picked) break; // unreachable: remaining > 0 guarantees a pick
+
+    board[index] = picked;
+    bag = { ...bag, [picked]: bag[picked] - 1 };
   }
 
   return { ...state, board, bag };
@@ -145,8 +155,9 @@ function applyPurchase(
 
 // Determines the next phase after a card purchase.
 // If an interactive ability is pending, defers the crown check via pendingCrownCheck.
-// Note: crossing both milestones (3 and 6) in a single purchase is impossible —
-// no card awards more than 3 crowns, so at most one milestone can cross per purchase.
+// Note: at most one crown milestone can cross per purchase — see the defensive
+// assertion in the PURCHASE_CARD case. If that invariant ever breaks, this logic
+// must be extended to award multiple royal cards in sequence.
 function postPurchaseTransition(state: GameState, milestoneCrossed: boolean): GameState {
   if (state.phase === 'resolve_ability' || state.phase === 'assign_wild') {
     return milestoneCrossed ? { ...state, pendingCrownCheck: true } : state;
@@ -218,12 +229,9 @@ function resolveAbility(state: GameState, card: Card): GameState {
 
   switch (card.ability) {
     case 'Turn': {
-      return {
-        ...state,
-        repeatTurn: true,
-        pendingAbility: null,
-        lastPurchasedCard: null,
-      };
+      // lastPurchasedCard is cleared downstream by advanceTurn; no need to clear
+      // here. Leaving it uniform with the other non-interactive branches.
+      return { ...state, repeatTurn: true, pendingAbility: null };
     }
 
     case 'Privilege': {
@@ -234,7 +242,7 @@ function resolveAbility(state: GameState, card: Card): GameState {
     case 'Token': {
       // Player must take 1 token matching the card's effective color from the board
       // If card has no gem color, skip the token effect
-      if (card.color === 'wild' || card.color === null) {
+      if (card.color === null) {
         return { ...state, pendingAbility: null };
       }
       const color = card.color as TokenColor;
@@ -251,12 +259,12 @@ function resolveAbility(state: GameState, card: Card): GameState {
       return { ...state, phase: 'resolve_ability', pendingAbility: 'Take', lastPurchasedCard: card };
     }
 
-    case 'Wild':
-    case 'Wild/Turn': {
+    case 'wild':
+    case 'wild and turn': {
       // Player must own at least one Jewel Card with a GemColor to assign this wild
       const player = state.players[state.currentPlayer];
       const hasColoredCard = player.purchasedCards.some(
-        ownedCard => ownedCard.id !== card.id && ownedCard.color !== 'wild' && ownedCard.color !== null
+        ownedCard => ownedCard.id !== card.id && ownedCard.color !== null
       );
       if (!hasColoredCard) {
         return { ...state, pendingAbility: null };
@@ -293,31 +301,26 @@ export function reducer(state: GameState, action: Action): GameState {
     }
 
     // ── Optional: Use Privilege ───────────────────────────────────────────────
+    // Spends exactly one privilege to take one token. Callers must sequence
+    // multiple actions to use multiple privileges — this mirrors the single-index
+    // enumeration in legalMoves and keeps the reducer path small and auditable.
     case 'USE_PRIVILEGE': {
       if (state.phase !== 'optional_privilege') return state;
       const { indices } = action;
-      const privilegesUsed = indices.length;
+      if (indices.length !== 1) return state;
+      if (player.privileges < 1) return state;
 
-      // Validate: must use at least 1 privilege, can't exceed privileges held
-      if (privilegesUsed === 0 || privilegesUsed > player.privileges) return state;
+      const index = indices[0];
+      const cell = state.board[index];
+      if (!cell || cell === 'gold') return state; // cell must have a non-gold token
 
-      // Validate: no duplicate indices
-      if (new Set(indices).size !== indices.length) return state;
+      const board = [...state.board];
+      board[index] = null;
+      const playerTokens = { ...player.tokens, [cell]: player.tokens[cell] + 1 };
+      const newPrivileges = player.privileges - 1;
 
-      let board = [...state.board];
-      let playerTokens = { ...player.tokens };
-      const tablePrivileges = state.privileges + privilegesUsed;
-
-      for (const index of indices) {
-        const cell = board[index];
-        if (!cell || cell === 'gold') return state; // cell must have a non-gold token
-        board[index] = null;
-        playerTokens = { ...playerTokens, [cell]: playerTokens[cell] + 1 };
-      }
-
-      const newPrivileges = player.privileges - privilegesUsed;
       let newState = updatePlayer(state, currentPlayerId, { tokens: playerTokens, privileges: newPrivileges });
-      newState = { ...newState, board, privileges: tablePrivileges };
+      newState = { ...newState, board, privileges: state.privileges + 1 };
 
       if (newPrivileges > 0) return newState; // player may use another privilege
       const bagEmpty = totalTokens(newState.bag) === 0;
@@ -342,13 +345,19 @@ export function reducer(state: GameState, action: Action): GameState {
       const { indices } = action;
       if (!isValidTokenLine(indices)) return state;
 
+      // Pre-validate every cell before any mutation. Each target must hold a
+      // non-gold token (USE_PRIVILEGE and TAKE_TOKENS never take gold).
+      for (const index of indices) {
+        const cell = state.board[index];
+        if (!cell || cell === 'gold') return state;
+      }
+
       const board = [...state.board];
       let playerTokens = { ...player.tokens };
       const taken: TokenColor[] = [];
 
       for (const index of indices) {
-        const color = board[index];
-        if (!color || color === 'gold') return state;
+        const color = board[index] as TokenColor; // guaranteed non-null by pre-validation
         board[index] = null;
         playerTokens = { ...playerTokens, [color]: playerTokens[color] + 1 };
         taken.push(color);
@@ -433,9 +442,27 @@ export function reducer(state: GameState, action: Action): GameState {
 
       const prevCrowns = player.crowns;
       let newState = applyPurchase(state, currentPlayerId, purchasedCard, fromReserve, level, goldUsage);
+      const newCrowns = newState.players[currentPlayerId].crowns;
 
-      const milestoneCrossed = CROWN_MILESTONES.some(milestone => prevCrowns < milestone && newState.players[currentPlayerId].crowns >= milestone)
-        && newState.royalDeck.length > 0;
+      const milestonesCrossedCount = CROWN_MILESTONES.filter(
+        milestone => prevCrowns < milestone && newCrowns >= milestone,
+      ).length;
+
+      // Defensive invariant: no jewel card in the current data awards more than
+      // 3 crowns, so at most one milestone (3 or 6) can cross per purchase, and
+      // the choose_royal → royal-ability → endOfTurnSequence flow only handles
+      // a single award. If a card is ever introduced that breaks this, we must
+      // loop the flow to award multiple royal cards — fail loudly instead of
+      // silently dropping awards.
+      if (milestonesCrossedCount > 1) {
+        throw new Error(
+          `Invariant violated: purchase of card ${purchasedCard.id} crossed ` +
+          `${milestonesCrossedCount} crown milestones (prev=${prevCrowns}, new=${newCrowns}); ` +
+          `multi-milestone royal awarding is not implemented.`,
+        );
+      }
+
+      const milestoneCrossed = milestonesCrossedCount === 1 && newState.royalDeck.length > 0;
 
       newState = resolveAbility(newState, purchasedCard);
       return postPurchaseTransition(newState, milestoneCrossed);
@@ -446,6 +473,17 @@ export function reducer(state: GameState, action: Action): GameState {
       if (state.phase !== 'choose_royal') return state;
       const royalCard = state.royalDeck.find(card => card.id === action.cardId);
       if (!royalCard) return state;
+
+      // Defensive invariant: royal cards in the current data have no crowns, so
+      // this handler only propagates royalCard.points into prestige. If a royal
+      // card with crowns is ever introduced, crowns propagation (and potentially
+      // a cascading milestone check) must be added.
+      if (royalCard.crowns !== 0) {
+        throw new Error(
+          `Invariant violated: royal card ${royalCard.id} has ${royalCard.crowns} crowns; ` +
+          `crown-bearing royal cards are not supported.`,
+        );
+      }
 
       const royalDeck = state.royalDeck.filter(card => card.id !== action.cardId);
 
@@ -464,11 +502,12 @@ export function reducer(state: GameState, action: Action): GameState {
       if (state.phase !== 'assign_wild') return state;
       const { wildCardId, color } = action;
       const wildCard = player.purchasedCards.find(card => card.id === wildCardId);
-      if (!wildCard || wildCard.color !== 'wild') return state;
+      const isWild = wildCard?.ability === 'wild' || wildCard?.ability === 'wild and turn';
+      if (!wildCard || !isWild) return state;
 
       // Validate: player owns at least one Jewel Card with this color
       const hasColor = player.purchasedCards.some(
-        card => card.id !== wildCardId && card.color !== 'wild' && card.color !== null && card.color === color
+        card => card.id !== wildCardId && card.color === color
       );
       if (!hasColor) return state;
 
@@ -477,8 +516,8 @@ export function reducer(state: GameState, action: Action): GameState {
       );
       let newState = updatePlayer(state, currentPlayerId, { purchasedCards: updatedCards });
 
-      // If Wild/Turn, grant an extra turn
-      if (state.pendingAbility === 'Wild/Turn') {
+      // If wild and turn, grant an extra turn
+      if (state.pendingAbility === 'wild and turn') {
         newState = { ...newState, repeatTurn: true, pendingAbility: null };
       } else {
         newState = { ...newState, pendingAbility: null };

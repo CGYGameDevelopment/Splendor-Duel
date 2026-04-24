@@ -7,9 +7,9 @@ export type TokenPool = Record<TokenColor, number>;
 
 // ─── Cards ───────────────────────────────────────────────────────────────────
 
-export type CardAbility = 'Turn' | 'Token' | 'Take' | 'Privilege' | 'Wild' | 'Wild/Turn';
+export type CardAbility = 'Turn' | 'Token' | 'Take' | 'Privilege' | 'wild' | 'wild and turn';
 
-export type CardColor = GemColor | 'wild';
+export type CardColor = GemColor;
 
 export type Cost = Partial<Record<TokenColor, number>>;
 
@@ -22,7 +22,7 @@ export interface Card {
   ability: CardAbility | null;
   crowns: number;
   cost: Cost;
-  // For Wild cards: the GemColor permanently assigned during assign_wild phase
+  // For wild cards: the GemColor permanently assigned during assign_wild phase
   assignedColor: GemColor | null;
 }
 
@@ -69,7 +69,7 @@ export type Phase =
   | 'mandatory'               // must take tokens | reserve | purchase
   | 'choose_royal'            // must choose a royal card after hitting a crown milestone
   | 'resolve_ability'         // resolving a card ability (Turn, Token, Take, etc.)
-  | 'assign_wild'             // choosing which card a Wild card takes its color from
+  | 'assign_wild'             // choosing which card a wild card takes its color from
   | 'discard'                 // must discard down to 10 tokens
   | 'game_over';
 

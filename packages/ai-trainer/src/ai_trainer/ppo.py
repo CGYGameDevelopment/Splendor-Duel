@@ -41,6 +41,7 @@ def _compute_gae(
     player_ids: list[int],
     gamma: float,
     lam: float,
+    terminal_value: float = 0.0,
 ) -> tuple[list[float], list[float]]:
     """
     Compute GAE advantages and discounted returns for a two-player zero-sum game.
@@ -50,12 +51,15 @@ def _compute_gae(
     V_opponent(s) ≈ -V_current(s).  When the next step belongs to the opponent,
     both the bootstrap value and the accumulated GAE term must be negated to
     convert them to the current player's perspective before computing the TD error.
+
+    terminal_value: value estimate of the state after the last transition.
+    Non-zero only for episodes truncated by a step cap (not naturally terminal).
     """
     n = len(rewards)
     advantages = [0.0] * n
     returns = [0.0] * n
     gae = 0.0
-    next_value = 0.0
+    next_value = terminal_value
 
     for t in reversed(range(n)):
         mask = 0.0 if dones[t] else 1.0
@@ -102,7 +106,7 @@ def update(
         dones = [t.done for t in ep.transitions]
         player_ids = [t.player_id for t in ep.transitions]
 
-        advantages, returns = _compute_gae(rewards, values, dones, player_ids, config.gamma, config.lam)
+        advantages, returns = _compute_gae(rewards, values, dones, player_ids, config.gamma, config.lam, ep.terminal_value)
 
         for i, t in enumerate(ep.transitions):
             all_obs.append(t.obs)
@@ -112,23 +116,39 @@ def update(
             all_returns.append(returns[i])
             all_masks.append(t.legal_mask)
 
-    # Normalise advantages globally across the entire rollout batch
-    adv_arr = np.array(all_advantages, dtype=np.float32)
+    # Normalise advantages globally across the entire rollout batch.
+    adv_arr = np.asarray(all_advantages, dtype=np.float32)
     adv_arr = (adv_arr - adv_arr.mean()) / (adv_arr.std() + 1e-6)
-    adv_arr = np.clip(adv_arr, -5.0, 5.0)
-    all_advantages = adv_arr.tolist()
+    adv_clip_hits = int(((adv_arr > 5.0) | (adv_arr < -5.0)).sum())
+    np.clip(adv_arr, -5.0, 5.0, out=adv_arr)
 
-    obs_t = torch.tensor(np.array(all_obs), dtype=torch.float32, device=device)
-    actions_t = torch.tensor(all_actions, dtype=torch.long, device=device)
-    log_probs_old_t = torch.tensor(all_log_probs_old, dtype=torch.float32, device=device)
-    advantages_t = torch.tensor(all_advantages, dtype=torch.float32, device=device)
-    returns_t = torch.tensor(all_returns, dtype=torch.float32, device=device)
-    masks_t = torch.tensor(np.array(all_masks), dtype=torch.bool, device=device)
+    # Single-copy transfer: list-of-arrays → stacked numpy → torch on device.
+    obs_t = torch.from_numpy(np.stack(all_obs).astype(np.float32, copy=False)).to(
+        device, non_blocking=True
+    )
+    masks_t = torch.from_numpy(np.stack(all_masks).astype(np.bool_, copy=False)).to(
+        device, non_blocking=True
+    )
+    actions_t = torch.from_numpy(np.asarray(all_actions, dtype=np.int64)).to(
+        device, non_blocking=True
+    )
+    log_probs_old_t = torch.from_numpy(
+        np.asarray(all_log_probs_old, dtype=np.float32)
+    ).to(device, non_blocking=True)
+    advantages_t = torch.from_numpy(adv_arr).to(device, non_blocking=True)
+    returns_t = torch.from_numpy(np.asarray(all_returns, dtype=np.float32)).to(
+        device, non_blocking=True
+    )
+
+    # Precompute the inverted legal mask once — it's referenced every minibatch.
+    inv_masks_t = ~masks_t
 
     n = len(all_obs)
-    total_policy_loss = 0.0
-    total_value_loss = 0.0
-    total_entropy = 0.0
+    # Accumulate loss components on-device and sync only once at the end,
+    # instead of calling .item() on every minibatch.
+    total_policy_loss = torch.zeros((), device=device)
+    total_value_loss = torch.zeros((), device=device)
+    total_entropy = torch.zeros((), device=device)
     n_updates = 0
 
     model.train()
@@ -138,7 +158,7 @@ def update(
             idx = perm[start : start + config.batch_size]
 
             logits, values = model(obs_t[idx])
-            logits_masked = logits.masked_fill(~masks_t[idx], float("-inf"))
+            logits_masked = logits.masked_fill(inv_masks_t[idx], float("-inf"))
             dist = torch.distributions.Categorical(logits=logits_masked)
 
             log_probs = dist.log_prob(actions_t[idx])
@@ -161,13 +181,24 @@ def update(
             nn.utils.clip_grad_norm_(model.parameters(), max_norm=config.max_grad_norm)
             optimizer.step()
 
-            total_policy_loss += policy_loss.item()
-            total_value_loss += value_loss.item()
-            total_entropy += entropy.item()
+            total_policy_loss += policy_loss.detach()
+            total_value_loss += value_loss.detach()
+            total_entropy += entropy.detach()
             n_updates += 1
 
+    # Single GPU→CPU sync after all minibatches.
+    pl = float(total_policy_loss.item()) / n_updates
+    vl = float(total_value_loss.item()) / n_updates
+    ent = float(total_entropy.item()) / n_updates
+    if not (np.isfinite(pl) and np.isfinite(vl) and np.isfinite(ent)):
+        raise ValueError(
+            f"NaN/Inf in PPO loss: policy_loss={pl:.4f}  "
+            f"value_loss={vl:.4f}  entropy={ent:.4f}"
+        )
+
     return {
-        "policy_loss": total_policy_loss / n_updates,
-        "value_loss": total_value_loss / n_updates,
-        "entropy": total_entropy / n_updates,
+        "policy_loss": pl,
+        "value_loss": vl,
+        "entropy": ent,
+        "adv_clip_frac": adv_clip_hits / max(n, 1),
     }

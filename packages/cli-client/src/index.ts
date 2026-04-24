@@ -25,13 +25,12 @@ function send(ws: WebSocket, msg: ClientMessage): void {
 // ─── Display helpers ──────────────────────────────────────────────────────────
 
 const TOKEN_ABBR: { [key: string]: string } = {
-  white: '{W}', blue: '{U}', black: '{B}', red: '{R}', green: '{G}',
-  pearl: '{Pl}', gold: '{Au}',
+  white: 'W', blue: 'U', black: 'B', red: 'R', green: 'G',
+  pearl: 'Pl', gold: 'Au',
 };
 
 const CARD_COLOR_ABBR: { [key: string]: string } = {
-  white: '{W}', blue: '{U}', black: '{B}', red: '{R}', green: '{G}',
-  wild: 'wi',
+  white: 'W', blue: 'U', black: 'B', red: 'R', green: 'G',
 };
 
 const ALL_TOKEN_COLORS = ['white', 'blue', 'green', 'red', 'black', 'pearl', 'gold'];
@@ -63,10 +62,10 @@ function describeCard(card: Card): string {
   const level = card.level === 'royal' ? 'R ' : `L${card.level}`;
   const abil = card.ability ? ` [${card.ability}]` : '';
   const crowns = card.crowns > 0 ? ` 👑${card.crowns}` : '';
-  const gemColors: (string | null)[] = ['white', 'blue', 'green', 'red', 'black'];
-  const colorStr = card.color !== null && gemColors.includes(card.color) && card.bonus > 0
-    ? cardColorAbbr(card.color).repeat(card.bonus)
-    : cardColorAbbr(card.color);
+  const effectiveColor = card.assignedColor ?? card.color;
+  const colorStr = effectiveColor !== null && card.bonus > 0
+    ? cardColorAbbr(effectiveColor).repeat(card.bonus)
+    : cardColorAbbr(effectiveColor);
   return `#${card.id} ${level} ${colorStr} ⭐${card.points}${crowns}${abil}`;
 }
 
@@ -95,15 +94,23 @@ function totalTokens(pool: { [key: string]: number | undefined }): number {
 
 function displayBoard(board: ClientGameState['board']): void {
   console.log('\nBOARD:');
-  console.log('      0      1      2      3      4');
   for (let row = 0; row < 5; row++) {
     const cells = [];
     for (let col = 0; col < 5; col++) {
-      const cell = board[row * 5 + col];
-      cells.push(cell ? abbr(cell).padEnd(5) : ' .   ');
+      const idx = row * 5 + col;
+      const token = board[idx] ? abbr(board[idx]!) : '.';
+      cells.push(`${String(idx).padStart(2)}:${token.padEnd(3)}`);
     }
-    console.log(`  ${row}: ${cells.join('  ')}`);
+    console.log('  ' + cells.join('  '));
   }
+}
+
+const CARD_DESC_WIDTH = 36;
+
+function displayCardRow(card: Card, indent: string): void {
+  const desc = describeCard(card).padEnd(CARD_DESC_WIDTH);
+  const cost = formatCost(card.cost);
+  console.log(`${indent}${desc}  ${cost}`);
 }
 
 function displayPyramid(state: ClientGameState): void {
@@ -112,12 +119,18 @@ function displayPyramid(state: ClientGameState): void {
     const key = `level${level}` as 'level1' | 'level2' | 'level3';
     const cards = state.pyramid[key];
     const deckCount = state.decks[key].length;
-    const cardStrs = cards.map(c => `[${describeCard(c)} cost:${formatCost(c.cost)}]`).join(' ');
-    console.log(`  L${level} deck:${deckCount}: ${cardStrs || '(empty)'}`);
+    console.log(`  L${level}  (deck: ${deckCount})`);
+    if (cards.length === 0) {
+      console.log('    (empty)');
+    } else {
+      for (const c of cards) displayCardRow(c, '    ');
+    }
   }
   if (state.royalDeck.length > 0) {
-    const royalStrs = state.royalDeck.map(c => `[${describeCard(c)}]`).join(' ');
-    console.log(`  Royals: ${royalStrs}`);
+    console.log('  Royals');
+    for (const c of state.royalDeck) {
+      console.log(`    ${describeCard(c)}`);
+    }
   }
 }
 
@@ -131,12 +144,13 @@ function displayPlayers(state: ClientGameState): void {
     console.log(`\n${name} — ⭐${player.prestige} | 👑${player.crowns} | 📜${player.privileges}${turnMark}`);
 
     const total = totalTokens(player.tokens as { [key: string]: number });
-    console.log(`  Tokens (${total}): ${formatPool(player.tokens as { [key: string]: number }, true)}`);
+    console.log(`  Tokens (${total}): ${formatPool(player.tokens as { [key: string]: number })}`);
 
     const gems: { [key: string]: number } = {};
     for (const card of player.purchasedCards) {
-      if (card.color !== null && card.color !== 'wild') {
-        gems[card.color] = (gems[card.color] ?? 0) + card.bonus;
+      const effective = card.assignedColor ?? card.color;
+      if (effective !== null) {
+        gems[effective] = (gems[effective] ?? 0) + card.bonus;
       }
     }
     console.log(`  Gems (${player.purchasedCards.length} cards): ${formatPool(gems)}`);
@@ -147,8 +161,8 @@ function displayPlayers(state: ClientGameState): void {
     }
 
     if (isMe && player.reservedCards.length > 0) {
-      const res = player.reservedCards.map(c => `[${describeCard(c)} cost:${formatCost(c.cost)}]`).join(' ');
-      console.log(`  Reserved: ${res}`);
+      console.log('  Reserved:');
+      for (const c of player.reservedCards) displayCardRow(c, '    ');
     } else if (!isMe) {
       console.log(`  Reserved: ${player.reservedCardCount} (hidden)`);
     }
@@ -161,8 +175,8 @@ function displayPlayers(state: ClientGameState): void {
 
 function displayState(state: ClientGameState): void {
   console.log('\n' + '═'.repeat(70));
-  displayBoard(state.board);
   displayPyramid(state);
+  displayBoard(state.board);
   displayPlayers(state);
   const bagTotal = totalTokens(state.bag as { [key: string]: number });
   const abil = state.pendingAbility ? ` (pending ability: ${state.pendingAbility})` : '';
@@ -226,7 +240,7 @@ function describeMove(action: Action, state: ClientGameState): string {
     case 'ASSIGN_WILD_COLOR': {
       const wild = findCard(state, action.wildCardId);
       const wildStr = wild ? describeCard(wild) : `#${action.wildCardId}`;
-      return `Assign Wild card ${wildStr} → ${action.color}`;
+      return `Assign wild card ${wildStr} → ${action.color}`;
     }
 
     case 'TAKE_TOKEN_FROM_BOARD': {

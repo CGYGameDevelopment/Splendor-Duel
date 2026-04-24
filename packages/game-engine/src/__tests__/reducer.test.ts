@@ -376,8 +376,8 @@ describe('Token Ability', () => {
     expect(next.phase).toBe('mandatory');
   });
 
-  it('skips Token ability on a Wild card (no color to match)', () => {
-    const card = makeCard({ id: 102, ability: 'Token', color: 'wild', cost: {} });
+  it('skips Token ability on a colorless card (no color to match)', () => {
+    const card = makeCard({ id: 102, ability: 'Token', color: null, cost: {} });
     const state = createInitialState(false);
     const board = new Array(25).fill(null);
     board[5] = 'red';
@@ -499,11 +499,11 @@ describe('Privilege Ability', () => {
   });
 });
 
-// ─── CARD ABILITY: Wild ───────────────────────────────────────────────────────
+// ─── CARD ABILITY: wild ───────────────────────────────────────────────────────
 
-describe('Wild Ability', () => {
+describe('wild ability', () => {
   it('enters assign_wild phase then assigns the chosen color permanently', () => {
-    const wildCard = makeCard({ id: 110, ability: 'Wild', color: 'wild', cost: {} });
+    const wildCard = makeCard({ id: 110, ability: 'wild', color: null, cost: {} });
     const redCard = makeCard({ id: 111, color: 'red', bonus: 1 });
     const state = createInitialState(false);
     const s: GameState = {
@@ -518,15 +518,15 @@ describe('Wild Ability', () => {
 
     const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 110, goldUsage: {} });
     expect(next.phase).toBe('assign_wild');
-    expect(next.pendingAbility).toBe('Wild');
+    expect(next.pendingAbility).toBe('wild');
 
     const resolved = reducer(next, { type: 'ASSIGN_WILD_COLOR', wildCardId: 110, color: 'red' });
     expect(resolved.players[0].purchasedCards[1].assignedColor).toBe('red');
     expect(resolved.pendingAbility).toBeNull();
   });
 
-  it('skips Wild ability when the player has no eligible target cards', () => {
-    const wildCard = makeCard({ id: 112, ability: 'Wild', color: 'wild', cost: {} });
+  it('skips wild ability when the player has no eligible target cards', () => {
+    const wildCard = makeCard({ id: 112, ability: 'wild', color: null, cost: {} });
     const state = createInitialState(false);
     const s: GameState = {
       ...state,
@@ -541,10 +541,10 @@ describe('Wild Ability', () => {
     expect(next.pendingAbility).toBeNull();
   });
 
-  it('skips Wild ability when all owned cards are wild or uncolored', () => {
-    const wildCard1 = makeCard({ id: 113, ability: 'Wild', color: 'wild' });
-    const wildCard2 = makeCard({ id: 114, ability: 'Wild', color: 'wild' });
-    const wildCard3 = makeCard({ id: 200, ability: 'Wild', color: 'wild' });
+  it('skips wild ability when all owned cards are wild or uncolored', () => {
+    const wildCard1 = makeCard({ id: 113, ability: 'wild', color: null });
+    const wildCard2 = makeCard({ id: 114, ability: 'wild', color: null });
+    const wildCard3 = makeCard({ id: 200, ability: 'wild', color: null });
     const nullColor = makeCard({ id: 116, color: null });
 
     const state = createInitialState(false);
@@ -570,13 +570,13 @@ describe('Wild Ability', () => {
   });
 
   it('ASSIGN_WILD_COLOR is rejected if the player does not own a card with that color', () => {
-    const wildCard = makeCard({ id: 115, ability: 'Wild', color: 'wild', cost: {} });
+    const wildCard = makeCard({ id: 115, ability: 'wild', color: null, cost: {} });
     const redCard = makeCard({ id: 116, color: 'red', bonus: 1 });
     const state = createInitialState(false);
     const s: GameState = {
       ...state,
       phase: 'assign_wild',
-      pendingAbility: 'Wild',
+      pendingAbility: 'wild',
       lastPurchasedCard: wildCard,
       players: [
         makePlayer({ purchasedCards: [redCard, wildCard] }),
@@ -589,11 +589,11 @@ describe('Wild Ability', () => {
   });
 });
 
-// ─── CARD ABILITY: Wild/Turn ──────────────────────────────────────────────────
+// ─── CARD ABILITY: wild and turn ──────────────────────────────────────────────
 
-describe('Wild/Turn Ability', () => {
-  it('places the Wild card and keeps the turn on the same player', () => {
-    const wildCard = makeCard({ id: 120, ability: 'Wild/Turn', color: 'wild', cost: {} });
+describe('wild and turn ability', () => {
+  it('places the wild card and keeps the turn on the same player', () => {
+    const wildCard = makeCard({ id: 120, ability: 'wild and turn', color: null, cost: {} });
     const targetCard = makeCard({ id: 121, color: 'green', bonus: 1 });
     const state = createInitialState(false);
     const s: GameState = {
@@ -610,6 +610,8 @@ describe('Wild/Turn Ability', () => {
     expect(next.phase).toBe('assign_wild');
 
     const resolved = reducer(next, { type: 'ASSIGN_WILD_COLOR', wildCardId: 120, color: 'green' });
+    // repeatTurn is set true by ASSIGN_WILD_COLOR then consumed by advanceTurn,
+    // leaving the same player on a fresh turn.
     expect(resolved.repeatTurn).toBe(false);
     expect(resolved.currentPlayer).toBe(0);
     expect(resolved.phase).toBe('mandatory');
@@ -688,7 +690,10 @@ describe('Royal Card Abilities', () => {
   });
 
   it('awards another royal card when crossing the 6-crown milestone', () => {
-    const card = makeCard({ id: 141, crowns: 4, cost: {} });
+    // Realistic scenario: player already at 3 crowns (previously crossed the
+    // 3-crown milestone) buys a 3-crown card, crossing only the 6-crown
+    // milestone this purchase. Real card data caps at 3 crowns per jewel card.
+    const card = makeCard({ id: 141, crowns: 3, cost: {} });
     const royalCard = makeCard({ id: 201, level: 'royal', points: 5, cost: {} });
     const state = createInitialState(false);
     const s: GameState = {
@@ -697,7 +702,7 @@ describe('Royal Card Abilities', () => {
       pyramid: { ...state.pyramid, level1: [card, ...state.pyramid.level1.slice(0, 4)] },
       royalDeck: [royalCard],
       players: [
-        makePlayer({ crowns: 2 }),
+        makePlayer({ crowns: 3 }),
         makePlayer(),
       ],
     };
@@ -708,6 +713,49 @@ describe('Royal Card Abilities', () => {
     const next = reducer(afterPurchase, { type: 'CHOOSE_ROYAL_CARD', cardId: 201 });
     expect(next.players[0].royalCards).toHaveLength(1);
     expect(next.players[0].crowns).toBe(6);
+  });
+
+  it('throws when a single purchase would cross both crown milestones (defensive invariant)', () => {
+    // Defensive: this scenario is not reachable from real card data (max 3
+    // crowns per jewel card), but the reducer must fail loudly rather than
+    // silently drop the second royal award if it ever does occur.
+    const card = makeCard({ id: 142, crowns: 6, cost: {} });
+    const royalCard = makeCard({ id: 202, level: 'royal', points: 3, cost: {} });
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      phase: 'mandatory',
+      pyramid: { ...state.pyramid, level1: [card, ...state.pyramid.level1.slice(0, 4)] },
+      royalDeck: [royalCard],
+      players: [makePlayer({ crowns: 0 }), makePlayer()],
+    };
+
+    expect(() =>
+      reducer(s, { type: 'PURCHASE_CARD', cardId: 142, goldUsage: {} }),
+    ).toThrow(/crossed 2 crown milestones/);
+  });
+
+  it('throws when a royal card with non-zero crowns is chosen (defensive invariant)', () => {
+    // Defensive: royal cards in the current data have no crowns. The reducer
+    // currently propagates royalCard.points but not royalCard.crowns — fail
+    // loudly if a crown-bearing royal card is ever introduced.
+    const card = makeCard({ id: 143, crowns: 3, cost: {} });
+    const royalCard = makeCard({ id: 203, level: 'royal', points: 3, crowns: 2, cost: {} });
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      phase: 'mandatory',
+      pyramid: { ...state.pyramid, level1: [card, ...state.pyramid.level1.slice(0, 4)] },
+      royalDeck: [royalCard],
+      players: [makePlayer({ crowns: 0 }), makePlayer()],
+    };
+
+    const afterPurchase = reducer(s, { type: 'PURCHASE_CARD', cardId: 143, goldUsage: {} });
+    expect(afterPurchase.phase).toBe('choose_royal');
+
+    expect(() =>
+      reducer(afterPurchase, { type: 'CHOOSE_ROYAL_CARD', cardId: 203 }),
+    ).toThrow(/crown-bearing royal cards are not supported/);
   });
 
   it('royal card with Token ability defers to resolve_ability phase for player to choose board position', () => {
@@ -1102,6 +1150,70 @@ describe('PURCHASE_CARD from reserved cards', () => {
     expect(next.players[0].purchasedCards.some(c => c.id === 90)).toBe(true);
     expect(next.players[0].reservedCards).toHaveLength(0);
     expect(next.players[0].prestige).toBe(1);
+  });
+});
+
+// ─── PURCHASE_CARD gold allocation validation ─────────────────────────────────
+
+describe('PURCHASE_CARD gold allocation validation', () => {
+  it('rejects overallocated gold (more gold assigned to a color than that color needs)', () => {
+    // Regression for a bug where overallocated gold caused tokens to be minted:
+    // paying 3 gold for a 1-black cost would refund 2 black tokens into the
+    // player's pool and push the bag negative. canAfford now rejects this.
+    const card = makeCard({ id: 999, cost: { black: 1 } });
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      phase: 'mandatory',
+      pyramid: { ...state.pyramid, level1: [card, ...state.pyramid.level1.slice(0, 4)] },
+      players: [
+        makePlayer({ tokens: { ...emptyPool(), black: 5, gold: 3 } }),
+        makePlayer(),
+      ],
+    };
+
+    const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 999, goldUsage: { black: 3 } });
+    expect(next).toBe(s); // rejected — state identity preserved
+  });
+
+  it('rejects negative gold allocation', () => {
+    // Regression: a negative gold allocation made deductTokenCost refund gold
+    // and over-deduct the colored token.
+    const card = makeCard({ id: 998, cost: { black: 2 } });
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      phase: 'mandatory',
+      pyramid: { ...state.pyramid, level1: [card, ...state.pyramid.level1.slice(0, 4)] },
+      players: [
+        makePlayer({ tokens: { ...emptyPool(), black: 3 } }),
+        makePlayer(),
+      ],
+    };
+
+    const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 998, goldUsage: { black: -1 } });
+    expect(next).toBe(s);
+  });
+
+  it('accepts exact gold allocation (gold equal to remaining shortage)', () => {
+    // Sanity check: the validation must not reject well-formed allocations.
+    const card = makeCard({ id: 997, color: 'black', cost: { black: 3 } });
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      phase: 'mandatory',
+      pyramid: { ...state.pyramid, level1: [card, ...state.pyramid.level1.slice(0, 4)] },
+      players: [
+        makePlayer({ tokens: { ...emptyPool(), black: 2, gold: 1 } }),
+        makePlayer(),
+      ],
+    };
+
+    const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 997, goldUsage: { black: 1 } });
+    expect(next.players[0].purchasedCards.some(c => c.id === 997)).toBe(true);
+    expect(next.players[0].tokens.black).toBe(0);
+    expect(next.players[0].tokens.gold).toBe(0);
+    expect(totalTokensByColor(next)).toEqual(totalTokensByColor(s));
   });
 });
 

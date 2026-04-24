@@ -1,7 +1,7 @@
 """
 SplendorDuelEnv: gymnasium.Env wrapping the ai-game-sim HTTP server.
 
-Observation space: Box(float32, shape=(858,))
+Observation space: Box(float32, shape=(STATE_DIM,))  # currently 859
 Action space:      Discrete(688)
 
 Each step's info dict contains:
@@ -21,7 +21,7 @@ from .sim_client import SimClient
 from .state_encoder import encode, STATE_DIM
 from .action_space import (
     ACTION_SPACE_SIZE,
-    build_legal_index_map,
+    build_legal_index_map_and_mask,
 )
 
 
@@ -82,7 +82,13 @@ class SplendorDuelEnv(gym.Env):
             obs = encode(self._state)
             return obs, self._illegal_action_penalty, False, False, self._make_info()
 
-        result = self.client.step(self._session_id, concrete)
+        try:
+            result = self.client.step(self._session_id, concrete)
+        except Exception as exc:
+            raise RuntimeError(
+                f"SimClient.step failed (session={self._session_id!r}, "
+                f"action_idx={action}, action={concrete!r}): {exc}"
+            ) from exc
         self._state = result["state"]
         self._legal_moves = result["legalMoves"]
         self._update_legal(self._legal_moves)
@@ -90,15 +96,22 @@ class SplendorDuelEnv(gym.Env):
         done: bool = result["done"]
         winner: int | None = result["winner"]
         self._winner = winner
-        current_player: int = self._state.get("currentPlayer", 0)
 
         reward = 0.0
         if done and winner is not None:
-            # Reward from the perspective of the player who just moved.
-            # endTurn() does NOT advance currentPlayer on game_over — it stays as
-            # state.winner.  So the player who just moved is current_player itself.
-            acting_player = current_player
-            reward = 1.0 if winner == acting_player else -1.0
+            # The player who just moved receives +1; the other player receives -1.
+            # On game_over the engine leaves currentPlayer equal to the winner,
+            # but we rely on `winner` directly so a future engine change can't
+            # silently flip reward attribution.
+            current_player: int = self._state.get("currentPlayer", 0)
+            if current_player != winner:
+                import logging as _logging
+                _logging.getLogger(__name__).warning(
+                    "env.step: currentPlayer=%s != winner=%s on game_over; "
+                    "attributing reward to winner regardless.",
+                    current_player, winner,
+                )
+            reward = 1.0
 
         obs = encode(self._state)
         info = self._make_info()
@@ -113,11 +126,13 @@ class SplendorDuelEnv(gym.Env):
 
     def _update_legal(self, legal_moves: list[dict]) -> None:
         """Build index map and mask in one pass over legal_moves."""
-        self._legal_index_map = build_legal_index_map(legal_moves)
-        mask = np.zeros(ACTION_SPACE_SIZE, dtype=bool)
-        for idx in self._legal_index_map:
-            mask[idx] = True
-        self._legal_mask = mask
+        self._legal_index_map, self._legal_mask = build_legal_index_map_and_mask(legal_moves)
+        if legal_moves and not self._legal_mask.any():
+            raise RuntimeError(
+                f"_update_legal: {len(legal_moves)} legal moves returned by server but none "
+                f"mapped to canonical indices — action_space coverage gap.\n"
+                f"  First unmapped move: {legal_moves[0]}"
+            )
 
     def _make_info(self) -> dict:
         return {

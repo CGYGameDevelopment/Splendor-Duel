@@ -21,9 +21,12 @@ Index ranges:
 
 from __future__ import annotations
 
+import logging
 from itertools import combinations as _combinations
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 ACTION_SPACE_SIZE = 688
 
@@ -173,16 +176,28 @@ def index_to_action(idx: int, legal_moves: list[dict]) -> dict | None:
 
 def build_legal_index_map(legal_moves: list[dict]) -> dict[int, dict]:
     """Return a dict mapping canonical action index → action dict for all legal moves."""
-    result: dict[int, dict] = {}
+    index_map, _ = build_legal_index_map_and_mask(legal_moves)
+    return index_map
+
+
+def build_legal_index_map_and_mask(
+    legal_moves: list[dict],
+) -> tuple[dict[int, dict], np.ndarray]:
+    """Return (index_map, mask) in a single pass over legal_moves."""
+    index_map: dict[int, dict] = {}
+    mask = np.zeros(ACTION_SPACE_SIZE, dtype=bool)
     for action in legal_moves:
         idx = action_to_index(action)
-        if idx is not None:
-            assert idx not in result, (
-                f"Duplicate canonical index {idx} produced by two different legal moves: "
-                f"{result[idx]} and {action}"
-            )
-            result[idx] = action
-    return result
+        if idx is None:
+            logger.warning("build_legal_index_map: unmapped legal action %s", action)
+            continue
+        assert idx not in index_map, (
+            f"Duplicate canonical index {idx} produced by two different legal moves: "
+            f"{index_map[idx]} and {action}"
+        )
+        index_map[idx] = action
+        mask[idx] = True
+    return index_map, mask
 
 
 def build_legal_mask(legal_moves: list[dict]) -> np.ndarray:

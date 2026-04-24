@@ -65,7 +65,12 @@ train
 
 **4. Play against the trained bot:**
 ```bash
-play-vs-ai
+.venv\Scripts\play-vs-ai.exe checkpoints\best.pt
+```
+
+Or use the convenience launcher (starts all servers + CLI in separate windows):
+```bash
+play_vs_ai.bat
 ```
 
 ---

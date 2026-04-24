@@ -164,3 +164,7 @@ def main(
 ) -> None:
     """Run the AI bot. It creates a session and waits for a human to join."""
     asyncio.run(_run(checkpoint, server, sim_url, name, greedy))
+
+
+if __name__ == "__main__":
+    app()

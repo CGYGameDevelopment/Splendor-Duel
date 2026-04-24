@@ -118,7 +118,7 @@ function reserveMoves(state: GameState): Action[] {
   return moves;
 }
 
-// Purchase moves — enumerate all affordable cards with valid gold usage
+// Purchase moves — enumerate all affordable cards with valid gold usage.
 function purchaseMoves(state: GameState): Action[] {
   const player = state.players[state.currentPlayer];
   const moves: Action[] = [];
@@ -130,30 +130,19 @@ function purchaseMoves(state: GameState): Action[] {
     ...player.reservedCards,
   ];
 
+  // Wild cards may only be purchased if the player already owns a Jewel Card
+  // with an intrinsic gem color (see rulebook: "null is not a color").
+  const hasColoredCard = player.purchasedCards.some(ownedCard => ownedCard.color !== null);
+
   for (const card of candidates) {
-    // Wild cards require the player to own at least one Jewel Card with a GemColor
-    if (card.color === 'wild') {
-      const hasColoredCard = player.purchasedCards.some(
-        ownedCard => ownedCard.color !== 'wild' && ownedCard.color !== null
-      );
-      if (!hasColoredCard) continue;
-      if (!canAfford(card, player)) continue;
-      const cost = netCost(card, player);
-      const goldOptions = goldUsageCombinations(cost, player.tokens);
-      for (const goldUsage of goldOptions) {
-        moves.push({ type: 'PURCHASE_CARD', cardId: card.id, goldUsage });
-      }
-      continue;
-    }
+    const isWild = card.ability === 'wild' || card.ability === 'wild and turn';
+    if (isWild && !hasColoredCard) continue;
+    if (!canAfford(card, player)) continue;
 
     const cost = netCost(card, player);
-
-    if (canAfford(card, player)) {
-      // Generate gold usage options
-      const goldOptions = goldUsageCombinations(cost, player.tokens);
-      for (const goldUsage of goldOptions) {
-        moves.push({ type: 'PURCHASE_CARD', cardId: card.id, goldUsage });
-      }
+    const goldOptions = goldUsageCombinations(cost, player.tokens);
+    for (const goldUsage of goldOptions) {
+      moves.push({ type: 'PURCHASE_CARD', cardId: card.id, goldUsage });
     }
   }
 
@@ -235,7 +224,7 @@ function assignWildColorMoves(state: GameState): Action[] {
 
   const availableColors = new Set<GemColor>(
     player.purchasedCards
-      .filter(card => card.id !== wildCard.id && card.color !== 'wild' && card.color !== null)
+      .filter(card => card.id !== wildCard.id && card.color !== null)
       .map(card => card.color as GemColor)
   );
 

@@ -37,6 +37,8 @@ def win_rate_vs_greedy(
     model.eval()
     opponent = GreedyPurchaseAgent()
     wins = 0
+    wins_as_p0 = 0
+    wins_as_p1 = 0
 
     for game_idx in range(n_games):
         model_player = game_idx % 2  # alternate sides each game
@@ -61,8 +63,26 @@ def win_rate_vs_greedy(
             obs_np, _, done, _, info = env.step(action)
             step += 1
 
-        if info["winner"] == model_player:
+        won = info["winner"] == model_player
+        if won:
             wins += 1
+            if model_player == 0:
+                wins_as_p0 += 1
+            else:
+                wins_as_p1 += 1
+
+    games_as_p0 = n_games // 2 + (n_games % 2)
+    games_as_p1 = n_games // 2
+    wr_p0 = wins_as_p0 / games_as_p0 if games_as_p0 else 0.0
+    wr_p1 = wins_as_p1 / games_as_p1 if games_as_p1 else 0.0
+    bias = abs(wr_p0 - wr_p1)
+    if bias > 0.1:
+        import logging as _logging
+        _logging.getLogger(__name__).warning(
+            "win_rate_vs_greedy: first-player bias detected — "
+            "win rate as P0=%.1f%%, as P1=%.1f%% (gap %.1f%%)",
+            wr_p0 * 100, wr_p1 * 100, bias * 100,
+        )
 
     return wins / n_games
 

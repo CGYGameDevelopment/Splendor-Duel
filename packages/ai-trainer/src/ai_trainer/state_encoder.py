@@ -1,105 +1,132 @@
 """
-GameState dict → flat float32 numpy array of shape (858,).
+GameState dict → flat float32 numpy array of shape (859,).
 
 Layout (always from the current player's perspective):
   [0..199]    Board:          25 cells × 8  (one-hot: 7 token colors + empty)
-  [200..206]  Bag:            7 token counts / 10
+  [200..206]  Bag:            7 token counts / _TOKEN_SCALE
   [207..518]  Pyramid:        12 card slots × 26 features  (level1: 5, level2: 4, level3: 3)
-  [519..521]  Deck sizes:     3 values / 30
+  [519..521]  Deck sizes:     3 values / _DECK_SCALE
   [522..625]  Royal deck:     4 card slots × 26 features
-  [626]       Table privs:    count / 3
+  [626]       Table privs:    count / _TABLE_PRIV_SCALE
   [627..734]  Current player: 108 features
   [735..842]  Opponent:       108 features
-  [843..848]  Phase:          6 one-hot
-  [849]       currentPlayer:  raw 0 or 1
-  [850]       extraTurns:     / 3
-  [851..857]  pendingAbility: 7 one-hot (6 abilities + none)
+  [843..849]  Phase:          7 one-hot (all engine phases except game_over)
+  [850]       reserved:       always 0 (was raw currentPlayer; removed to preserve
+                              seat-symmetric perspective encoding)
+  [851]       extraTurns:     / _EXTRA_TURNS_SCALE
+  [852..858]  pendingAbility: 7 one-hot (6 abilities + none)
 
-  TOTAL: 858
+  TOTAL: 859
 
 Per-card features (26):
-  [0..7]   color one-hot (8): white/blue/green/red/black/joker/points + absent=7
-  [8]      present bit
-  [9]      points / 6
-  [10]     bonus / 2
-  [11..16] ability one-hot (6 abilities)
+  [0..6]   color one-hot (7): white/blue/green/red/black/wild/null
+  [7]      absent bit (1.0 when this slot has no card)
+  [8]      present bit (1.0 when this slot has a card)
+  [9]      points / _POINTS_SCALE
+  [10]     bonus / _BONUS_SCALE
+  [11..16] ability one-hot (6 abilities: Turn, Token, Take, Privilege, wild, wild and turn)
   [17]     no-ability bit
-  [18]     crowns / 3
-  [19..25] cost per token color / 8
+  [18]     crowns / _CARD_CROWNS_SCALE
+  [19..25] cost per token color / _COST_SCALE
 
 Per-player features (108):
-  [0..6]   tokens (7 colors) / 10
-  [7..11]  bonuses per gem color (5) / 5
-  [12..16] prestige per gem color (5) / 10
-  [17]     total prestige / 20
-  [18]     crowns / 10
-  [19]     privileges / 3
-  [20]     reserved card count / 3
+  [0..6]   tokens (7 colors) / _TOKEN_SCALE
+  [7..11]  bonuses per gem color (5) / _BONUS_COLOR_SCALE
+  [12..16] prestige per gem color (5) / _PRESTIGE_COLOR_SCALE
+  [17]     total prestige / _TOTAL_PRESTIGE_SCALE
+  [18]     crowns / _PLAYER_CROWNS_SCALE
+  [19]     privileges / _PRIVILEGES_SCALE
+  [20]     reserved card count / _RESERVED_SCALE
   [21..46] reserved card 0 (26 features)
   [47..72] reserved card 1 (26 features)
   [73..98] reserved card 2 (26 features)
-  [99..107] royal cards: 9 floats (3 royals × 3 scalar features: points/6, crowns/3, has_ability)
+  [99..107] royal cards: 9 floats (3 royals × 3 scalar features:
+                                   points/_POINTS_SCALE, crowns/_CARD_CROWNS_SCALE, has_ability)
+
+Vocabulary note: the JSON card data uses `color: null` and `ability: "wild" | "wild and turn"`
+for wild jewel cards (not the `color: "wild"` / `ability: "Wild"` pattern suggested by
+types.ts). The encoder matches what actually appears at runtime.
 """
 
 from __future__ import annotations
 
 import numpy as np
 
-STATE_DIM = 858
+STATE_DIM = 859
 
 TOKEN_COLORS = ["white", "blue", "green", "red", "black", "pearl", "gold"]
 GEM_COLORS = ["white", "blue", "green", "red", "black"]
-CARD_COLORS = ["white", "blue", "green", "red", "black", "joker", "points"]  # index 7 = absent
-ABILITIES = ["Turn", "Token", "Bonus", "Take", "Privilege", "Bonus/Turn"]
+# CARD_COLORS matches the runtime `card.color` field:
+#   - gem colors (5) directly from data
+#   - "wild" slot set for wild jewel cards (data stores them as color=null, ability='wild'|'wild and turn')
+#   - "null" slot set for non-gem, non-wild cards (royal cards)
+# Position 7 in the per-card layout is the "absent" bit (slot has no card at all).
+CARD_COLORS = ["white", "blue", "green", "red", "black", "wild", "null"]
+# ABILITIES matches the runtime `card.ability` / `state.pendingAbility` strings.
+# 'wild' and 'wild and turn' are the lowercase/spaced forms emitted by the JSON card data.
+ABILITIES = ["Turn", "Token", "Take", "Privilege", "wild", "wild and turn"]
+# Labels for wild-like abilities, used to detect wild jewel cards whose color field is null.
+_WILD_ABILITIES = frozenset({"wild", "wild and turn"})
 PHASES = [
     "optional_privilege",
     "optional_replenish",
     "mandatory",
-    "discard",
+    "choose_royal",
     "resolve_ability",
-    "place_bonus",
-    # "game_over" is intentionally excluded: the encoder is never called on terminal
-    # states during training (the episode loop exits before the obs is used).
-    # Including it would shift all subsequent indices and change STATE_DIM.
+    "assign_wild",
+    "discard",
+    # "game_over" is intentionally excluded: its bit would only ever fire on the
+    # terminal observation, whose value estimate is ignored by the RL bootstrap.
 ]
 
 CARD_FEATURES = 26
 PLAYER_FEATURES = 108
 
 # Normalization divisors — adjust these if the game's numeric ranges change.
-_TOKEN_SCALE = 10.0          # token counts per color
-_POINTS_SCALE = 6.0          # card point values
-_BONUS_SCALE = 2.0           # card bonus values
-_COST_SCALE = 8.0            # token cost per color
-_CARD_CROWNS_SCALE = 3.0     # crowns on a card
-_DECK_SCALE = 30.0           # cards remaining in a deck
-_BONUS_COLOR_SCALE = 5.0     # purchased bonuses per gem color
-_PRESTIGE_COLOR_SCALE = 10.0 # prestige earned per gem color
-_TOTAL_PRESTIGE_SCALE = 20.0 # total prestige points
-_PLAYER_CROWNS_SCALE = 10.0  # total crowns on a player
-_PRIVILEGES_SCALE = 3.0      # privilege tokens
-_RESERVED_SCALE = 3.0        # reserved card count
-_EXTRA_TURNS_SCALE = 3.0     # extraTurns counter
-_TABLE_PRIV_SCALE = 3.0      # table-level privilege count
+# Values chosen to cover theoretical game maxima, not just typical ranges, so
+# the encoder never emits values > 1.0 (which would then be clamped and lose
+# information).
+_TOKEN_SCALE = 10.0          # token counts per color (max 4 gems / 2 pearl / 3 gold per pool)
+_POINTS_SCALE = 6.0          # card point values (max 6 in data)
+_BONUS_SCALE = 2.0           # card bonus values (max 2 in data)
+_COST_SCALE = 8.0            # token cost per color (max 8 in data)
+_CARD_CROWNS_SCALE = 3.0     # crowns on a card (max 3 in data)
+_DECK_SCALE = 30.0           # cards remaining in a deck (max 25 at start)
+_BONUS_COLOR_SCALE = 12.0    # purchased bonuses per gem color (theoretical max: 10×1 + 1×2 + 1 wild = 12)
+_PRESTIGE_COLOR_SCALE = 14.0 # prestige earned per gem color (wins at 10, but overshoot possible up to ~14)
+_TOTAL_PRESTIGE_SCALE = 26.0 # total prestige points (wins at 20, overshoot possible)
+_PLAYER_CROWNS_SCALE = 13.0  # total crowns on a player (wins at 10, overshoot possible)
+_PRIVILEGES_SCALE = 3.0      # privilege tokens (max 3)
+_RESERVED_SCALE = 3.0        # reserved card count (max 3)
+_EXTRA_TURNS_SCALE = 3.0     # extraTurns counter (reserved — engine uses repeatTurn bool, field absent)
+_TABLE_PRIV_SCALE = 3.0      # table-level privilege count (max 3)
 
 
 # ── Per-card encoding ─────────────────────────────────────────────────────────
 
 def _encode_card(card: dict | None, out: np.ndarray, offset: int) -> None:
-    """Write 26 floats for one card slot starting at out[offset]. Zeros if absent."""
+    """Write 26 floats for one card slot starting at out[offset]. Marks slot absent if None."""
     if card is None:
-        return  # already zero-initialised by caller
+        out[offset + 7] = 1.0  # absent bit
+        return
 
-    color = card.get("color", "points")
-    if color in CARD_COLORS:
+    # Color one-hot.  Gem colors come straight from the `color` field; wild jewel
+    # cards have color=null in data so they are detected via their ability; all
+    # other null-color cards (royal cards) use the "null" slot.
+    color = card.get("color")
+    ability = card.get("ability")
+    if color in GEM_COLORS:
         out[offset + CARD_COLORS.index(color)] = 1.0
-    # index 7 = absent — left 0 since card is present
+    elif ability in _WILD_ABILITIES:
+        out[offset + CARD_COLORS.index("wild")] = 1.0
+    else:
+        out[offset + CARD_COLORS.index("null")] = 1.0
+
     out[offset + 8] = 1.0  # present bit
     out[offset + 9] = card.get("points", 0) / _POINTS_SCALE
     out[offset + 10] = card.get("bonus", 0) / _BONUS_SCALE
 
-    ability = card.get("ability")
-    if ability and ability in ABILITIES:
+    if ability in ABILITIES:
         out[offset + 11 + ABILITIES.index(ability)] = 1.0
     else:
         out[offset + 17] = 1.0  # no-ability bit
@@ -207,20 +234,80 @@ def encode(state: dict) -> np.ndarray:
     _encode_player(players[current_player_idx], out, 627)
     _encode_player(players[opponent_idx], out, 735)
 
-    # Phase
+    # Phase (7 one-hot slots, 843..849)
     phase = state.get("phase", "mandatory")
     if phase in PHASES:
         out[843 + PHASES.index(phase)] = 1.0
 
-    out[849] = float(current_player_idx)
-    out[850] = state.get("extraTurns", 0) / _EXTRA_TURNS_SCALE
+    # out[850] is intentionally left zero — encoding the raw seat index would
+    # leak absolute player identity into an otherwise perspective-symmetric
+    # observation.  The slot is kept so the layout stays aligned with the
+    # docstring and so future uses have a natural home.
+    out[851] = state.get("extraTurns", 0) / _EXTRA_TURNS_SCALE
 
-    # Pending ability
+    # Pending ability (852..858)
     pending = state.get("pendingAbility")
     if pending and pending in ABILITIES:
-        out[851 + ABILITIES.index(pending)] = 1.0
+        out[852 + ABILITIES.index(pending)] = 1.0
     else:
-        out[857] = 1.0  # none
+        out[858] = 1.0  # none
 
     assert out.shape == (STATE_DIM,), f"State encoder output shape {out.shape} != ({STATE_DIM},)"
+    # Detect out-of-range values caused by scale constants being too small for actual game values.
+    # Clamp rather than assert so training can continue, but warn loudly on first occurrence per index.
+    if (out > 1.05).any() or (out < 0.0).any():
+        over_mask = out > 1.05
+        under_mask = out < 0.0
+        bad_indices = np.nonzero(over_mask | under_mask)[0]
+        new_indices = [i for i in bad_indices.tolist() if i not in _warned_indices]
+        if new_indices:
+            _warned_indices.update(new_indices)
+            import logging as _logging
+            samples = ", ".join(
+                f"[{i}]={out[i]:.3f} ({_describe_index(int(i))})" for i in new_indices[:6]
+            )
+            _logging.getLogger(__name__).warning(
+                "state_encoder: %d new out-of-range indices (over=%d, under=%d). "
+                "Samples: %s. Clamping to [0, 1].",
+                len(new_indices), int(over_mask.sum()), int(under_mask.sum()), samples,
+            )
+        np.clip(out, 0.0, 1.0, out=out)
     return out
+
+
+_warned_indices: set[int] = set()
+
+
+def _describe_index(i: int) -> str:
+    """Map a flat index to a human-readable feature name for diagnostics."""
+    if i < 200:
+        cell, slot = divmod(i, 8)
+        return f"board[{cell}].{'color' if slot < 7 else 'empty'}[{slot}]"
+    if i < 207:
+        return f"bag.{TOKEN_COLORS[i - 200]}/_TOKEN_SCALE"
+    if i < 519:
+        rel = i - 207
+        slot, field = divmod(rel, CARD_FEATURES)
+        level = "L1" if slot < 5 else ("L2" if slot < 9 else "L3")
+        return f"pyramid[{level}#{slot}].field[{field}]"
+    if i < 522:
+        return f"deck.level{i - 518}/_DECK_SCALE"
+    if i < 626:
+        rel = i - 522
+        slot, field = divmod(rel, CARD_FEATURES)
+        return f"royalDeck[{slot}].field[{field}]"
+    if i == 626:
+        return "table.privileges/_TABLE_PRIV_SCALE"
+    if i < 735:
+        return f"currentPlayer.field[{i - 627}]"
+    if i < 843:
+        return f"opponent.field[{i - 735}]"
+    if i < 850:
+        return f"phase[{PHASES[i - 843]}]"
+    if i == 850:
+        return "reserved"
+    if i == 851:
+        return "extraTurns/_EXTRA_TURNS_SCALE"
+    if i < 858:
+        return f"pendingAbility[{ABILITIES[i - 852]}]"
+    return "pendingAbility[none]"

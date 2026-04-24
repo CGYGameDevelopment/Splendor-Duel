@@ -12,13 +12,15 @@ Options:
   --sim-url TEXT            game-sim server URL  [default: http://127.0.0.1:3002]
   --checkpoint-dir PATH     Directory for saving model checkpoints  [default: packages/ai-trainer/checkpoints]
   --lr FLOAT                Learning rate  [default: 3e-4]
+  --lr-decay / --no-lr-decay  Linearly decay LR to 0 across the run  [default: True]
+  --parallel-envs INT       Number of parallel rollout envs  [default: 4]
   --resume PATH             Resume training from a checkpoint file
 """
 
 from __future__ import annotations
 
-import copy
 import csv
+import time
 from pathlib import Path
 
 import requests
@@ -36,6 +38,43 @@ app = typer.Typer(add_completion=False)
 
 
 CHECKPOINT_VERSION = 1
+
+# Transient network errors get retried with exponential backoff before the
+# run surrenders.  HTTP errors from the server (4xx/5xx) are not retried —
+# those indicate a real problem, not a blip.
+_COLLECT_RETRY_ATTEMPTS = 4
+_COLLECT_RETRY_BASE_DELAY = 1.0  # seconds
+
+
+def _collect_with_retries(
+    model: ActorCriticNet,
+    envs: list[SplendorDuelEnv],
+    episodes_per_iter: int,
+    device: torch.device,
+):
+    """Call collect_episodes, retrying on transient connection/timeout errors."""
+    last_exc: Exception | None = None
+    for attempt in range(_COLLECT_RETRY_ATTEMPTS):
+        try:
+            return collect_episodes(
+                model,
+                envs if len(envs) > 1 else envs[0],
+                episodes_per_iter,
+                device=device,
+            )
+        except (requests.ConnectionError, requests.Timeout) as exc:
+            last_exc = exc
+            if attempt == _COLLECT_RETRY_ATTEMPTS - 1:
+                break
+            delay = _COLLECT_RETRY_BASE_DELAY * (2 ** attempt)
+            typer.echo(
+                f"  !! transient network error ({type(exc).__name__}); "
+                f"retrying in {delay:.1f}s...",
+                err=True,
+            )
+            time.sleep(delay)
+    assert last_exc is not None
+    raise last_exc
 
 
 def _save_checkpoint(
@@ -65,12 +104,16 @@ def main(
     sim_url: str = typer.Option("http://127.0.0.1:3002", help="game-sim server URL"),
     checkpoint_dir: Path = typer.Option(Path(__file__).resolve().parent.parent.parent / "checkpoints", help="Checkpoint directory"),
     lr: float = typer.Option(3e-4, help="Learning rate"),
+    lr_decay: bool = typer.Option(True, help="Linearly decay LR to 0 across the run"),
+    parallel_envs: int = typer.Option(4, help="Number of parallel rollout envs"),
     resume: Path | None = typer.Option(None, help="Resume from checkpoint file"),
 ) -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     typer.echo(f"Training on {device}")
 
-    env = SplendorDuelEnv(sim_url=sim_url)
+    assert parallel_envs >= 1, "parallel_envs must be >= 1"
+    envs = [SplendorDuelEnv(sim_url=sim_url) for _ in range(parallel_envs)]
+    env = envs[0]  # used for evaluation
 
     if not env.client.health():
         typer.echo(
@@ -131,9 +174,18 @@ def main(
             if not log_existed:
                 writer.writerow(["iteration", "transitions", "policy_loss", "value_loss", "entropy", "win_rate"])
 
-            for iteration in range(start_iteration, start_iteration + iterations):
+            total_iterations = iterations
+            for iter_offset, iteration in enumerate(
+                range(start_iteration, start_iteration + iterations)
+            ):
+                if lr_decay:
+                    frac = 1.0 - (iter_offset / max(total_iterations, 1))
+                    scheduled_lr = max(lr * frac, lr * 0.05)  # floor at 5% of initial LR
+                    for pg in optimizer.param_groups:
+                        pg["lr"] = scheduled_lr
+
                 try:
-                    episodes = collect_episodes(model, env, episodes_per_iter, device=device)
+                    episodes = _collect_with_retries(model, envs, episodes_per_iter, device)
                 except requests.RequestException as exc:
                     typer.echo(
                         f"\nERROR: game-sim server became unreachable at iteration {iteration}: {exc}\n"
@@ -147,22 +199,34 @@ def main(
 
                 n_transitions = sum(len(ep) for ep in episodes)
                 n_episodes = len(episodes)
-                p0_wins = sum(
-                    1 for ep in episodes
-                    if ep.transitions and (
-                        (ep.transitions[-1].reward > 0 and ep.transitions[-1].player_id == 0)
-                        or (ep.transitions[-1].reward < 0 and ep.transitions[-1].player_id == 1)
-                    )
-                )
+                # Only count naturally-terminal episodes.  For truncated ones
+                # the final reward is 0 and player_id identifies a non-winner,
+                # so the old boolean test silently undercounted.
+                p0_wins = 0
+                natural_terminals = 0
+                for ep in episodes:
+                    if not ep.transitions:
+                        continue
+                    last = ep.transitions[-1]
+                    if not last.done:
+                        continue
+                    natural_terminals += 1
+                    if (last.reward > 0 and last.player_id == 0) or (
+                        last.reward < 0 and last.player_id == 1
+                    ):
+                        p0_wins += 1
                 avg_moves = n_transitions / n_episodes if n_episodes else 0
+                current_lr = optimizer.param_groups[0]["lr"]
                 typer.echo(
                     f"[{iteration:4d}] "
+                    f"lr={current_lr:.2e}  "
                     f"transitions={n_transitions:5d}  "
-                    f"won={p0_wins}/{n_episodes}  "
+                    f"won={p0_wins}/{natural_terminals}  "
                     f"moves={avg_moves:.0f}  "
                     f"policy_loss={losses['policy_loss']:.4f}  "
                     f"value_loss={losses['value_loss']:.4f}  "
-                    f"entropy={losses['entropy']:.4f}"
+                    f"entropy={losses['entropy']:.4f}  "
+                    f"adv_clip={losses.get('adv_clip_frac', 0.0):.3f}"
                 )
 
                 win_rate: float | None = None
@@ -188,9 +252,11 @@ def main(
                         _save_checkpoint(checkpoint_dir / "best.pt", iteration, model, optimizer, win_rate)
                         typer.echo(f"  >> New best model (win rate: {win_rate:.1%})")
 
-                    # Snapshot current model for next checkpoint comparison
+                    # Snapshot current model for next checkpoint comparison.
+                    # load_state_dict already copies parameters, so a deepcopy
+                    # of the source dict would just waste memory.
                     prev_model = ActorCriticNet().to(device)
-                    prev_model.load_state_dict(copy.deepcopy(model.state_dict()))
+                    prev_model.load_state_dict(model.state_dict())
                     prev_model.eval()
 
                 elif iteration % checkpoint_every == 0:
@@ -206,6 +272,10 @@ def main(
                 ])
                 log_file.flush()
     finally:
-        env.close()
+        for e in envs:
+            try:
+                e.close()
+            except Exception:
+                pass
 
     typer.echo("Training complete.")
