@@ -6,15 +6,17 @@ Usage:
 
 Options:
   --iterations INT          Number of training iterations  [default: 500]
-  --episodes-per-iter INT   Self-play episodes per iteration  [default: 20]
+  --episodes-per-iter INT   Self-play episodes per iteration  [default: 40]
   --eval-every INT          Evaluate vs random every N iterations  [default: 50]
-  --checkpoint-every INT    Save latest checkpoint every N iterations  [default: 10]
+  --checkpoint-every INT    Save latest checkpoint every N iterations  [default: 5]
   --sim-url TEXT            game-sim server URL  [default: http://127.0.0.1:3002]
   --checkpoint-dir PATH     Directory for saving model checkpoints  [default: packages/ai-trainer/checkpoints]
   --lr FLOAT                Learning rate  [default: 3e-4]
   --lr-decay / --no-lr-decay  Linearly decay LR to 0 across the run  [default: True]
+  --entropy-coef FLOAT      Entropy regularization coefficient  [default: 0.05]
   --parallel-envs INT       Number of parallel rollout envs  [default: 4]
   --resume PATH             Resume training from a checkpoint file
+  --seed INT                Random seed for reproducibility  [default: 42]
 """
 
 from __future__ import annotations
@@ -23,6 +25,7 @@ import csv
 import time
 from pathlib import Path
 
+import numpy as np
 import requests
 import torch
 import torch.optim as optim
@@ -32,12 +35,12 @@ from .env import SplendorDuelEnv
 from .model import ActorCriticNet
 from .ppo import PPOConfig, update
 from .self_play import collect_episodes
-from .evaluate import win_rate_vs_greedy, win_rate_vs_model
+from .evaluate import win_rate_vs_greedy, win_rate_vs_model, win_rate_vs_random
 
 app = typer.Typer(add_completion=False)
 
 
-CHECKPOINT_VERSION = 1
+CHECKPOINT_VERSION = 5  # bumped for reduced action space (358 vs 688; policy head incompatible)
 
 # Transient network errors get retried with exponential backoff before the
 # run surrenders.  HTTP errors from the server (4xx/5xx) are not retried —
@@ -89,6 +92,7 @@ def _save_checkpoint(
         "iteration": iteration,
         "model_state": model.state_dict(),
         "optimizer_state": optimizer.state_dict(),
+        "scheduled_lr": optimizer.param_groups[0]["lr"],
     }
     if win_rate is not None:
         payload["win_rate"] = win_rate
@@ -98,18 +102,23 @@ def _save_checkpoint(
 @app.command()
 def main(
     iterations: int = typer.Option(500, help="Number of training iterations"),
-    episodes_per_iter: int = typer.Option(20, help="Self-play episodes per iteration"),
+    episodes_per_iter: int = typer.Option(40, help="Self-play episodes per iteration"),
     eval_every: int = typer.Option(50, help="Evaluate vs random every N iterations"),
     checkpoint_every: int = typer.Option(5, help="Save latest checkpoint every N iterations"),
     sim_url: str = typer.Option("http://127.0.0.1:3002", help="game-sim server URL"),
     checkpoint_dir: Path = typer.Option(Path(__file__).resolve().parent.parent.parent / "checkpoints", help="Checkpoint directory"),
     lr: float = typer.Option(3e-4, help="Learning rate"),
     lr_decay: bool = typer.Option(True, help="Linearly decay LR to 0 across the run"),
+    entropy_coef: float = typer.Option(0.05, help="Entropy regularization coefficient"),
     parallel_envs: int = typer.Option(4, help="Number of parallel rollout envs"),
     resume: Path | None = typer.Option(None, help="Resume from checkpoint file"),
+    seed: int = typer.Option(42, help="Random seed for reproducibility"),
 ) -> None:
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    typer.echo(f"Training on {device}")
+    typer.echo(f"Training on {device} (seed={seed})")
 
     assert parallel_envs >= 1, "parallel_envs must be >= 1"
     envs = [SplendorDuelEnv(sim_url=sim_url) for _ in range(parallel_envs)]
@@ -124,27 +133,42 @@ def main(
         raise typer.Exit(code=1)
 
     model = ActorCriticNet().to(device)
+    n_params = sum(p.numel() for p in model.parameters())
+    typer.echo(f"Model parameters: {n_params:,}")
     optimizer = optim.Adam(model.parameters(), lr=lr)
-    config = PPOConfig()
+    config = PPOConfig(entropy_coef=entropy_coef)
 
     start_iteration = 1
+    start_lr = lr
     if resume is not None:
         if not resume.exists():
             typer.echo(f"ERROR: checkpoint not found: {resume}", err=True)
             raise typer.Exit(code=1)
         ckpt = torch.load(resume, map_location=device, weights_only=True)
         ckpt_version = ckpt.get("version", 0)
-        model.load_state_dict(ckpt["model_state"])
         if ckpt_version != CHECKPOINT_VERSION:
             typer.echo(
                 f"WARNING: checkpoint version mismatch (file={ckpt_version}, "
-                f"expected={CHECKPOINT_VERSION}). Weights loaded but optimizer state skipped.",
+                f"expected={CHECKPOINT_VERSION}). Attempting to load weights; "
+                f"optimizer state skipped.",
                 err=True,
             )
+            try:
+                model.load_state_dict(ckpt["model_state"])
+            except (RuntimeError, KeyError) as exc:
+                typer.echo(
+                    f"WARNING: could not load model weights (architecture mismatch?): {exc}\n"
+                    "Starting with fresh weights.",
+                    err=True,
+                )
         else:
+            model.load_state_dict(ckpt["model_state"])
             optimizer.load_state_dict(ckpt["optimizer_state"])
         start_iteration = ckpt["iteration"] + 1
-        typer.echo(f"Resumed from {resume} (iteration {ckpt['iteration']})")
+        # Continue the LR schedule from where it left off rather than restarting
+        # from the initial lr, which would cause a spike and destabilise training.
+        start_lr = float(ckpt.get("scheduled_lr", lr))
+        typer.echo(f"Resumed from {resume} (iteration {ckpt['iteration']}, lr={start_lr:.2e})")
 
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
@@ -171,7 +195,11 @@ def main(
         with open(log_path, "a", newline="") as log_file:
             writer = csv.writer(log_file)
             if not log_existed:
-                writer.writerow(["iteration", "transitions", "policy_loss", "value_loss", "entropy", "win_rate"])
+                writer.writerow([
+                    "iteration", "transitions", "truncation_rate",
+                    "policy_loss", "value_loss", "entropy", "kl", "grad_norm",
+                    "win_rate_vs_greedy", "win_rate_vs_random",
+                ])
 
             total_iterations = iterations
             for iter_offset, iteration in enumerate(
@@ -179,7 +207,7 @@ def main(
             ):
                 if lr_decay:
                     frac = 1.0 - (iter_offset / max(total_iterations, 1))
-                    scheduled_lr = max(lr * frac, lr * 0.05)  # floor at 5% of initial LR
+                    scheduled_lr = max(start_lr * frac, lr * 0.05)  # floor at 5% of initial LR
                     for pg in optimizer.param_groups:
                         pg["lr"] = scheduled_lr
 
@@ -203,6 +231,7 @@ def main(
                 # so the old boolean test silently undercounted.
                 p0_wins = 0
                 natural_terminals = 0
+                win_condition_counts: dict[str, int] = {}
                 for ep in episodes:
                     if not ep.transitions:
                         continue
@@ -210,30 +239,51 @@ def main(
                     if not last.done:
                         continue
                     natural_terminals += 1
-                    if (last.reward > 0 and last.player_id == 0) or (
-                        last.reward < 0 and last.player_id == 1
-                    ):
+                    if last.reward > 0 and last.player_id == 0:
                         p0_wins += 1
+                    if ep.win_condition:
+                        win_condition_counts[ep.win_condition] = (
+                            win_condition_counts.get(ep.win_condition, 0) + 1
+                        )
                 avg_moves = n_transitions / n_episodes if n_episodes else 0
+                truncation_rate = 1.0 - (natural_terminals / n_episodes) if n_episodes else 0.0
                 current_lr = optimizer.param_groups[0]["lr"]
+                wc_str = "  ".join(
+                    f"{k}={v}" for k, v in sorted(win_condition_counts.items())
+                ) or "none"
+                kl_val = losses.get("kl", 0.0)
                 typer.echo(
                     f"[{iteration:4d}] "
                     f"lr={current_lr:.2e}  "
                     f"transitions={n_transitions:5d}  "
+                    f"trunc={truncation_rate:.1%}  "
                     f"won={p0_wins}/{natural_terminals}  "
                     f"moves={avg_moves:.0f}  "
+                    f"win_by=[{wc_str}]  "
                     f"policy_loss={losses['policy_loss']:.4f}  "
                     f"value_loss={losses['value_loss']:.4f}  "
                     f"entropy={losses['entropy']:.4f}  "
+                    f"kl={kl_val:.4f}  "
+                    f"grad_norm={losses.get('grad_norm', 0.0):.3f}  "
                     f"adv_clip={losses.get('adv_clip_frac', 0.0):.3f}"
                 )
+                if kl_val > 0.05:
+                    typer.echo(
+                        f"  !! high KL divergence ({kl_val:.4f} > 0.05) — "
+                        "policy is changing rapidly; consider reducing lr or clip_eps",
+                        err=True,
+                    )
 
                 win_rate: float | None = None
+                win_rate_random: float | None = None
 
                 if iteration % eval_every == 0:
                     try:
                         win_rate = win_rate_vs_greedy(model, env, n_games=100, device=device)
-                        typer.echo(f"  >> Win rate vs greedy: {win_rate:.1%}")
+                        typer.echo(f"  >> Win rate vs greedy:  {win_rate:.1%}")
+
+                        win_rate_random = win_rate_vs_random(model, env, n_games=50, device=device, seed=0)
+                        typer.echo(f"  >> Win rate vs random:  {win_rate_random:.1%}")
 
                         if prev_model is not None:
                             wr_vs_prev = win_rate_vs_model(model, prev_model, env, n_games=50, device=device)
@@ -258,18 +308,21 @@ def main(
                     prev_model.load_state_dict(model.state_dict())
                     prev_model.eval()
 
-                elif iteration % checkpoint_every == 0:
-                    _save_checkpoint(checkpoint_dir / "latest.pt", iteration, model, optimizer)
-
                 writer.writerow([
                     iteration,
                     n_transitions,
+                    f"{truncation_rate:.4f}",
                     f"{losses['policy_loss']:.6f}",
                     f"{losses['value_loss']:.6f}",
                     f"{losses['entropy']:.6f}",
+                    f"{losses.get('kl', 0.0):.6f}",
+                    f"{losses.get('grad_norm', 0.0):.6f}",
                     f"{win_rate:.4f}" if win_rate is not None else "",
+                    f"{win_rate_random:.4f}" if win_rate_random is not None else "",
                 ])
                 log_file.flush()
+                if iteration % checkpoint_every == 0:
+                    _save_checkpoint(checkpoint_dir / "latest.pt", iteration, model, optimizer)
     finally:
         for e in envs:
             try:

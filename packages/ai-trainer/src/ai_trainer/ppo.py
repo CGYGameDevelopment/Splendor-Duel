@@ -3,7 +3,7 @@ PPO update with action masking and GAE advantage estimation.
 
 Hyperparameters:
   clip_eps     = 0.2
-  entropy_coef = 0.01
+  entropy_coef = 0.05
   value_coef   = 0.5
   gamma        = 0.99
   lam          = 0.95  (GAE lambda)
@@ -20,6 +20,8 @@ import torch.optim as optim
 
 from .self_play import Episode
 from .model import ActorCriticNet
+from .state_encoder import STATE_DIM
+from .action_space import ACTION_SPACE_SIZE
 
 _ADV_STD_EPSILON = 1e-6   # prevents division by zero in advantage normalisation
 _ADV_CLIP_RANGE = 5.0     # clip normalised advantages to ±5σ
@@ -28,7 +30,7 @@ _ADV_CLIP_RANGE = 5.0     # clip normalised advantages to ±5σ
 @dataclass
 class PPOConfig:
     clip_eps: float = 0.2
-    entropy_coef: float = 0.01
+    entropy_coef: float = 0.05
     value_coef: float = 0.5
     gamma: float = 0.99
     lam: float = 0.95
@@ -44,10 +46,14 @@ def _compute_gae(
     player_ids: list[int],
     gamma: float,
     lam: float,
+    out_advantages: np.ndarray,
+    out_returns: np.ndarray,
     terminal_value: float = 0.0,
-) -> tuple[list[float], list[float]]:
+    terminal_player_id: int = 0,
+) -> None:
     """
-    Compute GAE advantages and discounted returns for a two-player zero-sum game.
+    Compute GAE advantages and discounted returns for a two-player zero-sum game,
+    writing results directly into caller-provided arrays (no intermediate allocation).
 
     Observations are always encoded from the current player's perspective, so
     consecutive steps from different players have values in opposite frames:
@@ -55,14 +61,17 @@ def _compute_gae(
     both the bootstrap value and the accumulated GAE term must be negated to
     convert them to the current player's perspective before computing the TD error.
 
-    terminal_value: value estimate of the state after the last transition.
-    Non-zero only for episodes truncated by a step cap (not naturally terminal).
+    terminal_value: value estimate of the state after the last transition,
+    encoded from terminal_player_id's perspective.  Non-zero only for episodes
+    truncated by a step cap (not naturally terminal).  When terminal_player_id
+    differs from the last acting player, terminal_value must be negated to
+    convert it to that player's frame before bootstrapping GAE.
     """
     n = len(rewards)
-    advantages = [0.0] * n
-    returns = [0.0] * n
     gae = 0.0
-    next_value = terminal_value
+    # Flip terminal_value if it's in the opponent's frame relative to the last actor.
+    last_player = player_ids[n - 1] if n else 0
+    next_value = -terminal_value if terminal_player_id != last_player else terminal_value
 
     for t in reversed(range(n)):
         mask = 0.0 if dones[t] else 1.0
@@ -76,11 +85,9 @@ def _compute_gae(
             ng = gae
         delta = rewards[t] + gamma * nv * mask - values[t]
         gae = delta + gamma * lam * mask * ng
-        advantages[t] = gae
-        returns[t] = advantages[t] + values[t]
+        out_advantages[t] = gae
+        out_returns[t] = gae + values[t]
         next_value = values[t]
-
-    return advantages, returns
 
 
 def update(
@@ -99,59 +106,66 @@ def update(
     if device is None:
         device = next(model.parameters()).device
 
-    # Flatten all episodes into per-transition lists
-    all_obs, all_actions, all_log_probs_old = [], [], []
-    all_advantages, all_returns, all_masks = [], [], []
+    # Pre-allocate flat buffers for all transitions up front, avoiding repeated
+    # list appends and a separate np.stack / np.asarray pass at the end.
+    n = sum(len(ep) for ep in episodes)
+    all_obs = np.empty((n, STATE_DIM), dtype=np.float32)
+    all_masks = np.empty((n, ACTION_SPACE_SIZE), dtype=np.bool_)
+    all_actions = np.empty(n, dtype=np.int64)
+    all_log_probs_old = np.empty(n, dtype=np.float32)
+    all_advantages = np.empty(n, dtype=np.float32)
+    all_returns = np.empty(n, dtype=np.float32)
+    all_values_old = np.empty(n, dtype=np.float32)
 
+    ptr = 0
     for ep in episodes:
+        ep_n = len(ep.transitions)
         rewards = [t.reward for t in ep.transitions]
         values = [t.value for t in ep.transitions]
         dones = [t.done for t in ep.transitions]
         player_ids = [t.player_id for t in ep.transitions]
 
-        advantages, returns = _compute_gae(rewards, values, dones, player_ids, config.gamma, config.lam, ep.terminal_value)
+        _compute_gae(
+            rewards, values, dones, player_ids,
+            config.gamma, config.lam,
+            all_advantages[ptr : ptr + ep_n],
+            all_returns[ptr : ptr + ep_n],
+            ep.terminal_value, ep.terminal_player_id,
+        )
 
         for i, t in enumerate(ep.transitions):
-            all_obs.append(t.obs)
-            all_actions.append(t.action)
-            all_log_probs_old.append(t.log_prob)
-            all_advantages.append(advantages[i])
-            all_returns.append(returns[i])
-            all_masks.append(t.legal_mask)
+            all_obs[ptr + i] = t.obs
+            all_masks[ptr + i] = t.legal_mask
+            all_actions[ptr + i] = t.action
+            all_log_probs_old[ptr + i] = t.log_prob
+            all_values_old[ptr + i] = t.value
+        ptr += ep_n
 
-    # Normalise advantages globally across the entire rollout batch.
-    adv_arr = np.asarray(all_advantages, dtype=np.float32)
-    adv_arr = (adv_arr - adv_arr.mean()) / (adv_arr.std() + _ADV_STD_EPSILON)
+    # Normalise advantages in-place — avoids a temporary array allocation.
+    adv_arr = all_advantages  # already float32
+    adv_arr -= adv_arr.mean()
+    adv_arr /= adv_arr.std() + _ADV_STD_EPSILON
     adv_clip_hits = int(((adv_arr > _ADV_CLIP_RANGE) | (adv_arr < -_ADV_CLIP_RANGE)).sum())
     np.clip(adv_arr, -_ADV_CLIP_RANGE, _ADV_CLIP_RANGE, out=adv_arr)
 
-    # Single-copy transfer: list-of-arrays → stacked numpy → torch on device.
-    obs_t = torch.from_numpy(np.stack(all_obs).astype(np.float32, copy=False)).to(
-        device, non_blocking=True
-    )
-    masks_t = torch.from_numpy(np.stack(all_masks).astype(np.bool_, copy=False)).to(
-        device, non_blocking=True
-    )
-    actions_t = torch.from_numpy(np.asarray(all_actions, dtype=np.int64)).to(
-        device, non_blocking=True
-    )
-    log_probs_old_t = torch.from_numpy(
-        np.asarray(all_log_probs_old, dtype=np.float32)
-    ).to(device, non_blocking=True)
+    # Single-copy transfer to device.
+    obs_t = torch.from_numpy(all_obs).to(device, non_blocking=True)
+    masks_t = torch.from_numpy(all_masks).to(device, non_blocking=True)
+    actions_t = torch.from_numpy(all_actions).to(device, non_blocking=True)
+    log_probs_old_t = torch.from_numpy(all_log_probs_old).to(device, non_blocking=True)
     advantages_t = torch.from_numpy(adv_arr).to(device, non_blocking=True)
-    returns_t = torch.from_numpy(np.asarray(all_returns, dtype=np.float32)).to(
-        device, non_blocking=True
-    )
+    returns_t = torch.from_numpy(all_returns).to(device, non_blocking=True)
+    values_old_t = torch.from_numpy(all_values_old).to(device, non_blocking=True)
 
     # Precompute the inverted legal mask once — it's referenced every minibatch.
     inv_masks_t = ~masks_t
-
-    n = len(all_obs)
     # Accumulate loss components on-device and sync only once at the end,
     # instead of calling .item() on every minibatch.
     total_policy_loss = torch.zeros((), device=device)
     total_value_loss = torch.zeros((), device=device)
     total_entropy = torch.zeros((), device=device)
+    total_kl = torch.zeros((), device=device)
+    total_grad_norm = 0.0
     n_updates = 0
 
     model.train()
@@ -175,33 +189,52 @@ def update(
                 torch.clamp(ratio, 1 - config.clip_eps, 1 + config.clip_eps) * adv,
             ).mean()
 
-            value_loss = nn.functional.mse_loss(values.squeeze(-1), returns_t[idx])
+            # Clipped value loss: prevents value function from moving too far from
+            # the rollout estimate, mirroring the policy clip for stability.
+            values_sq = values.squeeze(-1)
+            values_old_b = values_old_t[idx]
+            values_clipped = values_old_b + torch.clamp(
+                values_sq - values_old_b, -config.clip_eps, config.clip_eps
+            )
+            value_loss = torch.max(
+                nn.functional.mse_loss(values_sq, returns_t[idx]),
+                nn.functional.mse_loss(values_clipped, returns_t[idx]),
+            )
+
+            # Approximate KL divergence for monitoring policy change per update.
+            kl = (log_probs_old_t[idx] - log_probs).mean()
 
             loss = policy_loss + config.value_coef * value_loss - config.entropy_coef * entropy
 
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
             loss.backward()
-            nn.utils.clip_grad_norm_(model.parameters(), max_norm=config.max_grad_norm)
+            grad_norm = float(nn.utils.clip_grad_norm_(model.parameters(), max_norm=config.max_grad_norm))
             optimizer.step()
 
             total_policy_loss += policy_loss.detach()
             total_value_loss += value_loss.detach()
             total_entropy += entropy.detach()
+            total_kl += kl.detach()
+            total_grad_norm += grad_norm
             n_updates += 1
 
     # Single GPU→CPU sync after all minibatches.
     pl = float(total_policy_loss.item()) / n_updates
     vl = float(total_value_loss.item()) / n_updates
     ent = float(total_entropy.item()) / n_updates
-    if not (np.isfinite(pl) and np.isfinite(vl) and np.isfinite(ent)):
+    kl = float(total_kl.item()) / n_updates
+    gn = total_grad_norm / n_updates
+    if not (np.isfinite(pl) and np.isfinite(vl) and np.isfinite(ent) and np.isfinite(kl)):
         raise ValueError(
-            f"NaN/Inf in PPO loss: policy_loss={pl:.4f}  "
-            f"value_loss={vl:.4f}  entropy={ent:.4f}"
+            f"NaN/Inf in PPO update: policy_loss={pl:.4f}  "
+            f"value_loss={vl:.4f}  entropy={ent:.4f}  kl={kl:.4f}"
         )
 
     return {
         "policy_loss": pl,
         "value_loss": vl,
         "entropy": ent,
+        "kl": kl,
+        "grad_norm": gn,
         "adv_clip_frac": adv_clip_hits / max(n, 1),
     }

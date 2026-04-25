@@ -24,32 +24,27 @@ class RandomAgent:
         return int(self.rng.choice(legal_indices))
 
 
-def _card_level_map(state: dict) -> dict[int, int]:
-    """Return a mapping of cardId -> pyramid level (1/2/3) from the current state."""
-    result: dict[int, int] = {}
+def _build_card_maps(state: dict) -> tuple[dict[int, dict], dict[int, int]]:
+    """
+    Single-pass build of two lookups from the current state:
+      card_lookup: cardId -> card dict  (pyramid + reserved cards)
+      card_level:  cardId -> level 1/2/3  (pyramid cards only)
+    """
+    card_lookup: dict[int, dict] = {}
+    card_level: dict[int, int] = {}
     pyramid = state.get("pyramid", {})
     for level_num, key in enumerate(("level1", "level2", "level3"), start=1):
         for card in pyramid.get(key, []):
             if card is not None:
-                card_id = card.get("id")
-                if card_id is not None:
-                    result[card_id] = level_num
-    return result
-
-
-def _build_card_lookup(state: dict) -> dict[int, dict]:
-    """Build a dict mapping cardId -> card dict from the pyramid and all reserved cards."""
-    result: dict[int, dict] = {}
-    pyramid = state.get("pyramid", {})
-    for key in ("level1", "level2", "level3"):
-        for card in pyramid.get(key, []):
-            if card is not None and card.get("id") is not None:
-                result[card["id"]] = card
+                cid = card.get("id")
+                if cid is not None:
+                    card_lookup[cid] = card
+                    card_level[cid] = level_num
     for player in state.get("players", []):
         for card in player.get("reservedCards", []):
             if card is not None and card.get("id") is not None:
-                result[card["id"]] = card
-    return result
+                card_lookup[card["id"]] = card
+    return card_lookup, card_level
 
 
 def _prestige_per_color(player: dict) -> dict[str, float]:
@@ -129,8 +124,7 @@ class GreedyPurchaseAgent:
         me = players[current_player_idx]
         opponent = players[1 - current_player_idx]
 
-        card_level = _card_level_map(state)
-        card_lookup = _build_card_lookup(state)
+        card_lookup, card_level = _build_card_maps(state)
 
         purchase_moves: list[tuple[dict, int]] = []
         reserve_pyramid_moves: list[tuple[dict, int]] = []

@@ -1,22 +1,23 @@
 """
-Fixed canonical action vocabulary of size 688.
+Fixed canonical action vocabulary of size 358.
 
 Index ranges:
   [0..144]    TAKE_TOKENS               — 145 valid board lines (1-3 cells)
   [145..211]  PURCHASE_CARD             — card id 1..67  (id-1 → offset)
   [212..278]  RESERVE_CARD_FROM_PYRAMID — card id 1..67
   [279..281]  RESERVE_CARD_FROM_DECK    — deck_1=279, deck_2=280, deck_3=281
-  [282..616]  ASSIGN_WILD_COLOR         — 67 card ids × 5 gem colors (white/blue/green/red/black)
-                                          index = 282 + (cardId-1)*5 + color_idx
-  [617..641]  USE_PRIVILEGE             — 25 single board cell indices (0-24)
-  [642]       REPLENISH_BOARD
-  [643]       END_OPTIONAL_PHASE
-  [644]       SKIP_TO_MANDATORY
-  [645..651]  DISCARD_TOKENS            — 7 token colors (discard exactly 1 of that color)
-  [652..676]  TAKE_TOKEN_FROM_BOARD     — 25 board positions (index 0-24)
-  [677..682]  TAKE_TOKEN_FROM_OPPONENT  — 6 token colors (white,blue,green,red,black,pearl)
-  [683..686]  CHOOSE_ROYAL_CARD         — royal card id 1..4
-  [687]       PASS_MANDATORY
+  [282..286]  ASSIGN_WILD_COLOR         — 5 gem colors (white/blue/green/red/black)
+                                          index = 282 + color_idx
+                                          (only one wild card is ever pending per phase)
+  [287..311]  USE_PRIVILEGE             — 25 single board cell indices (0-24)
+  [312]       REPLENISH_BOARD
+  [313]       END_OPTIONAL_PHASE
+  [314]       SKIP_TO_MANDATORY
+  [315..321]  DISCARD_TOKENS            — 7 token colors (discard exactly 1 of that color)
+  [322..346]  TAKE_TOKEN_FROM_BOARD     — 25 board positions (index 0-24)
+  [347..352]  TAKE_TOKEN_FROM_OPPONENT  — 6 token colors (white,blue,green,red,black,pearl)
+  [353..356]  CHOOSE_ROYAL_CARD         — royal card id 1..4
+  [357]       PASS_MANDATORY
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-ACTION_SPACE_SIZE = 688
+ACTION_SPACE_SIZE = 358
 
 TOKEN_COLORS = ["white", "blue", "green", "red", "black", "pearl", "gold"]
 GEM_COLORS = ["white", "blue", "green", "red", "black"]
@@ -76,16 +77,16 @@ OFFSET_TAKE_TOKENS = 0        # 0..144
 OFFSET_PURCHASE_CARD = 145    # 145..211   (card id 1..67)
 OFFSET_RESERVE_PYRAMID = 212  # 212..278   (card id 1..67)
 OFFSET_RESERVE_DECK = 279     # 279..281
-OFFSET_ASSIGN_WILD = 282      # 282..616   (card id 1..67, color idx 0..4; stride 5)
-OFFSET_USE_PRIVILEGE = 617    # 617..641   (single board cell 0-24)
-OFFSET_REPLENISH = 642        # 642
-OFFSET_END_OPTIONAL = 643     # 643
-OFFSET_SKIP_TO_MANDATORY = 644  # 644
-OFFSET_DISCARD = 645          # 645..651   (one entry per token color)
-OFFSET_TAKE_FROM_BOARD = 652  # 652..676   (25 board positions)
-OFFSET_TAKE_FROM_OPPONENT = 677  # 677..682  (6 colors: gem colors + pearl)
-OFFSET_CHOOSE_ROYAL = 683        # 683..686  (royal card id 1..4)
-OFFSET_PASS_MANDATORY = 687      # 687
+OFFSET_ASSIGN_WILD = 282      # 282..286   (color idx 0..4; one pending wild card per phase)
+OFFSET_USE_PRIVILEGE = 287    # 287..311   (single board cell 0-24)
+OFFSET_REPLENISH = 312        # 312
+OFFSET_END_OPTIONAL = 313     # 313
+OFFSET_SKIP_TO_MANDATORY = 314  # 314
+OFFSET_DISCARD = 315          # 315..321   (one entry per token color)
+OFFSET_TAKE_FROM_BOARD = 322  # 322..346   (25 board positions)
+OFFSET_TAKE_FROM_OPPONENT = 347  # 347..352  (6 colors: gem colors + pearl)
+OFFSET_CHOOSE_ROYAL = 353        # 353..356  (royal card id 1..4)
+OFFSET_PASS_MANDATORY = 357      # 357
 
 _DECK_TO_IDX = {"deck_1": 279, "deck_2": 280, "deck_3": 281}
 
@@ -115,10 +116,9 @@ def action_to_index(action: dict) -> int | None:
         return _DECK_TO_IDX.get(source)
 
     if t == "ASSIGN_WILD_COLOR":
-        card_id = action.get("wildCardId", 0)
         color = action.get("color", "")
-        if 1 <= card_id <= 67 and color in GEM_COLORS:
-            return OFFSET_ASSIGN_WILD + (card_id - 1) * 5 + GEM_COLORS.index(color)
+        if color in GEM_COLORS:
+            return OFFSET_ASSIGN_WILD + GEM_COLORS.index(color)
 
     if t == "USE_PRIVILEGE":
         indices = action.get("indices", [])

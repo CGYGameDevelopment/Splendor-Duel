@@ -10,7 +10,7 @@ by bugs in the game engine or an adversarial action-masking edge case.
 Rollouts can be parallelised across multiple envs.  Each env holds its own
 HTTP session against the game-sim server; running them in a thread pool hides
 HTTP latency behind GPU/Python work on the other episodes.  Torch inference
-is thread-safe under @torch.no_grad() with the model in eval mode, so all
+is thread-safe under @torch.inference_mode() with the model in eval mode, so all
 threads share a single model instance.
 """
 
@@ -48,11 +48,17 @@ class Episode:
     # Value estimate for the state after the last transition.
     # Non-zero only for episodes truncated by MAX_STEPS_PER_EPISODE (not naturally terminal).
     terminal_value: float = 0.0
+    # Player whose turn it is AFTER the last transition (used to correct perspective
+    # when bootstrapping terminal_value into GAE for truncated episodes).
+    terminal_player_id: int = 0
+    # 'prestige', 'crowns', 'color_prestige', or None for truncated episodes.
+    win_condition: str | None = None
 
     def __len__(self) -> int:
         return len(self.transitions)
 
 
+@torch.inference_mode()
 def _play_one_episode(
     model: ActorCriticNet,
     env: SplendorDuelEnv,
@@ -116,10 +122,12 @@ def _play_one_episode(
             )
         )
 
-    # If the episode was cut off by the step cap rather than a natural terminal,
-    # bootstrap the value of the final observation so GAE doesn't assume the
-    # truncated state has zero value.
-    if not done and episode.transitions:
+    if done:
+        episode.win_condition = info.get("win_condition")
+    else:
+        # Episode cut off by step cap — bootstrap terminal value for GAE.
+        # Record whose turn it is next so GAE can flip perspective if needed.
+        episode.terminal_player_id = info["state"].get("currentPlayer", 0)
         obs_buf.copy_(torch.from_numpy(obs_np).unsqueeze(0), non_blocking=True)
         _, final_value_t = model(obs_buf)
         episode.terminal_value = float(final_value_t.item())
@@ -127,7 +135,7 @@ def _play_one_episode(
     return episode
 
 
-@torch.no_grad()
+@torch.inference_mode()
 def collect_episodes(
     model: ActorCriticNet,
     env: SplendorDuelEnv | list[SplendorDuelEnv],

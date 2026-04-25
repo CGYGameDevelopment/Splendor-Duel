@@ -1,14 +1,15 @@
 """
 SplendorDuelEnv: gymnasium.Env wrapping the ai-game-sim HTTP server.
 
-Observation space: Box(float32, shape=(STATE_DIM,))  # currently 859
+Observation space: Box(float32, shape=(STATE_DIM,))  # currently 311
 Action space:      Discrete(688)
 
 Each step's info dict contains:
-  legal_mask: np.ndarray[688, bool]  — True at each legal action index
-  state:      dict                   — raw GameState from the server
-  legal_moves: list[dict]            — raw legal moves from the server
-  winner:     int | None             — winning player index, or None if game not over
+  legal_mask:    np.ndarray[688, bool]  — True at each legal action index
+  state:         dict                   — raw GameState from the server
+  legal_moves:   list[dict]             — raw legal moves from the server
+  winner:        int | None             — winning player index, or None if game not over
+  win_condition: str | None             — 'prestige', 'crowns', 'color_prestige', or None
 """
 
 from __future__ import annotations
@@ -48,6 +49,7 @@ class SplendorDuelEnv(gym.Env):
         self._legal_mask: np.ndarray = np.zeros(ACTION_SPACE_SIZE, dtype=bool)
         self._state: dict = {}
         self._winner: int | None = None
+        self._win_condition: str | None = None
 
     # ── Core API ──────────────────────────────────────────────────────────────
 
@@ -68,6 +70,7 @@ class SplendorDuelEnv(gym.Env):
         self._legal_moves = result["legalMoves"]
         self._update_legal(self._legal_moves)
         self._winner = None
+        self._win_condition = None
 
         obs = encode(self._state)
         info = self._make_info()
@@ -98,6 +101,7 @@ class SplendorDuelEnv(gym.Env):
         done: bool = result["done"]
         winner: int | None = result["winner"]
         self._winner = winner
+        self._win_condition = self._state.get("winCondition") if done else None
 
         reward = 0.0
         if done and winner is not None:
@@ -141,4 +145,5 @@ class SplendorDuelEnv(gym.Env):
             "state": self._state,
             "legal_moves": self._legal_moves,
             "winner": self._winner,
+            "win_condition": self._win_condition,
         }

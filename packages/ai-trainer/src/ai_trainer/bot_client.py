@@ -38,7 +38,7 @@ def _legal_moves_from_state(sim_url: str, state: dict) -> list[dict]:
     return r.json()["legalMoves"]
 
 
-@torch.no_grad()
+@torch.inference_mode()
 def _pick_action(
     model: ActorCriticNet,
     state: dict,
