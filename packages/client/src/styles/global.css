@@ -1,0 +1,101 @@
+/* ─── Theme tokens ─────────────────────────────────────────────────────── */
+
+:root {
+  /* gem colors */
+  --gem-white: #f1eee2;
+  --gem-blue: #2a5cb6;
+  --gem-green: #2e8a52;
+  --gem-red: #b73031;
+  --gem-black: #2c2a2a;
+  --gem-pearl: #efe7d8;
+  --gem-gold: #d8a93a;
+
+  /* surface */
+  --bg: #1c1410;
+  --panel: #2a1f17;
+  --panel-light: #3a2c20;
+  --border: #5b4128;
+  --border-strong: #8a6336;
+  --text: #f0e6d2;
+  --text-dim: #b9a987;
+  --accent: #e0a544;
+  --accent-strong: #f3c168;
+  --danger: #c84c3b;
+  --success: #6dba5e;
+
+  --radius: 6px;
+  --radius-lg: 10px;
+
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  background: var(--panel-light);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 12px;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+button:hover:not(:disabled) {
+  background: var(--border);
+  border-color: var(--border-strong);
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: var(--accent);
+  color: #1d1208;
+  border-color: var(--accent-strong);
+  font-weight: 600;
+}
+
+button.primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+
+button.danger {
+  background: var(--danger);
+  color: #fff;
+  border-color: #8d2e22;
+}
+
+input[type="text"], input[type="number"] {
+  font-family: inherit;
+  font-size: inherit;
+  background: #1a120c;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--accent);
+}

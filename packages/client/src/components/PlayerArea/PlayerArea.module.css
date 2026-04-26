@@ -1,0 +1,119 @@
+.player {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 280px;
+}
+
+.player.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 0 14px rgba(224, 165, 68, 0.3);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.name {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.youBadge {
+  font-size: 10px;
+  background: var(--accent);
+  color: #1d1208;
+  padding: 1px 6px;
+  border-radius: 999px;
+  margin-left: 6px;
+  letter-spacing: 0.5px;
+}
+
+.stats {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.stat strong {
+  color: var(--text);
+  margin-left: 3px;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sectionLabel {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+}
+
+.tokens {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tokens.clickable .tokenWrap { cursor: pointer; }
+
+.gemSummary {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.reserved, .royals {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.hidden {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.tokenWrap {
+  position: relative;
+  display: inline-block;
+}
+
+.tokenCount {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  background: var(--accent);
+  color: #1d1208;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 0 4px;
+  min-width: 14px;
+  text-align: center;
+  line-height: 14px;
+  border: 1px solid #1d1208;
+}
+
+.turnTag {
+  font-size: 10px;
+  background: var(--success);
+  color: #0d2509;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}

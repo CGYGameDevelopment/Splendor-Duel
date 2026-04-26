@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 import numpy as np
 import gymnasium as gym
+import requests
 from gymnasium import spaces
 
 from .sim_client import SimClient
@@ -89,6 +90,8 @@ class SplendorDuelEnv(gym.Env):
 
         try:
             result = self.client.step(self._session_id, concrete)
+        except (requests.ConnectionError, requests.Timeout):
+            raise  # let _collect_with_retries handle transient network errors
         except Exception as exc:
             raise RuntimeError(
                 f"SimClient.step failed (session={self._session_id!r}, "

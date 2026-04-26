@@ -64,9 +64,9 @@ describe('checkVictory', () => {
         const player = (0, fixtures_1.makePlayer)({ purchasedCards: cards });
         expect((0, helpers_1.checkVictory)(player)).toBe('color_prestige');
     });
-    it('counts Wild card points under its assignedColor for color_prestige', () => {
+    it('counts wild card points under its assignedColor for color_prestige', () => {
         const redCard = (0, fixtures_1.makeCard)({ id: 1, color: 'red', points: 7 });
-        const wildCard = (0, fixtures_1.makeCard)({ id: 2, color: 'wild', points: 3, assignedColor: 'red' });
+        const wildCard = (0, fixtures_1.makeCard)({ id: 2, color: null, ability: 'wild', points: 3, assignedColor: 'red' });
         const player = (0, fixtures_1.makePlayer)({ purchasedCards: [redCard, wildCard] });
         expect((0, helpers_1.checkVictory)(player)).toBe('color_prestige');
     });
@@ -97,7 +97,7 @@ describe('checkVictory - edge cases', () => {
     });
     it('does not double-count a wild card assigned to one color against another', () => {
         const redCard = (0, fixtures_1.makeCard)({ id: 1, color: 'red', points: 5 });
-        const wildCard = (0, fixtures_1.makeCard)({ id: 2, color: 'wild', points: 4, assignedColor: 'red' });
+        const wildCard = (0, fixtures_1.makeCard)({ id: 2, color: null, ability: 'wild', points: 4, assignedColor: 'red' });
         const player = (0, fixtures_1.makePlayer)({ purchasedCards: [redCard, wildCard] });
         // 5+4=9 for red, should not win
         expect((0, helpers_1.checkVictory)(player)).toBeNull();

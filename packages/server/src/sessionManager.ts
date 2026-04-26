@@ -8,6 +8,10 @@ import type { ClientGameState, ServerMessage, SessionInfo } from '@splendor-duel
 interface Session {
   id: string;
   state: ReturnType<typeof createInitialState>;
+  /** Snapshot of state at the start of the current player's turn — used for UNDO_TURN. */
+  turnStartState: ReturnType<typeof createInitialState>;
+  /** True iff the current player has dispatched at least one action this turn. */
+  hasActionsThisTurn: boolean;
   connections: [WebSocket | null, WebSocket | null];
   playerNames: [string, string | null];
   status: 'waiting' | 'playing' | 'finished';
@@ -59,6 +63,30 @@ function send(ws: WebSocket, msg: ServerMessage): void {
   }
 }
 
+/**
+ * Whether the given player can undo right now.
+ * Allowed only when it is their turn AND they have made at least one action since the turn began.
+ */
+function canUndoFor(session: Session, viewerId: PlayerId): boolean {
+  if (session.status !== 'playing') return false;
+  if (session.state.phase === 'game_over') return false;
+  if (session.state.currentPlayer !== viewerId) return false;
+  return session.hasActionsThisTurn;
+}
+
+function broadcastState(session: Session, kind: 'STATE_UPDATE' = 'STATE_UPDATE'): void {
+  for (const pid of [0, 1] as PlayerId[]) {
+    const playerWs = session.connections[pid];
+    if (playerWs) {
+      send(playerWs, {
+        type: kind,
+        state: sanitizeStateFor(session.state, pid),
+        canUndo: canUndoFor(session, pid),
+      });
+    }
+  }
+}
+
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -82,9 +110,12 @@ export function createSession(playerName: string, ws: WebSocket): string | null 
   }
   playerName = sanitized;
   const id = generateSessionId();
+  const initial = createInitialState(true);
   const session: Session = {
     id,
-    state: createInitialState(true),
+    state: initial,
+    turnStartState: initial,
+    hasActionsThisTurn: false,
     connections: [ws, null],
     playerNames: [playerName, null],
     status: 'waiting',
@@ -126,12 +157,23 @@ export function joinSession(
   session.status = 'playing';
 
   // Tell player 1 their identity and the starting state (their own reserved cards visible)
-  send(ws, { type: 'SESSION_JOINED', sessionId, playerId: 1, state: sanitizeStateFor(session.state, 1) });
+  send(ws, {
+    type: 'SESSION_JOINED',
+    sessionId,
+    playerId: 1,
+    state: sanitizeStateFor(session.state, 1),
+    canUndo: canUndoFor(session, 1),
+  });
 
   // Tell player 0 the opponent arrived and the game is starting (their own reserved cards visible)
   const p0 = session.connections[0];
   if (p0) {
-    send(p0, { type: 'GAME_STARTED', state: sanitizeStateFor(session.state, 0), opponentName: playerName });
+    send(p0, {
+      type: 'GAME_STARTED',
+      state: sanitizeStateFor(session.state, 0),
+      opponentName: playerName,
+      canUndo: canUndoFor(session, 0),
+    });
   }
 
   return 1;
@@ -165,6 +207,7 @@ export function dispatchAction(
     return;
   }
 
+  const previousPlayer = session.state.currentPlayer;
   const nextState = reducer(session.state, action);
   if (nextState === session.state) {
     // Reducer returns the same reference for illegal moves
@@ -173,15 +216,48 @@ export function dispatchAction(
   }
 
   session.state = nextState;
+  session.hasActionsThisTurn = true;
+
+  // If the turn just switched (or game ended), capture a fresh snapshot for the new current player.
+  if (nextState.currentPlayer !== previousPlayer || nextState.phase === 'game_over') {
+    session.turnStartState = nextState;
+    session.hasActionsThisTurn = false;
+  }
+
   if (nextState.phase === 'game_over') {
     session.status = 'finished';
     scheduleCleanup(session);
   }
 
-  for (const pid of [0, 1] as PlayerId[]) {
-    const playerWs = session.connections[pid];
-    if (playerWs) send(playerWs, { type: 'STATE_UPDATE', state: sanitizeStateFor(nextState, pid) });
+  broadcastState(session);
+}
+
+/**
+ * Restores the state to the start of the current player's turn.
+ * Allowed only for the current player and only when at least one action has been dispatched this turn.
+ */
+export function undoTurn(sessionId: string, playerId: PlayerId, ws: WebSocket): void {
+  const session = sessions.get(sessionId);
+  if (!session) {
+    send(ws, { type: 'ERROR', message: 'Session not found' });
+    return;
   }
+  if (session.status !== 'playing') {
+    send(ws, { type: 'ERROR', message: 'Game is not in progress' });
+    return;
+  }
+  if (session.state.currentPlayer !== playerId) {
+    send(ws, { type: 'ERROR', message: 'Not your turn' });
+    return;
+  }
+  if (!session.hasActionsThisTurn) {
+    send(ws, { type: 'ERROR', message: 'Nothing to undo' });
+    return;
+  }
+
+  session.state = session.turnStartState;
+  session.hasActionsThisTurn = false;
+  broadcastState(session);
 }
 
 /**

@@ -1,0 +1,40 @@
+.controls {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.phaseLine {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.phaseLine strong {
+  color: var(--accent-strong);
+  margin-left: 4px;
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.error {
+  font-size: 12px;
+  color: var(--danger);
+  background: rgba(200, 76, 59, 0.12);
+  padding: 4px 8px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(200, 76, 59, 0.4);
+}

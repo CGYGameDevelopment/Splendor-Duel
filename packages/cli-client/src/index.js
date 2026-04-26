@@ -54,12 +54,11 @@ function send(ws, msg) {
 }
 // ─── Display helpers ──────────────────────────────────────────────────────────
 const TOKEN_ABBR = {
-    white: '{W}', blue: '{U}', black: '{B}', red: '{R}', green: '{G}',
-    pearl: '{Pl}', gold: '{Au}',
+    white: 'W', blue: 'U', black: 'B', red: 'R', green: 'G',
+    pearl: 'Pl', gold: 'Au',
 };
 const CARD_COLOR_ABBR = {
-    white: '{W}', blue: '{U}', black: '{B}', red: '{R}', green: '{G}',
-    wild: 'wi',
+    white: 'W', blue: 'U', black: 'B', red: 'R', green: 'G',
 };
 const ALL_TOKEN_COLORS = ['white', 'blue', 'green', 'red', 'black', 'pearl', 'gold'];
 function abbr(color) {
@@ -86,10 +85,10 @@ function describeCard(card) {
     const level = card.level === 'royal' ? 'R ' : `L${card.level}`;
     const abil = card.ability ? ` [${card.ability}]` : '';
     const crowns = card.crowns > 0 ? ` 👑${card.crowns}` : '';
-    const gemColors = ['white', 'blue', 'green', 'red', 'black'];
-    const colorStr = card.color !== null && gemColors.includes(card.color) && card.bonus > 0
-        ? cardColorAbbr(card.color).repeat(card.bonus)
-        : cardColorAbbr(card.color);
+    const effectiveColor = card.assignedColor ?? card.color;
+    const colorStr = effectiveColor !== null && card.bonus > 0
+        ? cardColorAbbr(effectiveColor).repeat(card.bonus)
+        : cardColorAbbr(effectiveColor);
     return `#${card.id} ${level} ${colorStr} ⭐${card.points}${crowns}${abil}`;
 }
 function findCard(state, cardId) {
@@ -114,15 +113,21 @@ function totalTokens(pool) {
 // ─── State display ────────────────────────────────────────────────────────────
 function displayBoard(board) {
     console.log('\nBOARD:');
-    console.log('      0      1      2      3      4');
     for (let row = 0; row < 5; row++) {
         const cells = [];
         for (let col = 0; col < 5; col++) {
-            const cell = board[row * 5 + col];
-            cells.push(cell ? abbr(cell).padEnd(5) : ' .   ');
+            const idx = row * 5 + col;
+            const token = board[idx] ? abbr(board[idx]) : '.';
+            cells.push(`${String(idx).padStart(2)}:${token.padEnd(3)}`);
         }
-        console.log(`  ${row}: ${cells.join('  ')}`);
+        console.log('  ' + cells.join('  '));
     }
+}
+const CARD_DESC_WIDTH = 36;
+function displayCardRow(card, indent) {
+    const desc = describeCard(card).padEnd(CARD_DESC_WIDTH);
+    const cost = formatCost(card.cost);
+    console.log(`${indent}${desc}  ${cost}`);
 }
 function displayPyramid(state) {
     console.log('\nPYRAMID:');
@@ -130,12 +135,20 @@ function displayPyramid(state) {
         const key = `level${level}`;
         const cards = state.pyramid[key];
         const deckCount = state.decks[key].length;
-        const cardStrs = cards.map(c => `[${describeCard(c)} cost:${formatCost(c.cost)}]`).join(' ');
-        console.log(`  L${level} deck:${deckCount}: ${cardStrs || '(empty)'}`);
+        console.log(`  L${level}  (deck: ${deckCount})`);
+        if (cards.length === 0) {
+            console.log('    (empty)');
+        }
+        else {
+            for (const c of cards)
+                displayCardRow(c, '    ');
+        }
     }
     if (state.royalDeck.length > 0) {
-        const royalStrs = state.royalDeck.map(c => `[${describeCard(c)}]`).join(' ');
-        console.log(`  Royals: ${royalStrs}`);
+        console.log('  Royals');
+        for (const c of state.royalDeck) {
+            console.log(`    ${describeCard(c)}`);
+        }
     }
 }
 function displayPlayers(state) {
@@ -146,11 +159,12 @@ function displayPlayers(state) {
         const turnMark = state.currentPlayer === pid ? ' ◄ TURN' : '';
         console.log(`\n${name} — ⭐${player.prestige} | 👑${player.crowns} | 📜${player.privileges}${turnMark}`);
         const total = totalTokens(player.tokens);
-        console.log(`  Tokens (${total}): ${formatPool(player.tokens, true)}`);
+        console.log(`  Tokens (${total}): ${formatPool(player.tokens)}`);
         const gems = {};
         for (const card of player.purchasedCards) {
-            if (card.color !== null && card.color !== 'wild') {
-                gems[card.color] = (gems[card.color] ?? 0) + card.bonus;
+            const effective = card.assignedColor ?? card.color;
+            if (effective !== null) {
+                gems[effective] = (gems[effective] ?? 0) + card.bonus;
             }
         }
         console.log(`  Gems (${player.purchasedCards.length} cards): ${formatPool(gems)}`);
@@ -159,11 +173,12 @@ function displayPlayers(state) {
             console.log(`  Abilities: ${abilCards.map(c => c.ability).join(', ')}`);
         }
         if (isMe && player.reservedCards.length > 0) {
-            const res = player.reservedCards.map(c => `[${describeCard(c)} cost:${formatCost(c.cost)}]`).join(' ');
-            console.log(`  Reserved: ${res}`);
+            console.log('  Reserved:');
+            for (const c of player.reservedCards)
+                displayCardRow(c, '    ');
         }
         else if (!isMe) {
-            console.log(`  Reserved: ${player.reservedCards.length} (hidden)`);
+            console.log(`  Reserved: ${player.reservedCardCount} (hidden)`);
         }
         if (player.royalCards.length > 0) {
             console.log(`  Royals: ${player.royalCards.map(c => `[${describeCard(c)}]`).join(' ')}`);
@@ -172,8 +187,8 @@ function displayPlayers(state) {
 }
 function displayState(state) {
     console.log('\n' + '═'.repeat(70));
-    displayBoard(state.board);
     displayPyramid(state);
+    displayBoard(state.board);
     displayPlayers(state);
     const bagTotal = totalTokens(state.bag);
     const abil = state.pendingAbility ? ` (pending ability: ${state.pendingAbility})` : '';
@@ -210,7 +225,7 @@ function describeMove(action, state) {
             const info = card ? `${describeCard(card)} cost:${formatCost(card.cost)}` : `card #${action.cardId}`;
             return `Purchase ${info}${goldStr}`;
         }
-        case 'RESERVE_CARD':
+        case 'RESERVE_CARD_FROM_DECK':
             return `Reserve top card from ${action.source}`;
         case 'RESERVE_CARD_FROM_PYRAMID': {
             const card = findCard(state, action.cardId);
@@ -225,7 +240,7 @@ function describeMove(action, state) {
         case 'ASSIGN_WILD_COLOR': {
             const wild = findCard(state, action.wildCardId);
             const wildStr = wild ? describeCard(wild) : `#${action.wildCardId}`;
-            return `Assign Wild card ${wildStr} → ${action.color}`;
+            return `Assign wild card ${wildStr} → ${action.color}`;
         }
         case 'TAKE_TOKEN_FROM_BOARD': {
             const cell = state.board[action.index];
@@ -275,7 +290,7 @@ function buildMoveGroups(allMoves, state) {
     const tokens = orderedTokenMoves(tokenMoves, state.board);
     const privileges = rest.filter(m => m.type === 'USE_PRIVILEGE');
     const purchases = rest.filter(m => m.type === 'PURCHASE_CARD');
-    const reserves = rest.filter(m => m.type === 'RESERVE_CARD' || m.type === 'RESERVE_CARD_FROM_PYRAMID');
+    const reserves = rest.filter(m => m.type === 'RESERVE_CARD_FROM_DECK' || m.type === 'RESERVE_CARD_FROM_PYRAMID');
     const discards = rest.filter(m => m.type === 'DISCARD_TOKENS');
     const abilities = rest.filter(m => m.type === 'TAKE_TOKEN_FROM_BOARD' ||
         m.type === 'TAKE_TOKEN_FROM_OPPONENT' ||

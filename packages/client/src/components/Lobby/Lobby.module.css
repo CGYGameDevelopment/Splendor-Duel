@@ -1,0 +1,120 @@
+.lobby {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: 28px 30px;
+  min-width: 380px;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+}
+
+.title {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--accent-strong);
+  text-align: center;
+  margin: 0;
+}
+
+.subtitle {
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: center;
+  margin-top: -10px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field label {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  letter-spacing: 0.5px;
+}
+
+.field input {
+  width: 100%;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.actions button {
+  flex: 1;
+}
+
+.divider {
+  height: 1px;
+  background: var(--border);
+}
+
+.joinRow {
+  display: flex;
+  gap: 6px;
+}
+
+.joinRow input {
+  flex: 1;
+}
+
+.status {
+  background: rgba(224, 165, 68, 0.1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px;
+  font-size: 12px;
+  color: var(--text);
+  text-align: center;
+}
+
+.error {
+  background: rgba(200, 76, 59, 0.12);
+  border: 1px solid rgba(200, 76, 59, 0.4);
+  color: var(--danger);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.aiHint {
+  font-size: 11px;
+  color: var(--text-dim);
+  border-left: 3px solid var(--accent);
+  padding: 6px 10px;
+  background: rgba(224, 165, 68, 0.06);
+}
+
+.aiHint code {
+  background: #1a120c;
+  padding: 1px 6px;
+  border-radius: 3px;
+  color: var(--accent-strong);
+}
+
+.sessionId {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--accent);
+  text-align: center;
+  letter-spacing: 4px;
+  background: #1a120c;
+  padding: 10px;
+  border-radius: var(--radius);
+}

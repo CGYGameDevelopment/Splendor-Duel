@@ -3,8 +3,21 @@
 from __future__ import annotations
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 _TIMEOUT = 10  # seconds — applied to all requests
+
+# Retry on connection errors for all methods, including POST/DELETE.
+# This handles stale keep-alive connections: after the PPO update the
+# Node.js server may have closed the connection server-side, causing
+# the next request on the pooled socket to fail with ConnectionError.
+_RETRY = Retry(
+    connect=3,
+    backoff_factor=0.3,
+    allowed_methods={"DELETE", "GET", "HEAD", "OPTIONS", "POST", "PUT"},
+)
+_ADAPTER = HTTPAdapter(max_retries=_RETRY)
 
 
 class SimClient:
@@ -13,6 +26,8 @@ class SimClient:
     def __init__(self, base_url: str = "http://127.0.0.1:3002"):
         self.base_url = base_url.rstrip("/")
         self._session = requests.Session()
+        self._session.mount("http://", _ADAPTER)
+        self._session.mount("https://", _ADAPTER)
 
     def reset(
         self,

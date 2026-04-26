@@ -1,0 +1,38 @@
+.banner {
+  margin: 24px auto;
+  max-width: 600px;
+  background: var(--panel);
+  border: 2px solid var(--accent);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.title {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--accent-strong);
+}
+
+.outcome {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.outcome.win  { color: var(--success); }
+.outcome.lose { color: var(--danger); }
+
+.subtle {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+}

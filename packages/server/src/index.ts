@@ -8,6 +8,7 @@ import {
   createSession,
   joinSession,
   dispatchAction,
+  undoTurn,
   handleDisconnect,
   listSessions,
 } from './sessionManager';
@@ -85,6 +86,14 @@ wss.on('connection', (ws: WebSocket) => {
           return;
         }
         dispatchAction(sessionId, playerId, msg.action, ws);
+        break;
+      }
+      case 'UNDO_TURN': {
+        if (sessionId === null || playerId === null) {
+          ws.send(JSON.stringify({ type: 'ERROR', message: 'Not in a session' }));
+          return;
+        }
+        undoTurn(sessionId, playerId, ws);
         break;
       }
       case 'PING': {

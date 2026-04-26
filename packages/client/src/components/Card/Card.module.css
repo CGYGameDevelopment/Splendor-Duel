@@ -1,0 +1,160 @@
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 110px;
+  min-height: 150px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 6px 8px;
+  user-select: none;
+  transition: transform 0.1s ease, box-shadow 0.1s ease, border-color 0.1s ease;
+}
+
+.size-sm {
+  width: 92px;
+  min-height: 124px;
+  padding: 5px 6px;
+}
+
+.size-lg {
+  width: 130px;
+  min-height: 174px;
+  padding: 8px 10px;
+}
+
+.card.clickable { cursor: pointer; }
+.card.clickable:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.4);
+  border-color: var(--border-strong);
+}
+
+.card.affordable { border-color: var(--success); }
+.card.reservable { border-color: var(--accent); }
+.card.both { border-color: var(--accent-strong); }
+
+.colorBar {
+  height: 6px;
+  border-radius: 3px;
+  margin-bottom: 6px;
+}
+
+.colorBar.white  { background: var(--gem-white); }
+.colorBar.blue   { background: var(--gem-blue); }
+.colorBar.green  { background: var(--gem-green); }
+.colorBar.red    { background: var(--gem-red); }
+.colorBar.black  { background: var(--gem-black); }
+.colorBar.none   { background: transparent;
+  border: 1px dashed var(--border-strong);
+  height: 4px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+.points {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--accent-strong);
+}
+
+.crowns {
+  font-size: 12px;
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+.bonus {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  margin: 4px 0;
+}
+
+.ability {
+  font-size: 10px;
+  color: var(--accent);
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 2px 0;
+}
+
+.cost {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  justify-content: center;
+  margin-top: 4px;
+  min-height: 24px;
+}
+
+.costEmpty {
+  font-size: 10px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.actions {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(20, 14, 10, 0.85);
+  border-radius: var(--radius-lg);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.card:hover .actions { opacity: 1; }
+
+.actions button {
+  font-size: 11px;
+  padding: 5px 12px;
+  min-width: 80px;
+}
+
+/* Card-back for face-down decks */
+.back {
+  background: linear-gradient(135deg, #4a3018 0%, #2d1c0d 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  color: var(--text-dim);
+  border-style: dashed;
+}
+
+.backLabel {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.backCount {
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.empty {
+  border-style: dashed;
+  opacity: 0.4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  font-size: 11px;
+}
