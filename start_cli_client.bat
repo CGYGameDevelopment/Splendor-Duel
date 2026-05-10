@@ -5,7 +5,9 @@ TITLE Splendor Duel Launcher
 echo Building game engine...
 call npm run build --workspace=packages/game-engine
 
-:: 2. Start the Server in a new window
+:: 2. Kill anything already on port 3001, then start the server
+echo Clearing port 3001...
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":3001 " 2^>nul') do taskkill /PID %%a /F >nul 2>&1
 echo Starting Server on port 3001...
 start "Splendor Server" cmd /k "npm run dev --workspace=packages/server"
 
