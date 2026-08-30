@@ -1,152 +1,237 @@
 """
-SplendorDuelEnv: gymnasium.Env wrapping the ai-game-sim HTTP server.
+VecSplendorDuelEnv: N games stepped in lockstep through one HTTP round trip.
 
-Observation space: Box(float32, shape=(STATE_DIM,))  # currently 311
-Action space:      Discrete(688)
+Per-action HTTP latency, not engine compute, caps rollout throughput -- it was
+measured at 79-88% of collection wall-clock.  Two things follow from that:
 
-Each step's info dict contains:
-  legal_mask:    np.ndarray[688, bool]  — True at each legal action index
-  state:         dict                   — raw GameState from the server
-  legal_moves:   list[dict]             — raw legal moves from the server
-  winner:        int | None             — winning player index, or None if game not over
-  win_condition: str | None             — 'prestige', 'crowns', 'color_prestige', or None
+* Games are driven in lockstep, so a round costs one request and one batched
+  policy forward regardless of how many games are in flight.  Running thin is
+  expensive: a forward pass costs 1319 us/row at batch 1 against 41.7 us/row at
+  batch 64.
+* Responses use the server's compact form, which replaces the undrawn deck
+  arrays with counts.  The encoder only ever read the sizes, and the arrays were
+  71.5% of every response body.
+
+The compact state is observation-only and must not be handed back to the engine.
+
+Observation is Box(float32, (STATE_DIM,)); actions are Discrete(ACTION_SPACE_SIZE).
+Alongside each observation the env exposes `card_ids`, the card id occupying each
+visible card slot, which the model's card pointer head needs to route per-card
+logits to their action indices.
 """
 
 from __future__ import annotations
 
-import logging
+from dataclasses import dataclass, field
+
 import numpy as np
-import gymnasium as gym
-import requests
-from gymnasium import spaces
 
+from .action_space import ACTION_SPACE_SIZE, build_legal_index_map_and_mask
 from .sim_client import SimClient
-from .state_encoder import encode, STATE_DIM
-from .action_space import (
-    ACTION_SPACE_SIZE,
-    build_legal_index_map_and_mask,
-)
+from .state_encoder import STATE_DIM, N_CARD_SLOTS, encode, encode_card_ids
 
 
-class SplendorDuelEnv(gym.Env):
-    metadata = {"render_modes": []}
+def _reward_for_actor(actor: int, done: bool, winner: int | None) -> float:
+    """
+    Zero-sum terminal reward from the perspective of the player who just moved.
+
+    Attribution is driven by `winner`, never by whoever happened to act last.
+    The engine currently sets winner = currentPlayer at the moment the win is
+    detected, so the two always agree -- but reading `winner` directly means an
+    engine change cannot silently invert the reward signal.
+    """
+    if not done or winner is None:
+        return 0.0
+    return 1.0 if winner == actor else -1.0
+
+
+@dataclass
+class _Slot:
+    """One in-flight game inside a VecSplendorDuelEnv."""
+    session_id: str
+    state: dict = field(default_factory=dict)
+    legal_moves: list[dict] = field(default_factory=list)
+    index_map: dict[int, dict] = field(default_factory=dict)
+    done: bool = False
+    winner: int | None = None
+    win_condition: str | None = None
+
+    @property
+    def current_player(self) -> int:
+        return self.state.get("currentPlayer", 0)
+
+
+@dataclass
+class VecStepResult:
+    """Outcome of one slot's step, from the perspective of the player who moved."""
+    actor: int
+    reward: float
+    done: bool
+    winner: int | None
+    win_condition: str | None
+
+
+class VecSplendorDuelEnv:
+    """
+    N independent games driven in lockstep, one HTTP round trip per step.
+
+    Slots are never implicitly recycled: when a game finishes, `done` stays set
+    on that slot until the caller explicitly calls `reset_slots`.  That keeps
+    episode boundaries under the collector's control.
+    """
 
     def __init__(
         self,
+        n_envs: int,
         sim_url: str = "http://127.0.0.1:3002",
-        illegal_action_penalty: float = -1.0,
+        auto_advance: bool = True,
+        client: SimClient | None = None,
     ):
-        super().__init__()
-        self.client = SimClient(base_url=sim_url)
-        self._illegal_action_penalty = illegal_action_penalty
-        self.observation_space = spaces.Box(
-            low=0.0, high=1.0, shape=(STATE_DIM,), dtype=np.float32
+        assert n_envs >= 1, "n_envs must be >= 1"
+        self.n_envs = n_envs
+        self.client = client or SimClient(base_url=sim_url)
+        self._auto_advance = auto_advance
+        self.slots: list[_Slot] = []
+        # Reused across steps; callers must copy anything they keep past a step.
+        self._obs = np.zeros((n_envs, STATE_DIM), dtype=np.float32)
+        self._masks = np.zeros((n_envs, ACTION_SPACE_SIZE), dtype=bool)
+        self._card_ids = np.zeros((n_envs, N_CARD_SLOTS), dtype=np.int64)
+
+    # -- Lifecycle -------------------------------------------------------------
+
+    def reset_all(self) -> None:
+        """Start (or restart) every slot in a single request."""
+        session_ids = [s.session_id for s in self.slots] if self.slots else None
+        results = self.client.reset_batch(
+            session_ids=session_ids,
+            count=None if session_ids else self.n_envs,
+            auto_advance=self._auto_advance,
+            compact=True,
         )
-        self.action_space = spaces.Discrete(ACTION_SPACE_SIZE)
+        if not self.slots:
+            self.slots = [_Slot(session_id=r["sessionId"]) for r in results]
+        for i, result in enumerate(results):
+            self._install(i, result["state"], result["legalMoves"], done=False, winner=None)
 
-        self._session_id: str | None = None
-        self._legal_moves: list[dict] = []
-        self._legal_index_map: dict[int, dict] = {}
-        self._legal_mask: np.ndarray = np.zeros(ACTION_SPACE_SIZE, dtype=bool)
-        self._state: dict = {}
-        self._winner: int | None = None
-        self._win_condition: str | None = None
-
-    # ── Core API ──────────────────────────────────────────────────────────────
-
-    def reset(
-        self,
-        *,
-        seed: int | None = None,
-        options: dict | None = None,
-    ) -> tuple[np.ndarray, dict]:
-        super().reset(seed=seed)
-
-        if self._session_id is not None:
-            self.client.close_session(self._session_id)
-
-        result = self.client.reset()
-        self._session_id = result["sessionId"]
-        self._state = result["state"]
-        self._legal_moves = result["legalMoves"]
-        self._update_legal(self._legal_moves)
-        self._winner = None
-        self._win_condition = None
-
-        obs = encode(self._state)
-        info = self._make_info()
-        return obs, info
-
-    def step(self, action: int) -> tuple[np.ndarray, float, bool, bool, dict]:
-        if self._session_id is None:
-            raise RuntimeError("Call reset() before step()")
-
-        # Map canonical index → concrete action dict
-        concrete = self._legal_index_map.get(action)
-        if concrete is None:
-            # Illegal action selected — return current obs with configurable penalty
-            obs = encode(self._state)
-            return obs, self._illegal_action_penalty, False, False, self._make_info()
-
-        try:
-            result = self.client.step(self._session_id, concrete)
-        except (requests.ConnectionError, requests.Timeout):
-            raise  # let _collect_with_retries handle transient network errors
-        except Exception as exc:
-            raise RuntimeError(
-                f"SimClient.step failed (session={self._session_id!r}, "
-                f"action_idx={action}, action={concrete!r}): {exc}"
-            ) from exc
-        self._state = result["state"]
-        self._legal_moves = result["legalMoves"]
-        self._update_legal(self._legal_moves)
-
-        done: bool = result["done"]
-        winner: int | None = result["winner"]
-        self._winner = winner
-        self._win_condition = self._state.get("winCondition") if done else None
-
-        reward = 0.0
-        if done and winner is not None:
-            # The player who just moved receives +1; the other player receives -1.
-            # On game_over the engine leaves currentPlayer equal to the winner,
-            # but we rely on `winner` directly so a future engine change can't
-            # silently flip reward attribution.
-            current_player: int = self._state.get("currentPlayer", 0)
-            if current_player != winner:
-                logging.getLogger(__name__).warning(
-                    "env.step: currentPlayer=%s != winner=%s on game_over; "
-                    "attributing reward to winner regardless.",
-                    current_player, winner,
-                )
-            reward = 1.0
-
-        obs = encode(self._state)
-        info = self._make_info()
-        return obs, reward, done, False, info
+    def reset_slots(self, slots: list[int]) -> None:
+        """Restart the given slots in a single request, reusing their session ids."""
+        if not slots:
+            return
+        session_ids = [self.slots[i].session_id for i in slots]
+        results = self.client.reset_batch(
+            session_ids=session_ids, auto_advance=self._auto_advance, compact=True
+        )
+        for i, result in zip(slots, results):
+            self._install(i, result["state"], result["legalMoves"], done=False, winner=None)
 
     def close(self) -> None:
-        if self._session_id is not None:
-            self.client.close_session(self._session_id)
-            self._session_id = None
+        if self.slots:
+            self.client.close_sessions([s.session_id for s in self.slots])
+            self.slots = []
 
-    # ── Helpers ───────────────────────────────────────────────────────────────
+    # -- Observation views -----------------------------------------------------
+    #
+    # These are internal buffers refreshed in place on every step and reset, so
+    # copy anything you need to keep beyond the next call.
 
-    def _update_legal(self, legal_moves: list[dict]) -> None:
-        """Build index map and mask in one pass over legal_moves."""
-        self._legal_index_map, self._legal_mask = build_legal_index_map_and_mask(legal_moves)
-        if legal_moves and not self._legal_mask.any():
+    @property
+    def obs(self) -> np.ndarray:
+        return self._obs
+
+    @property
+    def masks(self) -> np.ndarray:
+        return self._masks
+
+    @property
+    def card_ids(self) -> np.ndarray:
+        return self._card_ids
+
+    def current_players(self) -> list[int]:
+        return [s.current_player for s in self.slots]
+
+    def active_slots(self) -> list[int]:
+        return [i for i, s in enumerate(self.slots) if not s.done]
+
+    # -- Stepping --------------------------------------------------------------
+
+    def step(self, slots: list[int], action_indices: list[int]) -> dict[int, VecStepResult]:
+        """
+        Apply one action to each of `slots` in a single request.
+
+        Returns a mapping slot -> VecStepResult.  Rewards are zero-sum and
+        expressed from the perspective of the player who moved in that slot.
+        """
+        assert len(slots) == len(action_indices), "slots and action_indices must align"
+        if not slots:
+            return {}
+
+        steps: list[dict] = []
+        actors: list[int] = []
+        for slot_idx, action_idx in zip(slots, action_indices):
+            slot = self.slots[slot_idx]
+            concrete = slot.index_map.get(action_idx)
+            if concrete is None:
+                raise RuntimeError(
+                    f"VecSplendorDuelEnv.step: action {action_idx} is not legal in slot "
+                    f"{slot_idx} (session={slot.session_id!r}). Masking should make this "
+                    f"unreachable; {len(slot.index_map)} legal indices available."
+                )
+            actors.append(slot.current_player)
+            steps.append({"sessionId": slot.session_id, "action": concrete})
+
+        results = self.client.step_batch(
+            steps, auto_advance=self._auto_advance, compact=True
+        )
+
+        out: dict[int, VecStepResult] = {}
+        for slot_idx, actor, result in zip(slots, actors, results):
+            if "error" in result:
+                raise RuntimeError(
+                    f"game-sim rejected a step for slot {slot_idx} "
+                    f"(session={result.get('sessionId')!r}): {result['error']}"
+                )
+            done = bool(result["done"])
+            winner = result["winner"]
+            win_condition = result["state"].get("winCondition") if done else None
+            self._install(
+                slot_idx, result["state"], result["legalMoves"], done, winner, win_condition
+            )
+            out[slot_idx] = VecStepResult(
+                actor=actor,
+                reward=_reward_for_actor(actor, done, winner),
+                done=done,
+                winner=winner,
+                win_condition=win_condition,
+            )
+        return out
+
+    # -- Internals -------------------------------------------------------------
+
+    def _install(
+        self,
+        i: int,
+        state: dict,
+        legal_moves: list[dict],
+        done: bool,
+        winner: int | None,
+        win_condition: str | None = None,
+    ) -> None:
+        """Write one slot's new state through to the slot and the observation buffers."""
+        slot = self.slots[i]
+        slot.state = state
+        slot.legal_moves = legal_moves
+        slot.done = done
+        slot.winner = winner
+        slot.win_condition = win_condition
+
+        index_map, mask = build_legal_index_map_and_mask(legal_moves)
+        if legal_moves and not mask.any():
             raise RuntimeError(
-                f"_update_legal: {len(legal_moves)} legal moves returned by server but none "
-                f"mapped to canonical indices — action_space coverage gap.\n"
+                f"{len(legal_moves)} legal moves returned by server but none mapped to "
+                f"canonical indices -- action_space coverage gap.\n"
                 f"  First unmapped move: {legal_moves[0]}"
             )
-
-    def _make_info(self) -> dict:
-        return {
-            "legal_mask": self._legal_mask,
-            "state": self._state,
-            "legal_moves": self._legal_moves,
-            "winner": self._winner,
-            "win_condition": self._win_condition,
-        }
+        slot.index_map = index_map
+        self._obs[i] = encode(state)
+        self._masks[i] = mask
+        self._card_ids[i] = encode_card_ids(state)

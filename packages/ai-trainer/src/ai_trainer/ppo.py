@@ -3,10 +3,30 @@ PPO update with action masking and GAE advantage estimation.
 
 Hyperparameters:
   clip_eps     = 0.2
-  entropy_coef = 0.05
+  entropy_coef = 0.01   (annealed towards entropy_coef_final by train.py)
   value_coef   = 0.5
-  gamma        = 0.99
-  lam          = 0.95  (GAE lambda)
+  gamma        = 1.0
+  lam          = 0.97   (GAE lambda)
+
+On gamma
+--------
+The only reward in this game is +/-1 at the end, and a game runs ~350
+decisions.  With the previous gamma=0.99 the terminal reward reached the
+opening attenuated by 0.99^350 ~ 0.03, and GAE's effective lookahead was
+1/(1 - gamma*lam) ~ 17 steps -- about two turns.  Openings therefore received
+essentially no gradient.  Episodes here are finite and bounded, so undiscounted
+returns are well defined and correct; gamma=1.0 lets the outcome propagate to
+every decision that produced it.
+
+On trainable transitions
+------------------------
+When the opponent seat is played by a frozen checkpoint from the opponent pool,
+its actions were not drawn from the policy being optimised, so the importance
+ratio is meaningless for them.  Those transitions carry trainable=False: they
+stay in the trajectory (GAE needs an unbroken chain, and their states are still
+valid value-function targets) but are excluded from the policy and entropy
+terms.  In pure self-play every transition is trainable and this reduces to the
+standard update.
 """
 
 from __future__ import annotations
@@ -20,22 +40,24 @@ import torch.optim as optim
 
 from .self_play import Episode
 from .model import ActorCriticNet
-from .state_encoder import STATE_DIM
+from .state_encoder import STATE_DIM, N_CARD_SLOTS
 from .action_space import ACTION_SPACE_SIZE
 
 _ADV_STD_EPSILON = 1e-6   # prevents division by zero in advantage normalisation
-_ADV_CLIP_RANGE = 5.0     # clip normalised advantages to ±5σ
+_ADV_CLIP_RANGE = 5.0     # clip normalised advantages to +/-5 sigma
 
 
 @dataclass
 class PPOConfig:
     clip_eps: float = 0.2
-    entropy_coef: float = 0.05
+    entropy_coef: float = 0.01
     value_coef: float = 0.5
-    gamma: float = 0.99
-    lam: float = 0.95
+    gamma: float = 1.0
+    lam: float = 0.97
     n_epochs: int = 4
-    batch_size: int = 256
+    # 1024 rather than 256: measured on CPU, four epochs over ~14k transitions
+    # cost 7.3s at 256 and 3.7s at 1024 -- same work, half the per-step overhead.
+    batch_size: int = 1024
     max_grad_norm: float = 0.5
 
 
@@ -57,7 +79,7 @@ def _compute_gae(
 
     Observations are always encoded from the current player's perspective, so
     consecutive steps from different players have values in opposite frames:
-    V_opponent(s) ≈ -V_current(s).  When the next step belongs to the opponent,
+    V_opponent(s) ~ -V_current(s).  When the next step belongs to the opponent,
     both the bootstrap value and the accumulated GAE term must be negated to
     convert them to the current player's perspective before computing the TD error.
 
@@ -109,13 +131,18 @@ def update(
     # Pre-allocate flat buffers for all transitions up front, avoiding repeated
     # list appends and a separate np.stack / np.asarray pass at the end.
     n = sum(len(ep) for ep in episodes)
+    if n == 0:
+        raise ValueError("PPO update called with no transitions")
+
     all_obs = np.empty((n, STATE_DIM), dtype=np.float32)
+    all_card_ids = np.empty((n, N_CARD_SLOTS), dtype=np.int64)
     all_masks = np.empty((n, ACTION_SPACE_SIZE), dtype=np.bool_)
     all_actions = np.empty(n, dtype=np.int64)
     all_log_probs_old = np.empty(n, dtype=np.float32)
     all_advantages = np.empty(n, dtype=np.float32)
     all_returns = np.empty(n, dtype=np.float32)
     all_values_old = np.empty(n, dtype=np.float32)
+    all_trainable = np.empty(n, dtype=np.bool_)
 
     ptr = 0
     for ep in episodes:
@@ -135,29 +162,45 @@ def update(
 
         for i, t in enumerate(ep.transitions):
             all_obs[ptr + i] = t.obs
+            all_card_ids[ptr + i] = t.card_ids
             all_masks[ptr + i] = t.legal_mask
             all_actions[ptr + i] = t.action
             all_log_probs_old[ptr + i] = t.log_prob
             all_values_old[ptr + i] = t.value
+            all_trainable[ptr + i] = t.trainable
         ptr += ep_n
 
-    # Normalise advantages in-place — avoids a temporary array allocation.
+    n_trainable = int(all_trainable.sum())
+    if n_trainable == 0:
+        raise ValueError(
+            "PPO update: no trainable transitions in this batch -- every episode was "
+            "played entirely by pool opponents. Check the opponent-pool sampling rate."
+        )
+
+    # Normalise advantages over the transitions the policy loss will actually
+    # use.  Including frozen-opponent transitions here would shift the mean by
+    # data that never contributes a policy gradient.
     adv_arr = all_advantages  # already float32
-    adv_arr -= adv_arr.mean()
-    adv_arr /= adv_arr.std() + _ADV_STD_EPSILON
-    adv_clip_hits = int(((adv_arr > _ADV_CLIP_RANGE) | (adv_arr < -_ADV_CLIP_RANGE)).sum())
+    trainable_adv = adv_arr[all_trainable]
+    adv_arr -= trainable_adv.mean()
+    adv_arr /= trainable_adv.std() + _ADV_STD_EPSILON
+    adv_clip_hits = int(
+        (((adv_arr > _ADV_CLIP_RANGE) | (adv_arr < -_ADV_CLIP_RANGE)) & all_trainable).sum()
+    )
     np.clip(adv_arr, -_ADV_CLIP_RANGE, _ADV_CLIP_RANGE, out=adv_arr)
 
     # Single-copy transfer to device.
     obs_t = torch.from_numpy(all_obs).to(device, non_blocking=True)
+    card_ids_t = torch.from_numpy(all_card_ids).to(device, non_blocking=True)
     masks_t = torch.from_numpy(all_masks).to(device, non_blocking=True)
     actions_t = torch.from_numpy(all_actions).to(device, non_blocking=True)
     log_probs_old_t = torch.from_numpy(all_log_probs_old).to(device, non_blocking=True)
     advantages_t = torch.from_numpy(adv_arr).to(device, non_blocking=True)
     returns_t = torch.from_numpy(all_returns).to(device, non_blocking=True)
     values_old_t = torch.from_numpy(all_values_old).to(device, non_blocking=True)
+    trainable_t = torch.from_numpy(all_trainable).to(device, non_blocking=True)
 
-    # Precompute the inverted legal mask once — it's referenced every minibatch.
+    # Precompute the inverted legal mask once -- it's referenced every minibatch.
     inv_masks_t = ~masks_t
     # Accumulate loss components on-device and sync only once at the end,
     # instead of calling .item() on every minibatch.
@@ -173,24 +216,35 @@ def update(
         perm = torch.randperm(n, device=device)
         for start in range(0, n, config.batch_size):
             idx = perm[start : start + config.batch_size]
+            keep = trainable_t[idx]
+            n_keep = keep.sum()
+            if n_keep == 0:
+                # Value-only minibatches are possible but rare; skipping keeps
+                # the averaged log lines interpretable.
+                continue
+            weight = keep.float()
+            denom = weight.sum()
 
-            logits, values = model(obs_t[idx])
+            logits, values = model(obs_t[idx], card_ids_t[idx])
             logits_masked = logits.masked_fill(inv_masks_t[idx], float("-inf"))
             dist = torch.distributions.Categorical(logits=logits_masked)
 
             log_probs = dist.log_prob(actions_t[idx])
-            entropy = dist.entropy().mean()
+            entropy = (dist.entropy() * weight).sum() / denom
 
             ratio = torch.exp(log_probs - log_probs_old_t[idx])
             adv = advantages_t[idx]
 
-            policy_loss = -torch.min(
+            per_sample_policy = -torch.min(
                 ratio * adv,
                 torch.clamp(ratio, 1 - config.clip_eps, 1 + config.clip_eps) * adv,
-            ).mean()
+            )
+            policy_loss = (per_sample_policy * weight).sum() / denom
 
             # Clipped value loss: prevents value function from moving too far from
             # the rollout estimate, mirroring the policy clip for stability.
+            # Applied to every transition -- opponent-played states are still
+            # valid samples of the value function.
             values_sq = values.squeeze(-1)
             values_old_b = values_old_t[idx]
             values_clipped = values_old_b + torch.clamp(
@@ -202,7 +256,7 @@ def update(
             )
 
             # Approximate KL divergence for monitoring policy change per update.
-            kl = (log_probs_old_t[idx] - log_probs).mean()
+            kl = ((log_probs_old_t[idx] - log_probs) * weight).sum() / denom
 
             loss = policy_loss + config.value_coef * value_loss - config.entropy_coef * entropy
 
@@ -218,7 +272,10 @@ def update(
             total_grad_norm += grad_norm
             n_updates += 1
 
-    # Single GPU→CPU sync after all minibatches.
+    if n_updates == 0:
+        raise ValueError("PPO update completed no minibatches")
+
+    # Single GPU->CPU sync after all minibatches.
     pl = float(total_policy_loss.item()) / n_updates
     vl = float(total_value_loss.item()) / n_updates
     ent = float(total_entropy.item()) / n_updates
@@ -236,5 +293,6 @@ def update(
         "entropy": ent,
         "kl": kl,
         "grad_norm": gn,
-        "adv_clip_frac": adv_clip_hits / max(n, 1),
+        "adv_clip_frac": adv_clip_hits / max(n_trainable, 1),
+        "trainable_frac": n_trainable / n,
     }

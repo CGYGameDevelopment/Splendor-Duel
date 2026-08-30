@@ -1,124 +1,222 @@
 """
 Evaluate the trained model against baselines.
+
+Two things differ from the earlier revision:
+
+* The model plays **greedily** (argmax over legal actions).  It used to sample,
+  which measured a deliberately randomised version of the policy -- and since
+  best.pt selection keyed off these numbers, the recorded win rates were of a
+  weaker player than the one being saved.
+* Games are run through a VecSplendorDuelEnv.  A 100-game evaluation is ~35,000
+  engine calls; batching turns that into ~350 round trips.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Callable
+from typing import Protocol
 
 import numpy as np
 import torch
 
-from .env import SplendorDuelEnv
+from .env import VecSplendorDuelEnv
 from .model import ActorCriticNet
 from .random_agent import GreedyPurchaseAgent, RandomAgent
-from .state_encoder import STATE_DIM
-from .action_space import ACTION_SPACE_SIZE
 
 MAX_EVAL_STEPS = 2_000
 _FIRST_PLAYER_BIAS_THRESHOLD = 0.1
 
 
-# ── Shared game-loop helper ───────────────────────────────────────────────────
-
-ActionFn = Callable[[np.ndarray, np.ndarray, dict], int]
+# -- Policies ------------------------------------------------------------------
 
 
-def _run_game(
-    env: SplendorDuelEnv,
-    player_fns: tuple[ActionFn, ActionFn],
-) -> int | None:
+class Policy(Protocol):
+    """Chooses one action index for each of the given env slots."""
+
+    def act(self, env: VecSplendorDuelEnv, slots: list[int]) -> list[int]:
+        ...
+
+
+class ModelPolicy:
     """
-    Play one game to completion and return the winner index (or None on timeout).
+    A network driving one seat.
 
-    player_fns[i] is called when it is player i's turn.
-    Signature: (obs_np, legal_mask, info) -> action_int
+    greedy=True picks the highest-logit legal action.  That is what a player
+    should do at evaluation and deployment time; sampling is for exploration
+    during rollouts, not for measuring or showing strength.  `temperature`
+    applies only when greedy is False.
     """
-    obs_np, info = env.reset()
-    for _ in range(MAX_EVAL_STEPS):
-        p: int = info["state"].get("currentPlayer", 0)
-        action = player_fns[p](obs_np, info["legal_mask"], info)
-        obs_np, _, done, _, info = env.step(action)
-        if done:
-            break
-    return info["winner"]
+
+    def __init__(
+        self,
+        model: ActorCriticNet,
+        device: torch.device | None = None,
+        greedy: bool = True,
+        temperature: float = 1.0,
+    ) -> None:
+        self.model = model
+        self.device = device or next(model.parameters()).device
+        self.greedy = greedy
+        self.temperature = temperature
+        model.eval()
+
+    @torch.inference_mode()
+    def act(self, env: VecSplendorDuelEnv, slots: list[int]) -> list[int]:
+        obs = torch.from_numpy(env.obs[slots]).to(self.device)
+        masks = torch.from_numpy(env.masks[slots]).to(self.device)
+        card_ids = torch.from_numpy(env.card_ids[slots]).to(self.device)
+        logits, _ = self.model(obs, card_ids)
+        logits = logits.masked_fill(~masks, float("-inf"))
+        if self.greedy:
+            return logits.argmax(dim=-1).cpu().tolist()
+        dist = torch.distributions.Categorical(logits=logits / max(self.temperature, 1e-6))
+        return dist.sample().cpu().tolist()
 
 
-def _model_action_fn(
-    model: ActorCriticNet,
-    obs_buf: torch.Tensor,
-    mask_buf: torch.Tensor,
-) -> ActionFn:
-    """Return a closure that runs greedy model inference."""
-    def fn(obs_np: np.ndarray, legal_mask: np.ndarray, info: dict) -> int:
-        obs_buf.copy_(torch.from_numpy(obs_np).unsqueeze(0), non_blocking=True)
-        mask_buf.copy_(torch.from_numpy(legal_mask).unsqueeze(0), non_blocking=True)
-        dist = model.masked_policy(obs_buf, mask_buf)
-        return int(dist.sample().item())
-    return fn
+class BaselinePolicy:
+    """Wraps a per-state baseline agent (RandomAgent, GreedyPurchaseAgent)."""
+
+    def __init__(self, act_fn) -> None:
+        self._act = act_fn
+
+    def act(self, env: VecSplendorDuelEnv, slots: list[int]) -> list[int]:
+        return [self._act(env, i) for i in slots]
 
 
-# ── Public evaluation functions ───────────────────────────────────────────────
+def random_policy(seed: int | None = None) -> BaselinePolicy:
+    agent = RandomAgent(rng=np.random.default_rng(seed))
+    return BaselinePolicy(lambda env, i: agent.act(env.masks[i]))
 
-@torch.inference_mode()
-def win_rate_vs_greedy(
-    model: ActorCriticNet,
-    env: SplendorDuelEnv,
-    n_games: int = 100,
-    device: torch.device | None = None,
-) -> float:
+
+def greedy_purchase_policy(seed: int | None = None) -> BaselinePolicy:
+    agent = GreedyPurchaseAgent(rng=np.random.default_rng(seed))
+    return BaselinePolicy(
+        lambda env, i: agent.act(env.slots[i].legal_moves, env.masks[i], env.slots[i].state)
+    )
+
+
+# -- Match runner --------------------------------------------------------------
+
+
+def _play_matches(
+    env: VecSplendorDuelEnv,
+    n_games: int,
+    policy_a: Policy,
+    policy_b: Policy,
+    max_steps: int = MAX_EVAL_STEPS,
+) -> tuple[int, int, int, int, int]:
     """
-    Play n_games against a greedy-purchase agent and return the model's win rate.
+    Play n_games between policy_a and policy_b, alternating seats.
 
-    The opponent always buys the highest-level pyramid card it can afford;
-    otherwise it picks a random legal action.
-
-    To eliminate first-player bias the model alternates sides each game.
+    Returns (wins_a, wins_a_as_p0, games_as_p0, wins_a_as_p1, games_as_p1).
+    Games that hit max_steps count as neither side's win.
     """
     assert n_games > 0
-    if device is None:
-        device = next(model.parameters()).device
-    model.eval()
+    env.reset_all()
+    n_slots = env.n_envs
 
-    opponent = GreedyPurchaseAgent()
-    obs_buf = torch.empty((1, STATE_DIM), dtype=torch.float32, device=device)
-    mask_buf = torch.empty((1, ACTION_SPACE_SIZE), dtype=torch.bool, device=device)
-    model_fn = _model_action_fn(model, obs_buf, mask_buf)
+    # Seat that policy_a occupies in the game currently held by each slot.
+    a_seat: list[int] = []
+    steps = [0] * n_slots
+    dealt = 0
+    for _ in range(n_slots):
+        a_seat.append(dealt % 2)
+        dealt += 1
 
-    def opp_fn(obs_np: np.ndarray, legal_mask: np.ndarray, info: dict) -> int:
-        return opponent.act(info["legal_moves"], legal_mask, info["state"])
+    wins_a = wins_p0 = wins_p1 = games_p0 = games_p1 = 0
+    completed = 0
 
-    wins = wins_as_p0 = wins_as_p1 = 0
-    for game_idx in range(n_games):
-        model_player = game_idx % 2
-        fns = (model_fn, opp_fn) if model_player == 0 else (opp_fn, model_fn)
-        winner = _run_game(env, fns)
-        if winner == model_player:
-            wins += 1
-            if model_player == 0:
-                wins_as_p0 += 1
+    while completed < n_games:
+        active = [i for i in env.active_slots() if steps[i] < max_steps]
+        if not active:
+            break
+
+        # Split by which policy is on turn, so each side acts on a full batch.
+        slots_a = [i for i in active if env.slots[i].current_player == a_seat[i]]
+        slots_b = [i for i in active if env.slots[i].current_player != a_seat[i]]
+
+        chosen: dict[int, int] = {}
+        if slots_a:
+            chosen.update(dict(zip(slots_a, policy_a.act(env, slots_a))))
+        if slots_b:
+            chosen.update(dict(zip(slots_b, policy_b.act(env, slots_b))))
+
+        ordered = [chosen[i] for i in active]
+        results = env.step(active, ordered)
+
+        to_reset: list[int] = []
+        for slot in active:
+            steps[slot] += 1
+            result = results[slot]
+            timed_out = not result.done and steps[slot] >= max_steps
+            if not (result.done or timed_out):
+                continue
+
+            seat = a_seat[slot]
+            if seat == 0:
+                games_p0 += 1
             else:
-                wins_as_p1 += 1
+                games_p1 += 1
+            if result.done and result.winner == seat:
+                wins_a += 1
+                if seat == 0:
+                    wins_p0 += 1
+                else:
+                    wins_p1 += 1
 
-    games_as_p0 = n_games // 2 + (n_games % 2)
-    games_as_p1 = n_games // 2
-    wr_p0 = wins_as_p0 / games_as_p0 if games_as_p0 else 0.0
-    wr_p1 = wins_as_p1 / games_as_p1 if games_as_p1 else 0.0
+            completed += 1
+            if completed >= n_games:
+                break
+            if dealt < n_games:
+                a_seat[slot] = dealt % 2
+                dealt += 1
+                steps[slot] = 0
+                to_reset.append(slot)
+
+        if completed >= n_games:
+            break
+        if to_reset:
+            env.reset_slots(to_reset)
+
+    return wins_a, wins_p0, games_p0, wins_p1, games_p1
+
+
+def _warn_on_seat_bias(label: str, wins_p0: int, games_p0: int, wins_p1: int, games_p1: int) -> None:
+    wr_p0 = wins_p0 / games_p0 if games_p0 else 0.0
+    wr_p1 = wins_p1 / games_p1 if games_p1 else 0.0
     bias = abs(wr_p0 - wr_p1)
-    if bias > _FIRST_PLAYER_BIAS_THRESHOLD:
+    if games_p0 and games_p1 and bias > _FIRST_PLAYER_BIAS_THRESHOLD:
         logging.getLogger(__name__).warning(
-            "win_rate_vs_greedy: first-player bias detected — "
-            "win rate as P0=%.1f%%, as P1=%.1f%% (gap %.1f%%)",
-            wr_p0 * 100, wr_p1 * 100, bias * 100,
+            "%s: first-player bias detected -- win rate as P0=%.1f%%, as P1=%.1f%% (gap %.1f%%)",
+            label, wr_p0 * 100, wr_p1 * 100, bias * 100,
         )
+
+
+# -- Public evaluation functions -----------------------------------------------
+
+
+def win_rate_vs_greedy(
+    model: ActorCriticNet,
+    env: VecSplendorDuelEnv,
+    n_games: int = 100,
+    device: torch.device | None = None,
+    seed: int | None = None,
+) -> float:
+    """
+    Play n_games against the greedy-purchase agent and return the model's win rate.
+
+    The model plays greedily and alternates seats to cancel first-player bias.
+    """
+    wins, w0, g0, w1, g1 = _play_matches(
+        env, n_games, ModelPolicy(model, device, greedy=True), greedy_purchase_policy(seed)
+    )
+    _warn_on_seat_bias("win_rate_vs_greedy", w0, g0, w1, g1)
     return wins / n_games
 
 
-@torch.inference_mode()
 def win_rate_vs_random(
     model: ActorCriticNet,
-    env: SplendorDuelEnv,
+    env: VecSplendorDuelEnv,
     n_games: int = 50,
     device: torch.device | None = None,
     seed: int = 0,
@@ -126,78 +224,27 @@ def win_rate_vs_random(
     """
     Play n_games against a random agent and return the model's win rate.
 
-    A fixed RNG seed is used so results are comparable across checkpoints.
-    The model alternates sides to eliminate first-player bias.
+    A fixed RNG seed keeps results comparable across checkpoints.
     """
-    assert n_games > 0
-    if device is None:
-        device = next(model.parameters()).device
-    model.eval()
-
-    opponent = RandomAgent(rng=np.random.default_rng(seed))
-    obs_buf = torch.empty((1, STATE_DIM), dtype=torch.float32, device=device)
-    mask_buf = torch.empty((1, ACTION_SPACE_SIZE), dtype=torch.bool, device=device)
-    model_fn = _model_action_fn(model, obs_buf, mask_buf)
-
-    def opp_fn(obs_np: np.ndarray, legal_mask: np.ndarray, info: dict) -> int:
-        return opponent.act(legal_mask)
-
-    wins = wins_as_p0 = wins_as_p1 = 0
-    for game_idx in range(n_games):
-        model_player = game_idx % 2
-        fns = (model_fn, opp_fn) if model_player == 0 else (opp_fn, model_fn)
-        if _run_game(env, fns) == model_player:
-            wins += 1
-            if model_player == 0:
-                wins_as_p0 += 1
-            else:
-                wins_as_p1 += 1
-
-    games_as_p0 = n_games // 2 + (n_games % 2)
-    games_as_p1 = n_games // 2
-    wr_p0 = wins_as_p0 / games_as_p0 if games_as_p0 else 0.0
-    wr_p1 = wins_as_p1 / games_as_p1 if games_as_p1 else 0.0
-    bias = abs(wr_p0 - wr_p1)
-    if bias > _FIRST_PLAYER_BIAS_THRESHOLD:
-        logging.getLogger(__name__).warning(
-            "win_rate_vs_random: first-player bias detected — "
-            "win rate as P0=%.1f%%, as P1=%.1f%% (gap %.1f%%)",
-            wr_p0 * 100, wr_p1 * 100, bias * 100,
-        )
+    wins, w0, g0, w1, g1 = _play_matches(
+        env, n_games, ModelPolicy(model, device, greedy=True), random_policy(seed)
+    )
+    _warn_on_seat_bias("win_rate_vs_random", w0, g0, w1, g1)
     return wins / n_games
 
 
-@torch.inference_mode()
 def win_rate_vs_model(
     model_a: ActorCriticNet,
     model_b: ActorCriticNet,
-    env: SplendorDuelEnv,
+    env: VecSplendorDuelEnv,
     n_games: int = 50,
     device: torch.device | None = None,
 ) -> float:
-    """
-    Play n_games between model_a and model_b and return model_a's win rate.
-
-    Sides alternate each game to eliminate first-player bias.
-    """
-    assert n_games > 0
-    if device is None:
-        device = next(model_a.parameters()).device
-    model_a.eval()
-    model_b.eval()
-
-    # Each model gets its own inference buffers to avoid aliasing.
-    obs_buf_a = torch.empty((1, STATE_DIM), dtype=torch.float32, device=device)
-    mask_buf_a = torch.empty((1, ACTION_SPACE_SIZE), dtype=torch.bool, device=device)
-    obs_buf_b = torch.empty((1, STATE_DIM), dtype=torch.float32, device=device)
-    mask_buf_b = torch.empty((1, ACTION_SPACE_SIZE), dtype=torch.bool, device=device)
-    fn_a = _model_action_fn(model_a, obs_buf_a, mask_buf_a)
-    fn_b = _model_action_fn(model_b, obs_buf_b, mask_buf_b)
-
-    wins = 0
-    for game_idx in range(n_games):
-        a_player = game_idx % 2
-        fns = (fn_a, fn_b) if a_player == 0 else (fn_b, fn_a)
-        if _run_game(env, fns) == a_player:
-            wins += 1
+    """Play n_games between model_a and model_b; returns model_a's win rate."""
+    wins, _, _, _, _ = _play_matches(
+        env,
+        n_games,
+        ModelPolicy(model_a, device, greedy=True),
+        ModelPolicy(model_b, device, greedy=True),
+    )
     return wins / n_games
