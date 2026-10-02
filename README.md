@@ -25,7 +25,7 @@ npm run test        # runs all tests
 
 ---
 
-## Play Locally (2-player CLI)
+## Play Locally (2 players)
 
 Builds the engine, starts the server, and opens two CLI client windows:
 
@@ -41,7 +41,11 @@ npm run dev --workspace=packages/server        # port 3001
 npm run dev --workspace=packages/cli-client    # repeat for player 2
 ```
 
-For the browser client instead, use `start_gui_client.bat` (server + Vite on port 5173).
+To play in the browser instead (server + Vite dev server on port 5173, opens two tabs):
+
+```bash
+start_gui_client.bat
+```
 
 ---
 
