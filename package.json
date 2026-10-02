@@ -5,7 +5,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
+    "build": "npm run build -w packages/game-engine -w packages/protocol && npm run build -w packages/server -w packages/ai-game-sim -w packages/client",
     "test": "npm run test --workspaces --if-present"
   }
 }

@@ -30,7 +30,7 @@ npm run test        # runs all tests
 Builds the engine, starts the server, and opens two CLI client windows:
 
 ```bash
-start_the_game.bat
+start_cli_client.bat
 ```
 
 Or manually:
@@ -40,6 +40,8 @@ npm run build --workspace=packages/game-engine
 npm run dev --workspace=packages/server        # port 3001
 npm run dev --workspace=packages/cli-client    # repeat for player 2
 ```
+
+For the browser client instead, use `start_gui_client.bat` (server + Vite on port 5173).
 
 ---
 
@@ -63,6 +65,11 @@ pip install -e .
 train
 ```
 
+Or use the interactive launcher (starts the game sim, then offers fresh/resume training):
+```bash
+start_the_ai_trainer.bat
+```
+
 **4. Play against the trained bot:**
 ```bash
 .venv\Scripts\play-vs-ai.exe checkpoints\best.pt
@@ -80,6 +87,7 @@ play_vs_ai.bat
 | Package | Description |
 |---|---|
 | `packages/game-engine` | Core game logic — types, reducer, legal moves, helpers |
+| `packages/protocol` | Shared client/server WebSocket message and sanitized-state types |
 | `packages/server` | Express + WebSocket multiplayer server |
 | `packages/cli-client` | Terminal client for local play |
 | `packages/ai-game-sim` | HTTP server wrapping game-engine for Python AI training |

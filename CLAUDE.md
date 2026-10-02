@@ -7,6 +7,7 @@ See `README.md` for project overview, setup, and run instructions.
 | Package | Purpose |
 |---|---|
 | `packages/game-engine` | Core game logic: state types, reducer, legal moves, board helpers |
+| `packages/protocol` | Shared client/server WebSocket message and sanitized-state types |
 | `packages/server` | Express + WebSocket server for multiplayer sessions |
 | `packages/cli-client` | Terminal-based interactive client for local play |
 | `packages/ai-game-sim` | HTTP server wrapping game-engine for Python AI training |

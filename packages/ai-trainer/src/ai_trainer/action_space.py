@@ -174,12 +174,6 @@ def index_to_action(idx: int, legal_moves: list[dict]) -> dict | None:
     return None
 
 
-def build_legal_index_map(legal_moves: list[dict]) -> dict[int, dict]:
-    """Return a dict mapping canonical action index → action dict for all legal moves."""
-    index_map, _ = build_legal_index_map_and_mask(legal_moves)
-    return index_map
-
-
 def build_legal_index_map_and_mask(
     legal_moves: list[dict],
 ) -> tuple[dict[int, dict], np.ndarray]:
@@ -189,7 +183,7 @@ def build_legal_index_map_and_mask(
     for action in legal_moves:
         idx = action_to_index(action)
         if idx is None:
-            logger.warning("build_legal_index_map: unmapped legal action %s", action)
+            logger.warning("build_legal_index_map_and_mask: unmapped legal action %s", action)
             continue
         assert idx not in index_map, (
             f"Duplicate canonical index {idx} produced by two different legal moves: "
