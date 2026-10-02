@@ -190,7 +190,6 @@ function chooseRoyalMoves(state: GameState): Action[] {
 
 function resolveAbilityMoves(state: GameState): Action[] {
   const currentPlayerId = state.currentPlayer;
-  const player = state.players[currentPlayerId];
   const card = state.lastPurchasedCard;
   if (!card) return [];
 

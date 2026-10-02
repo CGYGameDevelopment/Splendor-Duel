@@ -3,8 +3,8 @@ import type {
 } from './types';
 import { SPIRAL_ORDER, isValidTokenLine } from './board';
 import {
-  emptyPool, totalTokens, netCost, canAfford, grantPrivileges,
-  checkVictory, GEM_COLORS, TOKEN_COLORS, MAX_TOKENS, MAX_RESERVED, MAX_PRIVILEGES,
+  totalTokens, netCost, canAfford, grantPrivileges,
+  checkVictory, GEM_COLORS, TOKEN_COLORS, MAX_TOKENS, MAX_RESERVED,
   CROWN_MILESTONES, CARD_LEVELS, PENALTY_SAME_COLOR_COUNT, PENALTY_PEARL_COUNT,
 } from './helpers';
 

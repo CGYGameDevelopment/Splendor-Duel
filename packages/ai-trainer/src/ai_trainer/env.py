@@ -146,9 +146,6 @@ class VecSplendorDuelEnv:
     def card_ids(self) -> np.ndarray:
         return self._card_ids
 
-    def current_players(self) -> list[int]:
-        return [s.current_player for s in self.slots]
-
     def active_slots(self) -> list[int]:
         return [i for i, s in enumerate(self.slots) if not s.done]
 
