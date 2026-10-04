@@ -147,7 +147,7 @@ class GreedyPurchaseAgent:
 
         # Rule 5: When discarding, never discard gold.
         if discard_moves:
-            safe = [(m, i) for m, i in discard_moves if "gold" not in m.get("tokens", {})]
+            safe = [(m, i) for m, i in discard_moves if m.get("color") != "gold"]
             pool = safe if safe else discard_moves
             return pool[int(self.rng.integers(len(pool)))][1]
 

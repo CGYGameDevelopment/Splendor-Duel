@@ -1,0 +1,1741 @@
+{
+  "formatVersion": 1,
+  "generatedFrom": "packages/game-engine (see scripts/generate_action_fixture.js)",
+  "phasesCovered": [
+    "assign_wild",
+    "choose_royal",
+    "discard",
+    "mandatory",
+    "optional_privilege",
+    "optional_replenish",
+    "resolve_ability"
+  ],
+  "samples": [
+    {
+      "signature": "assign_wild|ASSIGN_WILD_COLOR",
+      "phase": "assign_wild",
+      "legalMoves": [
+        {
+          "type": "ASSIGN_WILD_COLOR",
+          "wildCardId": 27,
+          "color": "red"
+        },
+        {
+          "type": "ASSIGN_WILD_COLOR",
+          "wildCardId": 27,
+          "color": "blue"
+        },
+        {
+          "type": "ASSIGN_WILD_COLOR",
+          "wildCardId": 27,
+          "color": "black"
+        },
+        {
+          "type": "ASSIGN_WILD_COLOR",
+          "wildCardId": 27,
+          "color": "white"
+        }
+      ]
+    },
+    {
+      "signature": "choose_royal|CHOOSE_ROYAL_CARD",
+      "phase": "choose_royal",
+      "legalMoves": [
+        {
+          "type": "CHOOSE_ROYAL_CARD",
+          "cardId": 2
+        },
+        {
+          "type": "CHOOSE_ROYAL_CARD",
+          "cardId": 1
+        },
+        {
+          "type": "CHOOSE_ROYAL_CARD",
+          "cardId": 4
+        },
+        {
+          "type": "CHOOSE_ROYAL_CARD",
+          "cardId": 3
+        }
+      ]
+    },
+    {
+      "signature": "discard|DISCARD_TOKENS",
+      "phase": "discard",
+      "legalMoves": [
+        {
+          "type": "DISCARD_TOKENS",
+          "color": "white"
+        },
+        {
+          "type": "DISCARD_TOKENS",
+          "color": "blue"
+        },
+        {
+          "type": "DISCARD_TOKENS",
+          "color": "green"
+        },
+        {
+          "type": "DISCARD_TOKENS",
+          "color": "red"
+        },
+        {
+          "type": "DISCARD_TOKENS",
+          "color": "black"
+        },
+        {
+          "type": "DISCARD_TOKENS",
+          "color": "gold"
+        }
+      ]
+    },
+    {
+      "signature": "mandatory|PURCHASE_CARD",
+      "phase": "mandatory",
+      "legalMoves": [
+        {
+          "type": "PURCHASE_CARD",
+          "cardId": 17,
+          "goldUsage": {}
+        },
+        {
+          "type": "PURCHASE_CARD",
+          "cardId": 5,
+          "goldUsage": {}
+        },
+        {
+          "type": "PURCHASE_CARD",
+          "cardId": 29,
+          "goldUsage": {}
+        }
+      ]
+    },
+    {
+      "signature": "mandatory|PURCHASE_CARD,RESERVE_CARD_FROM_DECK,RESERVE_CARD_FROM_PYRAMID",
+      "phase": "mandatory",
+      "legalMoves": [
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 27
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 28
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 13
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 18
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 23
+        },
+        {
+          "type": "RESERVE_CARD_FROM_DECK",
+          "source": "deck_1"
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 33
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 45
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 36
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 35
+        },
+        {
+          "type": "RESERVE_CARD_FROM_DECK",
+          "source": "deck_2"
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 62
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 59
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 66
+        },
+        {
+          "type": "RESERVE_CARD_FROM_DECK",
+          "source": "deck_3"
+        },
+        {
+          "type": "PURCHASE_CARD",
+          "cardId": 13,
+          "goldUsage": {
+            "pearl": 1
+          }
+        },
+        {
+          "type": "PURCHASE_CARD",
+          "cardId": 18,
+          "goldUsage": {
+            "pearl": 1
+          }
+        },
+        {
+          "type": "PURCHASE_CARD",
+          "cardId": 35,
+          "goldUsage": {
+            "pearl": 1
+          }
+        }
+      ]
+    },
+    {
+      "signature": "mandatory|PURCHASE_CARD,RESERVE_CARD_FROM_DECK,RESERVE_CARD_FROM_PYRAMID,TAKE_TOKENS",
+      "phase": "mandatory",
+      "legalMoves": [
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            1
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            2
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            5
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            10
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            11
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            12
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            16
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            17
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            18
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            20
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            22
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            23
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            1,
+            2
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            1,
+            5
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            5,
+            10
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            5,
+            11
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            10,
+            11
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            10,
+            16
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            11,
+            12
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            11,
+            16
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            11,
+            17
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            12,
+            16
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            12,
+            17
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            12,
+            18
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            16,
+            17
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            16,
+            20
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            16,
+            22
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            17,
+            18
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            17,
+            22
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            17,
+            23
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            18,
+            22
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            18,
+            23
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            22,
+            23
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            5,
+            11,
+            17
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            10,
+            11,
+            12
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            10,
+            16,
+            22
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            11,
+            17,
+            23
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            12,
+            16,
+            20
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            12,
+            17,
+            22
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            16,
+            17,
+            18
+          ]
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 18
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 15
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 24
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 10
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 22
+        },
+        {
+          "type": "RESERVE_CARD_FROM_DECK",
+          "source": "deck_1"
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 32
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 54
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 41
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 48
+        },
+        {
+          "type": "RESERVE_CARD_FROM_DECK",
+          "source": "deck_2"
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 62
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 61
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 63
+        },
+        {
+          "type": "RESERVE_CARD_FROM_DECK",
+          "source": "deck_3"
+        },
+        {
+          "type": "PURCHASE_CARD",
+          "cardId": 15,
+          "goldUsage": {
+            "black": 1
+          }
+        }
+      ]
+    },
+    {
+      "signature": "mandatory|PURCHASE_CARD,TAKE_TOKENS",
+      "phase": "mandatory",
+      "legalMoves": [
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            12
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            18
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            20
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            22
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            23
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            12,
+            18
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            18,
+            22
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            18,
+            23
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            22,
+            23
+          ]
+        },
+        {
+          "type": "PURCHASE_CARD",
+          "cardId": 18,
+          "goldUsage": {
+            "black": 1
+          }
+        },
+        {
+          "type": "PURCHASE_CARD",
+          "cardId": 15,
+          "goldUsage": {}
+        },
+        {
+          "type": "PURCHASE_CARD",
+          "cardId": 10,
+          "goldUsage": {}
+        },
+        {
+          "type": "PURCHASE_CARD",
+          "cardId": 22,
+          "goldUsage": {}
+        }
+      ]
+    },
+    {
+      "signature": "mandatory|REPLENISH_BOARD",
+      "phase": "mandatory",
+      "legalMoves": [
+        {
+          "type": "REPLENISH_BOARD"
+        }
+      ]
+    },
+    {
+      "signature": "mandatory|RESERVE_CARD_FROM_DECK,RESERVE_CARD_FROM_PYRAMID",
+      "phase": "mandatory",
+      "legalMoves": [
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 32
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 54
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 53
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 40
+        },
+        {
+          "type": "RESERVE_CARD_FROM_DECK",
+          "source": "deck_2"
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 61
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 59
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 55
+        },
+        {
+          "type": "RESERVE_CARD_FROM_DECK",
+          "source": "deck_3"
+        }
+      ]
+    },
+    {
+      "signature": "mandatory|RESERVE_CARD_FROM_DECK,RESERVE_CARD_FROM_PYRAMID,TAKE_TOKENS",
+      "phase": "mandatory",
+      "legalMoves": [
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            0
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            1
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            2
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            3
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            4
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            5
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            6
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            7
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            8
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            10
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            11
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            12
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            13
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            14
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            16
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            17
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            18
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            19
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            20
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            22
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            23
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            24
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            0,
+            1
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            0,
+            5
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            0,
+            6
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            1,
+            2
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            1,
+            5
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            1,
+            6
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            1,
+            7
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            2,
+            3
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            2,
+            6
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            2,
+            7
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            2,
+            8
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            3,
+            4
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            3,
+            7
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            3,
+            8
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            4,
+            8
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            5,
+            6
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            5,
+            10
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            5,
+            11
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            6,
+            7
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            6,
+            10
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            6,
+            11
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            6,
+            12
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            7,
+            8
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            7,
+            11
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            7,
+            12
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            7,
+            13
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            8,
+            12
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            8,
+            13
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            8,
+            14
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            10,
+            11
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            10,
+            16
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            11,
+            12
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            11,
+            16
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            11,
+            17
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            12,
+            13
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            12,
+            16
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            12,
+            17
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            12,
+            18
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            13,
+            14
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            13,
+            17
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            13,
+            18
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            13,
+            19
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            14,
+            18
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            14,
+            19
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            16,
+            17
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            16,
+            20
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            16,
+            22
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            17,
+            18
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            17,
+            22
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            17,
+            23
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            18,
+            19
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            18,
+            22
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            18,
+            23
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            18,
+            24
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            19,
+            23
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            19,
+            24
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            22,
+            23
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            23,
+            24
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            0,
+            1,
+            2
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            0,
+            5,
+            10
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            0,
+            6,
+            12
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            1,
+            2,
+            3
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            1,
+            6,
+            11
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            1,
+            7,
+            13
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            2,
+            6,
+            10
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            2,
+            7,
+            12
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            2,
+            8,
+            14
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            3,
+            7,
+            11
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            3,
+            8,
+            13
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            4,
+            8,
+            12
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            5,
+            6,
+            7
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            5,
+            11,
+            17
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            6,
+            7,
+            8
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            6,
+            11,
+            16
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            6,
+            12,
+            18
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            7,
+            12,
+            17
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            7,
+            13,
+            19
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            8,
+            12,
+            16
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            8,
+            13,
+            18
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            10,
+            11,
+            12
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            10,
+            16,
+            22
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            11,
+            12,
+            13
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            11,
+            17,
+            23
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            12,
+            13,
+            14
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            12,
+            16,
+            20
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            12,
+            17,
+            22
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            12,
+            18,
+            24
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            13,
+            18,
+            23
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            14,
+            18,
+            22
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            14,
+            19,
+            24
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            16,
+            17,
+            18
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            17,
+            18,
+            19
+          ]
+        },
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            22,
+            23,
+            24
+          ]
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 18
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 15
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 24
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 10
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 22
+        },
+        {
+          "type": "RESERVE_CARD_FROM_DECK",
+          "source": "deck_1"
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 32
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 54
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 41
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 48
+        },
+        {
+          "type": "RESERVE_CARD_FROM_DECK",
+          "source": "deck_2"
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 62
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 61
+        },
+        {
+          "type": "RESERVE_CARD_FROM_PYRAMID",
+          "cardId": 63
+        },
+        {
+          "type": "RESERVE_CARD_FROM_DECK",
+          "source": "deck_3"
+        }
+      ]
+    },
+    {
+      "signature": "mandatory|TAKE_TOKENS",
+      "phase": "mandatory",
+      "legalMoves": [
+        {
+          "type": "TAKE_TOKENS",
+          "indices": [
+            12
+          ]
+        }
+      ]
+    },
+    {
+      "signature": "optional_privilege|END_OPTIONAL_PHASE,SKIP_TO_MANDATORY",
+      "phase": "optional_privilege",
+      "legalMoves": [
+        {
+          "type": "END_OPTIONAL_PHASE"
+        },
+        {
+          "type": "SKIP_TO_MANDATORY"
+        }
+      ]
+    },
+    {
+      "signature": "optional_privilege|END_OPTIONAL_PHASE,SKIP_TO_MANDATORY,USE_PRIVILEGE",
+      "phase": "optional_privilege",
+      "legalMoves": [
+        {
+          "type": "END_OPTIONAL_PHASE"
+        },
+        {
+          "type": "SKIP_TO_MANDATORY"
+        },
+        {
+          "type": "USE_PRIVILEGE",
+          "index": 0
+        },
+        {
+          "type": "USE_PRIVILEGE",
+          "index": 1
+        },
+        {
+          "type": "USE_PRIVILEGE",
+          "index": 2
+        },
+        {
+          "type": "USE_PRIVILEGE",
+          "index": 3
+        },
+        {
+          "type": "USE_PRIVILEGE",
+          "index": 4
+        },
+        {
+          "type": "USE_PRIVILEGE",
+          "index": 5
+        },
+        {
+          "type": "USE_PRIVILEGE",
+          "index": 6
+        },
+        {
+          "type": "USE_PRIVILEGE",
+          "index": 7
+        },
+        {
+          "type": "USE_PRIVILEGE",
+          "index": 8
+        },
+        {
+          "type": "USE_PRIVILEGE",
+          "index": 10
+        },
+        {
+          "type": "USE_PRIVILEGE",
+          "index": 11
+        },
+        {
+          "type": "USE_PRIVILEGE",
+          "index": 12
+        },
+        {
+          "type": "USE_PRIVILEGE",
+          "index": 13
+        },
+        {
+          "type": "USE_PRIVILEGE",
+          "index": 14
+        },
+        {
+          "type": "USE_PRIVILEGE",
+          "index": 16
+        },
+        {
+          "type": "USE_PRIVILEGE",
+          "index": 17
+        },
+        {
+          "type": "USE_PRIVILEGE",
+          "index": 18
+        },
+        {
+          "type": "USE_PRIVILEGE",
+          "index": 20
+        },
+        {
+          "type": "USE_PRIVILEGE",
+          "index": 22
+        },
+        {
+          "type": "USE_PRIVILEGE",
+          "index": 23
+        }
+      ]
+    },
+    {
+      "signature": "optional_replenish|END_OPTIONAL_PHASE,REPLENISH_BOARD,SKIP_TO_MANDATORY",
+      "phase": "optional_replenish",
+      "legalMoves": [
+        {
+          "type": "END_OPTIONAL_PHASE"
+        },
+        {
+          "type": "SKIP_TO_MANDATORY"
+        },
+        {
+          "type": "REPLENISH_BOARD"
+        }
+      ]
+    },
+    {
+      "signature": "resolve_ability|TAKE_TOKEN_FROM_BOARD",
+      "phase": "resolve_ability",
+      "legalMoves": [
+        {
+          "type": "TAKE_TOKEN_FROM_BOARD",
+          "index": 11
+        }
+      ]
+    },
+    {
+      "signature": "resolve_ability|TAKE_TOKEN_FROM_OPPONENT",
+      "phase": "resolve_ability",
+      "legalMoves": [
+        {
+          "type": "TAKE_TOKEN_FROM_OPPONENT",
+          "color": "white"
+        },
+        {
+          "type": "TAKE_TOKEN_FROM_OPPONENT",
+          "color": "blue"
+        },
+        {
+          "type": "TAKE_TOKEN_FROM_OPPONENT",
+          "color": "green"
+        },
+        {
+          "type": "TAKE_TOKEN_FROM_OPPONENT",
+          "color": "pearl"
+        }
+      ]
+    }
+  ]
+}

@@ -9,7 +9,7 @@ Index ranges:
   [282..286]  ASSIGN_WILD_COLOR         — 5 gem colors (white/blue/green/red/black)
                                           index = 282 + color_idx
                                           (only one wild card is ever pending per phase)
-  [287..311]  USE_PRIVILEGE             — 25 single board cell indices (0-24)
+  [287..311]  USE_PRIVILEGE             — 25 board cell indices (0-24), one privilege per action
   [312]       REPLENISH_BOARD
   [313]       END_OPTIONAL_PHASE
   [314]       SKIP_TO_MANDATORY
@@ -121,9 +121,9 @@ def action_to_index(action: dict) -> int | None:
             return OFFSET_ASSIGN_WILD + GEM_COLORS.index(color)
 
     if t == "USE_PRIVILEGE":
-        indices = action.get("indices", [])
-        if len(indices) == 1 and 0 <= indices[0] <= 24:
-            return OFFSET_USE_PRIVILEGE + indices[0]
+        idx = action.get("index")
+        if isinstance(idx, int) and 0 <= idx <= 24:
+            return OFFSET_USE_PRIVILEGE + idx
 
     if t == "REPLENISH_BOARD":
         return OFFSET_REPLENISH
@@ -135,11 +135,9 @@ def action_to_index(action: dict) -> int | None:
         return OFFSET_SKIP_TO_MANDATORY
 
     if t == "DISCARD_TOKENS":
-        tokens = action.get("tokens", {})
-        if len(tokens) == 1:
-            color = next(iter(tokens))
-            if tokens[color] == 1 and color in TOKEN_COLORS:
-                return OFFSET_DISCARD + TOKEN_COLORS.index(color)
+        color = action.get("color", "")
+        if color in TOKEN_COLORS:
+            return OFFSET_DISCARD + TOKEN_COLORS.index(color)
 
     if t == "TAKE_TOKEN_FROM_BOARD":
         idx = action.get("index")
