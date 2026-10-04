@@ -27,8 +27,10 @@ export function Pyramid({
     const canReserveDeck = isMyTurn && legal.reserveDeckBySource.has(deckKey);
 
     return (
-      <div className={styles.row} key={level}>
-        <span className={styles.rowLabel}>L{level}</span>
+      <div className={styles.row} data-level={level} key={level}>
+        <span className={styles.rowLabel}>
+          <span className={styles.tierBadge}>{level}</span>
+        </span>
         <div className={styles.cards}>
           {deckRemaining > 0 ? (
             <CardBack

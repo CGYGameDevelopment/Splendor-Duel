@@ -3,6 +3,7 @@ import type { ClientGameState } from '@splendor-duel/protocol';
 import { TOKEN_COLORS } from '@splendor-duel/game-engine';
 import { Token } from '../Token/Token';
 import { Card } from '../Card/Card';
+import { RoyalCard } from '../RoyalCards/RoyalCards';
 import type { LegalMovesIndex } from '../../actions/legalMovesIndex';
 import styles from './PlayerArea.module.css';
 
@@ -53,10 +54,22 @@ export function PlayerArea({
         {isActive && <span className={styles.turnTag}>TURN</span>}
       </div>
       <div className={styles.stats}>
-        <span className={styles.stat}>⭐<strong>{player.prestige}</strong></span>
-        <span className={styles.stat}>👑<strong>{player.crowns}</strong></span>
-        <span className={styles.stat}>📜<strong>{player.privileges}</strong></span>
-        <span className={styles.stat}>cards<strong>{player.purchasedCards.length}</strong></span>
+        <span className={`${styles.stat} ${styles.statPrimary} ${player.prestige >= 16 ? styles.statClose : ''}`}>
+          <span className={styles.statValue}>{player.prestige}</span>
+          <span className={styles.statLabel}>Prestige</span>
+        </span>
+        <span className={`${styles.stat} ${styles.statPrimary} ${player.crowns >= 8 ? styles.statClose : ''}`}>
+          <span className={styles.statValue}>{player.crowns}</span>
+          <span className={styles.statLabel}>Crowns</span>
+        </span>
+        <span className={styles.stat}>
+          <span className={styles.statValue}>{player.privileges}</span>
+          <span className={styles.statLabel}>Scrolls</span>
+        </span>
+        <span className={styles.stat}>
+          <span className={styles.statValue}>{player.purchasedCards.length}</span>
+          <span className={styles.statLabel}>Cards</span>
+        </span>
       </div>
 
       <div className={styles.section}>
@@ -120,8 +133,14 @@ export function PlayerArea({
                     />
                   );
                 })
+          ) : player.reservedCardCount === 0 ? (
+            <span className={styles.hidden}>(none)</span>
           ) : (
-            <span className={styles.hidden}>{player.reservedCardCount} hidden</span>
+            <span className={styles.hiddenCards} title={`${player.reservedCardCount} face-down`}>
+              {Array.from({ length: player.reservedCardCount }).map((_, i) => (
+                <span key={i} className={styles.hiddenCard} />
+              ))}
+            </span>
           )}
         </div>
       </div>
@@ -131,7 +150,7 @@ export function PlayerArea({
           <div className={styles.sectionLabel}>Royals</div>
           <div className={styles.royals}>
             {player.royalCards.map(card => (
-              <Card key={card.id} card={card} size="sm" />
+              <RoyalCard key={card.id} card={card} />
             ))}
           </div>
         </div>

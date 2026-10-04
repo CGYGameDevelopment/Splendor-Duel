@@ -1,160 +1,351 @@
+/*
+ * Jewel cards.
+ *
+ * The 3D comes from a real perspective transform rather than a drop shadow:
+ * the parent sets a perspective origin and the card rotates on hover, so the
+ * highlight sweep and the shadow move with it. Flat cards with a shadow read as
+ * stickers; these read as pieces of card stock.
+ */
+
+/*
+ * The shell owns the perspective; the card inside does the rotating. They have
+ * to be separate elements: a transform on the same element that declares the
+ * perspective is not projected by it.
+ *
+ * The shell is also a flex container so the card fills it. Cards in a pyramid
+ * row have costs of different heights, and without this they ended up at
+ * different heights within the row.
+ */
+.cardShell {
+  display: flex;
+  perspective: 900px;
+  perspective-origin: 50% 20%;
+  flex-shrink: 0;
+}
+
 .card {
   position: relative;
   display: flex;
   flex-direction: column;
-  width: 110px;
-  min-height: 150px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 6px 8px;
+  flex: 1;
+  width: 118px;
+  min-height: 170px;
+  padding: 0;
+  border-radius: var(--radius);
   user-select: none;
-  transition: transform 0.1s ease, box-shadow 0.1s ease, border-color 0.1s ease;
+  overflow: hidden;
+  transform-style: preserve-3d;
+  background:
+    linear-gradient(170deg, var(--card-tint-strong) 0%, transparent 42%),
+    linear-gradient(180deg, var(--panel-raised) 0%, var(--panel) 55%, var(--panel-sunken) 100%);
+  border: 1px solid var(--border);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.3),
+    var(--shadow-2);
+  transition:
+    transform 0.22s cubic-bezier(0.2, 0.8, 0.3, 1),
+    box-shadow 0.22s ease,
+    border-color 0.18s ease;
+
+  /* Neutral default; the colour modifiers below override it. */
+  --card-tint: rgba(255, 255, 255, 0.06);
+  --card-tint-strong: rgba(255, 255, 255, 0.1);
+  --card-edge: var(--border-strong);
 }
 
-.size-sm {
-  width: 92px;
-  min-height: 124px;
-  padding: 5px 6px;
+.size-sm { width: 96px; min-height: 148px; }
+.size-lg { width: 140px; min-height: 194px; }
+
+/* ─── Colour identity ────────────────────────────────────────────────────── */
+/* A tinted wash plus a coloured edge, so the card's gem colour is readable from
+   its silhouette alone and not only from the bonus pip. */
+
+.white { --card-tint: rgba(232, 227, 212, 0.1); --card-tint-strong: rgba(232, 227, 212, 0.22); --card-edge: var(--gem-white-deep); }
+.blue  { --card-tint: rgba(47, 106, 208, 0.12); --card-tint-strong: rgba(47, 106, 208, 0.34); --card-edge: var(--gem-blue); }
+.green { --card-tint: rgba(47, 158, 92, 0.12); --card-tint-strong: rgba(47, 158, 92, 0.34); --card-edge: var(--gem-green); }
+.red   { --card-tint: rgba(201, 58, 58, 0.12); --card-tint-strong: rgba(201, 58, 58, 0.34); --card-edge: var(--gem-red); }
+.black { --card-tint: rgba(138, 134, 146, 0.1); --card-tint-strong: rgba(138, 134, 146, 0.26); --card-edge: var(--gem-black-light); }
+.none  { --card-tint: rgba(224, 165, 68, 0.1); --card-tint-strong: rgba(224, 165, 68, 0.26); --card-edge: var(--accent); }
+
+/* The coloured spine down the left edge. */
+.card::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: linear-gradient(180deg, var(--card-edge), transparent 130%);
+  box-shadow: 0 0 10px -1px var(--card-edge);
 }
 
-.size-lg {
-  width: 130px;
-  min-height: 174px;
-  padding: 8px 10px;
+/*
+ * Gloss: a diagonal sheen across the stock. It sits above the content but below
+ * the action overlay, and slides on hover so the surface looks like it is
+ * catching moving light.
+ */
+.card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    114deg,
+    transparent 28%,
+    rgba(255, 255, 255, 0.09) 42%,
+    rgba(255, 255, 255, 0.16) 48%,
+    rgba(255, 255, 255, 0.05) 56%,
+    transparent 70%
+  );
+  transform: translateX(-28%);
+  transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.3, 1);
 }
 
-.card.clickable { cursor: pointer; }
-.card.clickable:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.4);
-  border-color: var(--border-strong);
+.clickable { cursor: pointer; }
+
+.cardShell:hover .card {
+  transform: translateY(-8px) rotateX(7deg) rotateY(-5deg) scale(1.035);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    var(--shadow-lift);
+  border-color: var(--card-edge);
+  z-index: 3;
 }
 
-.card.affordable { border-color: var(--success); }
-.card.reservable { border-color: var(--accent); }
-.card.both { border-color: var(--accent-strong); }
+.cardShell:hover .card::after { transform: translateX(28%); }
 
-.colorBar {
-  height: 6px;
-  border-radius: 3px;
-  margin-bottom: 6px;
-}
+/* ─── Availability ───────────────────────────────────────────────────────── */
+/* Ring colour tells the player what they can do with the card before hovering. */
 
-.colorBar.white  { background: var(--gem-white); }
-.colorBar.blue   { background: var(--gem-blue); }
-.colorBar.green  { background: var(--gem-green); }
-.colorBar.red    { background: var(--gem-red); }
-.colorBar.black  { background: var(--gem-black); }
-.colorBar.none   { background: transparent;
-  border: 1px dashed var(--border-strong);
-  height: 4px;
+.affordable { border-color: var(--success); box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 0 0 1px rgba(95, 194, 126, 0.45), var(--shadow-2); }
+.reservable { border-color: var(--accent); box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 0 0 1px rgba(224, 165, 68, 0.4), var(--shadow-2); }
+.both       { border-color: var(--accent-strong); box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 0 0 1px rgba(248, 207, 122, 0.55), 0 0 18px -4px rgba(248, 207, 122, 0.5), var(--shadow-2); }
+
+/* ─── Content ────────────────────────────────────────────────────────────── */
+
+.body {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding: 7px 8px 6px 10px;
 }
 
 .header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  font-size: 11px;
-  color: var(--text-dim);
-  margin-bottom: 4px;
+  min-height: 24px;
 }
 
 .points {
-  font-size: 18px;
+  font-family: var(--font-display);
+  font-size: 23px;
   font-weight: 700;
+  line-height: 1;
   color: var(--accent-strong);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
 }
 
 .crowns {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   font-size: 12px;
+  font-weight: 800;
   color: var(--accent-strong);
-  font-weight: 700;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--accent-deep);
+  border-radius: 999px;
+  padding: 1px 6px 1px 4px;
 }
 
+/* The bonus row may be squeezed by a tall cost tray, never the other way. */
 .bonus {
   display: flex;
-  gap: 3px;
+  gap: 4px;
   align-items: center;
   justify-content: center;
-  flex: 1;
-  margin: 4px 0;
-}
-
-.ability {
-  font-size: 10px;
-  color: var(--accent);
-  text-align: center;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  flex: 1 1 auto;
+  min-height: 0;
   margin: 2px 0;
 }
 
+.wildMark {
+  font-size: 20px;
+  color: var(--accent);
+  text-shadow: 0 0 12px rgba(224, 165, 68, 0.7);
+}
+
+.ability {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--accent-strong);
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  background: rgba(0, 0, 0, 0.32);
+  border-top: 1px solid rgba(224, 165, 68, 0.25);
+  border-bottom: 1px solid rgba(224, 165, 68, 0.25);
+  padding: 2px 3px;
+  margin: 2px -8px 3px -10px;
+}
+
+/*
+ * The cost strip reads as a recessed tray cut into the card.
+ *
+ * flex-shrink is pinned off: a four-colour cost wraps to two rows, and with the
+ * tray allowed to shrink the second row was clipped by the card's overflow.
+ */
 .cost {
   display: flex;
   flex-wrap: wrap;
-  gap: 3px;
+  gap: 4px;
   justify-content: center;
-  margin-top: 4px;
-  min-height: 24px;
+  align-items: center;
+  flex-shrink: 0;
+  min-height: 28px;
+  padding: 5px 4px;
+  margin: 4px -8px -6px -10px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.42) 0%, rgba(0, 0, 0, 0.2) 100%);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.45);
 }
 
 .costEmpty {
   font-size: 10px;
-  color: var(--text-dim);
-  text-align: center;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--success);
 }
+
+/* ─── Hover actions ──────────────────────────────────────────────────────── */
 
 .actions {
   position: absolute;
   inset: 0;
+  z-index: 4;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  background: rgba(20, 14, 10, 0.85);
-  border-radius: var(--radius-lg);
+  gap: 7px;
+  background: linear-gradient(180deg, rgba(10, 16, 14, 0.82) 0%, rgba(6, 10, 9, 0.92) 100%);
+  backdrop-filter: blur(2px);
   opacity: 0;
-  transition: opacity 0.12s ease;
+  transition: opacity 0.15s ease;
 }
 
-.card:hover .actions { opacity: 1; }
+.cardShell:hover .actions { opacity: 1; }
 
 .actions button {
   font-size: 11px;
-  padding: 5px 12px;
-  min-width: 80px;
+  padding: 6px 14px;
+  min-width: 86px;
 }
 
-/* Card-back for face-down decks */
+/* ─── Card back (face-down deck) ─────────────────────────────────────────── */
+
+/*
+ * A deck, not a card: two offset pseudo-element layers behind the face give the
+ * stack real thickness, and the count tells the player how deep it goes.
+ */
 .back {
-  background: linear-gradient(135deg, #4a3018 0%, #2d1c0d 100%);
-  display: flex;
   align-items: center;
   justify-content: center;
-  flex-direction: column;
-  color: var(--text-dim);
-  border-style: dashed;
+  background:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.03) 0 6px, transparent 6px 12px),
+    linear-gradient(160deg, #2c3a46 0%, #18222b 60%, #0e151b 100%);
+  border-color: var(--border-strong);
 }
 
-.backLabel {
-  font-size: 16px;
+.back::before { display: none; }
+
+.deckStack {
+  position: relative;
+}
+
+/*
+ * The two cards peeking out from under the top one.
+ *
+ * They are siblings of the face and come earlier in paint order, so the face
+ * covers them except for the offset edge. They deliberately do not move with
+ * the hover lift: the top card rises off a stack that stays put.
+ */
+.deckStack::before,
+.deckStack::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius);
+  background: linear-gradient(160deg, #26323d 0%, #141c24 100%);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-1);
+}
+
+.deckStack::before { transform: translate(4px, 5px); }
+.deckStack::after  { transform: translate(8px, 10px); opacity: 0.75; }
+
+/* The face has to sit above both, and opaque, or the stack shows through. */
+.deckStack .card { z-index: 1; }
+
+.backInner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: 1;
+}
+
+.backLevel {
+  font-family: var(--font-display);
+  font-size: 30px;
   font-weight: 700;
+  line-height: 1;
   color: var(--accent);
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
+}
+
+/* A ring of gem-coloured dots, hinting at the level without any text. */
+.backPips {
+  display: flex;
+  gap: 3px;
+}
+
+.backPip {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 5px rgba(224, 165, 68, 0.8);
 }
 
 .backCount {
-  font-size: 11px;
-  margin-top: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  color: var(--text-dim);
+  text-transform: uppercase;
 }
 
+/* ─── Empty slot ─────────────────────────────────────────────────────────── */
+
 .empty {
-  border-style: dashed;
-  opacity: 0.4;
-  display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-dim);
-  font-size: 11px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px dashed var(--border);
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.4);
+  color: var(--text-faint);
+  font-size: 10px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+.empty::before, .empty::after { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cardShell:hover .card { transform: translateY(-3px); }
+  .cardShell:hover .card::after { transform: translateX(-28%); }
 }

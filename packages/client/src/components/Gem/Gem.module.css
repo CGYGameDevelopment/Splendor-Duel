@@ -1,0 +1,108 @@
+/*
+ * Gem artwork styling.
+ *
+ * Every colour comes from a custom property so the whole set re-themes from
+ * global.css. Each gem family defines --stone-light / --stone / --stone-deep and
+ * the shared facet rules below read those, which is why adding a colour means
+ * adding one rule rather than touching the geometry.
+ */
+
+.gem {
+  display: block;
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.size-xs { width: 16px; height: 16px; }
+.size-sm { width: 22px; height: 22px; }
+.size-md { width: 34px; height: 34px; }
+.size-lg { width: 46px; height: 46px; }
+
+/* ─── Per-colour stone ramps ─────────────────────────────────────────────── */
+
+.white { --stone-light: #ffffff; --stone: #e8e3d4; --stone-deep: #9c9684; --stone-rim: #fffdf6; }
+.blue  { --stone-light: #8fc0ff; --stone: #2f6ad0; --stone-deep: #11306e; --stone-rim: #b9d8ff; }
+.green { --stone-light: #86e6a8; --stone: #2f9e5c; --stone-deep: #0e4a29; --stone-rim: #b2f5c9; }
+.red   { --stone-light: #ff9b94; --stone: #c93a3a; --stone-deep: #661317; --stone-rim: #ffc0ba; }
+.black { --stone-light: #8a8692; --stone: #3a3742; --stone-deep: #0c0b10; --stone-rim: #a8a3b2; }
+
+/* ─── Faceted gems ───────────────────────────────────────────────────────── */
+
+.body {
+  fill: var(--stone);
+}
+
+.girdle {
+  fill: none;
+  stroke: var(--stone-rim);
+  stroke-width: 3;
+  opacity: 0.55;
+}
+
+.crown {
+  fill: var(--stone-deep);
+  opacity: 0.35;
+}
+
+.table {
+  fill: var(--stone-light);
+  opacity: 0.5;
+}
+
+.tableSheen {
+  fill: none;
+  stroke: var(--stone-light);
+  stroke-width: 1.5;
+  opacity: 0.7;
+}
+
+.glint {
+  fill: #fff;
+  opacity: 0.65;
+}
+
+/*
+ * Black gems are nearly invisible on a dark table, so they get an extra rim
+ * light. Without it the only cue is the facet geometry, which disappears at
+ * small sizes.
+ */
+.darkRescue {
+  fill: none;
+  stroke: var(--stone-rim);
+  stroke-width: 2;
+  opacity: 0.4;
+}
+
+/* ─── Pearl ──────────────────────────────────────────────────────────────── */
+
+.pearlBody { fill: #f4eee1; }
+.pearlWashA { fill: #cfd9ff; opacity: 0.45; }
+.pearlWashB { fill: #ffd9ec; opacity: 0.38; }
+.pearlRim {
+  fill: none;
+  stroke: #9b917f;
+  stroke-width: 2.5;
+  opacity: 0.45;
+}
+.pearlGlint { fill: #fff; opacity: 0.95; }
+.pearlGlintLow { fill: #fff; opacity: 0.35; }
+
+/* ─── Gold coin ──────────────────────────────────────────────────────────── */
+
+.coinBody { fill: #d9a434; }
+.coinRim {
+  fill: none;
+  stroke: #fbe9a8;
+  stroke-width: 4;
+  opacity: 0.75;
+}
+.coinInnerRim {
+  fill: none;
+  stroke: #7d5a12;
+  stroke-width: 2.5;
+  opacity: 0.6;
+}
+.coinField { fill: #e9bc52; }
+.coinStar { fill: #fff3c4; }
+.coinStarShadow { fill: #7d5a12; opacity: 0.75; }
+.coinGlint { fill: #fff; opacity: 0.45; }

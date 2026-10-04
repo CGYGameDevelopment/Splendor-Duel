@@ -1,28 +1,80 @@
+/*
+ * The card pyramid.
+ *
+ * Rows are laid out highest-level first and indented slightly as they descend,
+ * so the three tiers read as a pyramid rather than three equal shelves. Each row
+ * gets its own tier colour on the label and rail.
+ */
+
 .pyramid {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-  background: var(--panel);
+  gap: 10px;
+  padding: 14px 16px;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+  background:
+    radial-gradient(ellipse 90% 60% at 50% 0%, rgba(255, 255, 255, 0.05), transparent 70%),
+    linear-gradient(180deg, var(--panel-raised) 0%, var(--panel) 100%);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
+  box-shadow: inset 0 1px 0 var(--edge-light), var(--shadow-3);
 }
 
 .row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
 }
 
+/* Indent the lower tiers so the stack narrows towards level 1. */
+.row[data-level='2'] { padding-left: 14px; }
+.row[data-level='1'] { padding-left: 28px; }
+
 .rowLabel {
-  font-size: 11px;
-  color: var(--text-dim);
-  width: 28px;
-  text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  width: 34px;
+  flex-shrink: 0;
 }
+
+.tierBadge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  color: #120d06;
+  background: linear-gradient(180deg, var(--tier-light), var(--tier));
+  border: 1px solid var(--tier-light);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+/* Tier colours run cool to warm as the cards get more valuable. */
+.row[data-level='1'] { --tier: #6f8fae; --tier-light: #a8c4dc; }
+.row[data-level='2'] { --tier: #b99a4e; --tier-light: #e3cd8d; }
+.row[data-level='3'] { --tier: #b5693c; --tier-light: #e8a173; }
 
 .cards {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   flex-wrap: wrap;
+  align-items: flex-start;
+  /* Hovered cards lift and scale; without room they clip against the row above. */
+  padding: 4px 0;
+}
+
+@media (max-width: 1100px) {
+  .pyramid { padding: 10px; gap: 8px; }
+  .row { gap: 8px; }
+  .row[data-level='2'] { padding-left: 8px; }
+  .row[data-level='1'] { padding-left: 16px; }
+  .cards { gap: 6px; }
 }

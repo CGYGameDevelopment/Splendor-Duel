@@ -19,10 +19,11 @@ export function GameOver({ state, myPlayerId, onPlayAgain }: GameOverProps) {
   const condition = state.winCondition ? CONDITION_LABEL[state.winCondition] ?? state.winCondition : '';
 
   return (
-    <div className={styles.banner}>
+    <div className={`${styles.banner} ${youWon ? styles.won : styles.lost}`}>
+      <div className={styles.crest} aria-hidden="true">{youWon ? '♛' : '⚔'}</div>
       <div className={styles.title}>Game over</div>
       <div className={`${styles.outcome} ${youWon ? styles.win : styles.lose}`}>
-        {youWon ? 'You win!' : `${winnerLabel} wins`}
+        {youWon ? 'Victory' : `${winnerLabel} wins`}
       </div>
       {condition && <div className={styles.subtle}>by {condition}</div>}
       <div className={styles.actions}>
