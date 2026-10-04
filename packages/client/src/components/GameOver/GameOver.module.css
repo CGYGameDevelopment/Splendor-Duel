@@ -1,29 +1,72 @@
+/*
+ * End-of-game plate.
+ *
+ * It replaces the whole table, so it carries the result, how it was won, and
+ * the way back out. The win and loss states differ in colour and in the glow,
+ * not only in the wording.
+ */
+
 .banner {
-  margin: 24px auto;
-  max-width: 600px;
-  background: var(--panel);
-  border: 2px solid var(--accent);
-  border-radius: var(--radius-lg);
-  padding: 24px;
-  text-align: center;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  align-items: center;
+  gap: 10px;
+  margin: 48px auto;
+  max-width: 560px;
+  padding: 36px 40px;
+  text-align: center;
+  background:
+    radial-gradient(ellipse 100% 60% at 50% 0%, var(--halo), transparent 70%),
+    linear-gradient(180deg, var(--panel-raised) 0%, var(--panel) 100%);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xl);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 0 0 1px var(--ring),
+    var(--shadow-lift);
+  animation: rise 0.3s cubic-bezier(0.2, 0.8, 0.3, 1);
+  --halo: rgba(224, 165, 68, 0.16);
+  --ring: rgba(224, 165, 68, 0.3);
+}
+
+.banner.won  { --halo: rgba(95, 194, 126, 0.2); --ring: rgba(95, 194, 126, 0.45); }
+.banner.lost { --halo: rgba(224, 90, 70, 0.16); --ring: rgba(224, 90, 70, 0.3); }
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(18px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+
+.crest {
+  font-size: 44px;
+  line-height: 1;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.6));
 }
 
 .title {
-  font-size: 28px;
+  font-size: 11px;
   font-weight: 700;
-  color: var(--accent-strong);
+  letter-spacing: 2.4px;
+  text-transform: uppercase;
+  color: var(--text-faint);
 }
 
 .outcome {
-  font-size: 18px;
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-size: 38px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: 0.5px;
 }
 
-.outcome.win  { color: var(--success); }
-.outcome.lose { color: var(--danger); }
+.outcome.win {
+  background: linear-gradient(180deg, #c8f5d6 0%, var(--success) 70%, #1f6b3a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.outcome.lose { color: var(--text-dim); }
 
 .subtle {
   font-size: 13px;
@@ -33,6 +76,8 @@
 .actions {
   display: flex;
   justify-content: center;
-  gap: 8px;
-  margin-top: 8px;
+  gap: 10px;
+  margin-top: 14px;
 }
+
+.actions button { padding: 10px 22px; font-size: 14px; }

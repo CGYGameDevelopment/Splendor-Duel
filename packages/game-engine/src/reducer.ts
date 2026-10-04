@@ -2,6 +2,9 @@ import type {
   GameState, Action, PlayerState, PlayerId, Card, TokenColor, GemColor, TokenPool,
 } from './types';
 import { SPIRAL_ORDER, isValidTokenLine } from './board';
+import { randomInt } from './rng';
+import { validateAction } from './validateAction';
+import { legalMoves } from './legalMoves';
 import {
   totalTokens, netCost, canAfford, grantPrivileges,
   checkVictory, GEM_COLORS, TOKEN_COLORS, MAX_TOKENS, MAX_RESERVED,
@@ -21,6 +24,7 @@ function updatePlayer(state: GameState, id: PlayerId, playerStateUpdate: Partial
 function replenishBoard(state: GameState): GameState {
   let bag = { ...state.bag };
   const board = [...state.board];
+  let rngSeed = state.rngSeed;
 
   for (const index of SPIRAL_ORDER) {
     if (board[index] !== null) continue; // already occupied
@@ -31,7 +35,9 @@ function replenishBoard(state: GameState): GameState {
     for (const color of TOKEN_COLORS) remaining += bag[color];
     if (remaining === 0) break;
 
-    let draw = Math.floor(Math.random() * remaining);
+    const drawn = randomInt(rngSeed, remaining);
+    rngSeed = drawn.seed;
+    let draw = drawn.value;
     let picked: TokenColor | null = null;
     for (const color of TOKEN_COLORS) {
       if (draw < bag[color]) { picked = color; break; }
@@ -43,7 +49,7 @@ function replenishBoard(state: GameState): GameState {
     bag = { ...bag, [picked]: bag[picked] - 1 };
   }
 
-  return { ...state, board, bag };
+  return { ...state, board, bag, rngSeed };
 }
 
 // ─── Replace pyramid slot ─────────────────────────────────────────────────────
@@ -279,7 +285,18 @@ function resolveAbility(state: GameState, card: Card): GameState {
 
 // ─── Main reducer ─────────────────────────────────────────────────────────────
 
-export function reducer(state: GameState, action: Action): GameState {
+export function reducer(state: GameState, incomingAction: Action): GameState {
+  // Structural validation first, so the rule logic below can trust the payload.
+  // A malformed action is treated exactly like an illegal one: the same state
+  // is returned by reference. Callers that need to tell a client *why* it was
+  // rejected should call validateAction themselves and read the reason.
+  //
+  // Everything below reads the *validated* action, which has unknown keys
+  // stripped and arrays copied — never the caller's object.
+  const validated = validateAction(incomingAction);
+  if (!validated.valid) return state;
+  const action = validated.action;
+
   const currentPlayerId = state.currentPlayer;
   const player = state.players[currentPlayerId];
 
@@ -306,11 +323,9 @@ export function reducer(state: GameState, action: Action): GameState {
     // enumeration in legalMoves and keeps the reducer path small and auditable.
     case 'USE_PRIVILEGE': {
       if (state.phase !== 'optional_privilege') return state;
-      const { indices } = action;
-      if (indices.length !== 1) return state;
       if (player.privileges < 1) return state;
 
-      const index = indices[0];
+      const { index } = action;
       const cell = state.board[index];
       if (!cell || cell === 'gold') return state; // cell must have a non-gold token
 
@@ -331,6 +346,24 @@ export function reducer(state: GameState, action: Action): GameState {
     case 'REPLENISH_BOARD': {
       if (state.phase !== 'optional_replenish' && state.phase !== 'mandatory') return state;
       if (totalTokens(state.bag) === 0) return state;
+
+      // Replenishing is an *optional* pre-turn action. It is also allowed during
+      // the mandatory step, but only in the one case the rulebook carves out:
+      // "If you would not be able to perform any of the mandatory actions, you
+      // must perform the Replenish the Game Board optional action before
+      // choosing your mandatory action." Outside that case a player cannot
+      // reshuffle the board mid-turn — it would hand the opponent a privilege in
+      // exchange for a free board reset at any moment.
+      //
+      // mandatoryMoves() already encodes that carve-out by returning
+      // REPLENISH_BOARD as the sole option, so defer to it rather than
+      // re-deriving "no mandatory action is possible" here.
+      if (state.phase === 'mandatory') {
+        const available = legalMoves(state);
+        const forcedReplenish =
+          available.length === 1 && available[0].type === 'REPLENISH_BOARD';
+        if (!forcedReplenish) return state;
+      }
       let newState = replenishBoard(state);
       // Opponent gets 1 privilege as penalty
       const opponentId = (1 - currentPlayerId) as PlayerId;
@@ -436,6 +469,17 @@ export function reducer(state: GameState, action: Action): GameState {
       if (!location) return state;
       const { card, fromReserve, level } = location;
 
+      // Rulebook: "You cannot purchase a Jewel Card with the wild ability unless
+      // you have a Jewel Card that has a color (null is not a color)."
+      //
+      // legalMoves has always filtered these out, but the reducer did not, so a
+      // client could buy a wild card with nothing to assign it to — the card
+      // then sat permanently colourless, contributing no bonus and counting
+      // toward no colour for the same-colour victory condition. A property test
+      // comparing the reducer against legalMoves surfaced it.
+      const isWild = card.ability === 'wild' || card.ability === 'wild and turn';
+      if (isWild && !player.purchasedCards.some(owned => owned.color !== null)) return state;
+
       if (!canAfford(card, player, goldUsage)) return state;
 
       const purchasedCard = { ...card };
@@ -530,6 +574,12 @@ export function reducer(state: GameState, action: Action): GameState {
     // ── Ability: Token — take 1 token of card's color from board ─────────────
     case 'TAKE_TOKEN_FROM_BOARD': {
       if (state.phase !== 'resolve_ability') return state;
+      // resolve_ability is shared by the Token and Take abilities, so the phase
+      // alone does not say which resolution is owed. Without this check a player
+      // resolving a Take could instead help themselves to a board token of the
+      // card's colour — a different, usually better, effect than the one the
+      // card grants.
+      if (state.pendingAbility !== 'Token') return state;
       const { index } = action;
       const card = state.lastPurchasedCard;
       if (!card) return state;
@@ -549,6 +599,10 @@ export function reducer(state: GameState, action: Action): GameState {
     // ── Ability: Take — take 1 gem/pearl from opponent ────────────────────────
     case 'TAKE_TOKEN_FROM_OPPONENT': {
       if (state.phase !== 'resolve_ability') return state;
+      // See TAKE_TOKEN_FROM_BOARD: the phase is shared, so the pending ability
+      // is what decides which resolution is legal. Without this check a player
+      // resolving a Token ability could steal from their opponent instead.
+      if (state.pendingAbility !== 'Take') return state;
       const { color } = action;
       if (color === 'gold') return state;
 
@@ -569,6 +623,21 @@ export function reducer(state: GameState, action: Action): GameState {
     // ── Pass mandatory (deadlock — no legal moves exist) ─────────────────────
     case 'PASS_MANDATORY': {
       if (state.phase !== 'mandatory') return state;
+
+      // Passing is a deadlock escape hatch, not a way to decline the mandatory
+      // action: the rulebook requires taking tokens, reserving or purchasing.
+      // The reducer used to accept this in any mandatory phase, which let a
+      // client skip its obligation entirely — a property test ("every action
+      // outside legalMoves is inert") caught it.
+      //
+      // mandatoryMoves() already encodes the rule: it returns PASS_MANDATORY as
+      // the sole option exactly when nothing else is playable and the bag is
+      // empty, so there is nothing to replenish either. Deferring to it keeps
+      // one definition of "deadlocked" rather than two that can drift.
+      const available = legalMoves(state);
+      const deadlocked = available.length === 1 && available[0].type === 'PASS_MANDATORY';
+      if (!deadlocked) return state;
+
       return endOfTurnSequence(state);
     }
 
@@ -578,9 +647,7 @@ export function reducer(state: GameState, action: Action): GameState {
       let playerTokens = { ...player.tokens };
       let bag = { ...state.bag };
 
-      const colors = Object.keys(action.tokens) as TokenColor[];
-      if (colors.length !== 1 || action.tokens[colors[0]] !== 1) return state;
-      const color = colors[0];
+      const { color } = action;
       if (playerTokens[color] < 1) return state;
 
       playerTokens = { ...playerTokens, [color]: playerTokens[color] - 1 };

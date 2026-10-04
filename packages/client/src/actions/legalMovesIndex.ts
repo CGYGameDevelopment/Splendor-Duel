@@ -1,4 +1,4 @@
-import type { Action, GameState } from '@splendor-duel/game-engine';
+import type { Action } from '@splendor-duel/game-engine';
 import { legalMoves } from '@splendor-duel/game-engine';
 import type { ClientGameState } from '@splendor-duel/protocol';
 
@@ -64,7 +64,7 @@ export function buildLegalMovesIndex(
 ): LegalMovesIndex {
   if (!state || !isMyTurn) return EMPTY_LEGAL_INDEX;
 
-  const all = legalMoves(state as unknown as GameState);
+  const all = legalMoves(state);
   const takeTokenLines: TakeTokensAction[] = [];
   const purchaseByCard = new Map<number, Action[]>();
   const reservePyramidByCard = new Map<number, Action>();
@@ -100,7 +100,7 @@ export function buildLegalMovesIndex(
         break;
       case 'USE_PRIVILEGE':
         hasPrivilege = true;
-        if (m.indices.length === 1) privilegeByCell.set(m.indices[0], m);
+        privilegeByCell.set(m.index, m);
         break;
       case 'TAKE_TOKEN_FROM_BOARD':
         takeBoardByCell.set(m.index, m);
@@ -114,13 +114,9 @@ export function buildLegalMovesIndex(
       case 'ASSIGN_WILD_COLOR':
         assignWildByColor.set(m.color, m);
         break;
-      case 'DISCARD_TOKENS': {
-        const tokens = m.tokens as Record<string, number>;
-        for (const c of Object.keys(tokens)) {
-          if (tokens[c] === 1) discardByColor.set(c, m);
-        }
+      case 'DISCARD_TOKENS':
+        discardByColor.set(m.color, m);
         break;
-      }
       case 'END_OPTIONAL_PHASE':
         endOptional = m;
         break;

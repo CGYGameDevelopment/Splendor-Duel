@@ -40,12 +40,10 @@ def _pick_action(
 ) -> dict | None:
     """Run the policy and return a concrete action dict."""
     obs_t = torch.tensor(encode(state), dtype=torch.float32, device=device).unsqueeze(0)
-    ids_t = torch.tensor(
-        encode_card_ids(state), dtype=torch.long, device=device
-    ).unsqueeze(0)
-    mask_t = torch.tensor(
-        build_legal_mask(legal_moves), dtype=torch.bool, device=device
-    ).unsqueeze(0)
+    ids_t = torch.tensor(encode_card_ids(state), dtype=torch.long, device=device).unsqueeze(0)
+    mask_t = torch.tensor(build_legal_mask(legal_moves), dtype=torch.bool, device=device).unsqueeze(
+        0
+    )
 
     dist = model.masked_policy(obs_t, ids_t, mask_t)
     action_idx = int(dist.logits.argmax().item()) if greedy else int(dist.sample().item())
@@ -154,9 +152,7 @@ def main(
     server: str = typer.Option("ws://localhost:3001", help="WebSocket server URL"),
     sim_url: str = typer.Option("http://127.0.0.1:3002", help="game-sim server URL"),
     name: str = typer.Option("AI", help="Display name shown to the human player"),
-    greedy: bool = typer.Option(
-        True, help="Pick the highest-probability move instead of sampling"
-    ),
+    greedy: bool = typer.Option(True, help="Pick the highest-probability move instead of sampling"),
 ) -> None:
     """Run the AI bot. It creates a session and waits for a human to join."""
     asyncio.run(_run(checkpoint, server, sim_url, name, greedy))

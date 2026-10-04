@@ -3,10 +3,12 @@ import cors from 'cors';
 import http from 'http';
 import WebSocket, { WebSocketServer } from 'ws';
 import type { PlayerId } from '@splendor-duel/game-engine';
+import { decodeWireMessage } from '@splendor-duel/protocol';
 import type { ClientMessage } from '@splendor-duel/protocol';
 import {
   createSession,
   joinSession,
+  reconnectSession,
   dispatchAction,
   undoTurn,
   handleDisconnect,
@@ -57,7 +59,7 @@ wss.on('connection', (ws: WebSocket) => {
 
     let msg: ClientMessage;
     try {
-      msg = JSON.parse(data.toString()) as ClientMessage;
+      msg = JSON.parse(decodeWireMessage(data)) as ClientMessage;
     } catch {
       ws.send(JSON.stringify({ type: 'ERROR', message: 'Malformed JSON' }));
       return;
@@ -74,6 +76,14 @@ wss.on('connection', (ws: WebSocket) => {
       }
       case 'JOIN_SESSION': {
         const pid = joinSession(msg.sessionId, msg.playerName, ws);
+        if (pid !== null) {
+          sessionId = msg.sessionId;
+          playerId = pid;
+        }
+        break;
+      }
+      case 'RECONNECT_SESSION': {
+        const pid = reconnectSession(msg.sessionId, msg.reconnectToken, ws);
         if (pid !== null) {
           sessionId = msg.sessionId;
           playerId = pid;

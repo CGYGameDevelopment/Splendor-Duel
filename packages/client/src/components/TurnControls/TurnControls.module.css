@@ -1,11 +1,21 @@
+/*
+ * The action column beside the board.
+ *
+ * It is the one place that tells the player what the game is waiting for, so
+ * the phase sits at the top as a heading rather than as a line of body text.
+ */
+
 .controls {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+  min-width: 232px;
+  max-width: 300px;
+  padding: 13px 14px;
+  background: linear-gradient(180deg, var(--panel-raised) 0%, var(--panel) 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 1px 0 var(--edge-light), var(--shadow-3);
 }
 
 .row {
@@ -15,26 +25,44 @@
   flex-wrap: wrap;
 }
 
+/* Buttons fill the column so the action area has one clear edge. */
+.row button { flex: 1 1 auto; }
+
 .phaseLine {
-  font-size: 12px;
-  color: var(--text-dim);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--border);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.9px;
+  text-transform: uppercase;
+  color: var(--text-faint);
 }
 
 .phaseLine strong {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  text-transform: none;
   color: var(--accent-strong);
-  margin-left: 4px;
 }
 
 .hint {
   font-size: 12px;
-  color: var(--text);
+  line-height: 1.45;
+  color: var(--text-dim);
 }
 
 .error {
   font-size: 12px;
-  color: var(--danger);
-  background: rgba(200, 76, 59, 0.12);
-  padding: 4px 8px;
+  font-weight: 600;
+  color: #ffd8d0;
+  background: linear-gradient(180deg, rgba(224, 90, 70, 0.26), rgba(224, 90, 70, 0.14));
+  padding: 7px 10px;
   border-radius: var(--radius);
-  border: 1px solid rgba(200, 76, 59, 0.4);
+  border: 1px solid rgba(224, 90, 70, 0.5);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }

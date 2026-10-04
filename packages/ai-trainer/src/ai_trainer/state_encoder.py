@@ -100,7 +100,7 @@ PHASES = [
 # -- Sub-structure sizes -------------------------------------------------------
 
 N_BOARD_CELLS = 25
-BOARD_CELL_FEATURES = len(TOKEN_COLORS) + 1   # 7 colours + "empty" = 8
+BOARD_CELL_FEATURES = len(TOKEN_COLORS) + 1  # 7 colours + "empty" = 8
 CARD_FEATURES = 1 + len(CARD_COLORS) + 2 + len(ABILITIES) + 1 + len(TOKEN_COLORS)  # 24
 ROYAL_FEATURES = 2
 N_PYRAMID = 12
@@ -118,20 +118,20 @@ N_ABILITIES = len(ABILITIES)
 # Purchase is legal from pyramid or the player's OWN reserved cards, so slots
 # [0..14] can carry a purchase logit; reserve-from-pyramid only applies to
 # [0..11].  Opponent reserved slots are features only.
-N_PYRAMID_SLOTS = N_PYRAMID                                  # 12
-N_CARD_SLOTS = N_PYRAMID_SLOTS + 2 * N_RESERVED              # 18
-N_PURCHASABLE_SLOTS = N_PYRAMID_SLOTS + N_RESERVED           # 15
+N_PYRAMID_SLOTS = N_PYRAMID  # 12
+N_CARD_SLOTS = N_PYRAMID_SLOTS + 2 * N_RESERVED  # 18
+N_PURCHASABLE_SLOTS = N_PYRAMID_SLOTS + N_RESERVED  # 15
 MAX_CARD_ID = 67
 
 # -- Per-card field offsets ----------------------------------------------------
 
 C_PRESENT = 0
-C_COLOR = 1                              # 1..7
-C_POINTS = C_COLOR + len(CARD_COLORS)    # 8
-C_BONUS = C_POINTS + 1                   # 9
-C_ABILITY = C_BONUS + 1                  # 10..15
-C_CROWNS = C_ABILITY + len(ABILITIES)    # 16
-C_COST = C_CROWNS + 1                    # 17..23
+C_COLOR = 1  # 1..7
+C_POINTS = C_COLOR + len(CARD_COLORS)  # 8
+C_BONUS = C_POINTS + 1  # 9
+C_ABILITY = C_BONUS + 1  # 10..15
+C_CROWNS = C_ABILITY + len(ABILITIES)  # 16
+C_COST = C_CROWNS + 1  # 17..23
 
 # -- Per-player sub-layout -----------------------------------------------------
 
@@ -142,36 +142,36 @@ P_TOTAL_PRESTIGE = 17
 P_CROWNS = 18
 P_PRIVILEGES = 19
 P_RESERVED_COUNT = 20
-P_SCALAR_END = 21                                                # end of scalar block
-P_RESERVED_START = P_SCALAR_END                                  # 21
-P_RESERVED_END = P_RESERVED_START + N_RESERVED * CARD_FEATURES   # 93
-P_ROYAL_START = P_RESERVED_END                                   # 93
+P_SCALAR_END = 21  # end of scalar block
+P_RESERVED_START = P_SCALAR_END  # 21
+P_RESERVED_END = P_RESERVED_START + N_RESERVED * CARD_FEATURES  # 93
+P_ROYAL_START = P_RESERVED_END  # 93
 PLAYER_FEATURES = P_ROYAL_START + N_PLAYER_ROYALS * ROYAL_FEATURES  # 99
 
 # -- Top-level layout ----------------------------------------------------------
 
 BOARD_START = 0
-BOARD_END = BOARD_START + N_BOARD_CELLS * BOARD_CELL_FEATURES   # 200
-BAG_START = BOARD_END                                           # 200
-BAG_END = BAG_START + len(TOKEN_COLORS)                         # 207
-PYRAMID_START = BAG_END                                         # 207
-PYRAMID_END = PYRAMID_START + N_PYRAMID * CARD_FEATURES         # 495
-DECK_START = PYRAMID_END                                        # 495
-DECK_END = DECK_START + 3                                       # 498
-ROYAL_START = DECK_END                                          # 498
-ROYAL_END = ROYAL_START + 4 * ROYAL_FEATURES                    # 506
-TABLE_PRIV = ROYAL_END                                          # 506
-CUR_START = TABLE_PRIV + 1                                      # 507
-CUR_END = CUR_START + PLAYER_FEATURES                           # 606
-OPP_START = CUR_END                                             # 606
-OPP_END = OPP_START + PLAYER_FEATURES                           # 705
-PHASE_START = OPP_END                                           # 705
-PHASE_END = PHASE_START + N_PHASES                              # 712
-EXTRA_TURNS = PHASE_END                                         # 712
-PENDING_START = EXTRA_TURNS + 1                                 # 713
-PENDING_END = PENDING_START + N_ABILITIES                       # 719
+BOARD_END = BOARD_START + N_BOARD_CELLS * BOARD_CELL_FEATURES  # 200
+BAG_START = BOARD_END  # 200
+BAG_END = BAG_START + len(TOKEN_COLORS)  # 207
+PYRAMID_START = BAG_END  # 207
+PYRAMID_END = PYRAMID_START + N_PYRAMID * CARD_FEATURES  # 495
+DECK_START = PYRAMID_END  # 495
+DECK_END = DECK_START + 3  # 498
+ROYAL_START = DECK_END  # 498
+ROYAL_END = ROYAL_START + 4 * ROYAL_FEATURES  # 506
+TABLE_PRIV = ROYAL_END  # 506
+CUR_START = TABLE_PRIV + 1  # 507
+CUR_END = CUR_START + PLAYER_FEATURES  # 606
+OPP_START = CUR_END  # 606
+OPP_END = OPP_START + PLAYER_FEATURES  # 705
+PHASE_START = OPP_END  # 705
+PHASE_END = PHASE_START + N_PHASES  # 712
+EXTRA_TURNS = PHASE_END  # 712
+PENDING_START = EXTRA_TURNS + 1  # 713
+PENDING_END = PENDING_START + N_ABILITIES  # 719
 
-STATE_DIM = PENDING_END                                         # 719
+STATE_DIM = PENDING_END  # 719
 
 # Precomputed index lookups for O(1) categorical encoding.
 _CARD_COLOR_IDX: dict[str, int] = {c: i for i, c in enumerate(CARD_COLORS)}
@@ -193,26 +193,28 @@ class EncoderScales:
     above 1.0 under normal play.  Override individual fields to accommodate
     rule variants or to fix out-of-range warnings without editing source code.
     """
-    token: float = 10.0           # token counts per colour (max 4 gems / 2 pearl / 3 gold per pool)
-    points: float = 6.0           # card point values (max 6 in data)
-    bonus: float = 2.0            # card bonus values (max 2 in data)
-    cost: float = 8.0             # token cost per colour (max 8 in data)
-    card_crowns: float = 3.0      # crowns on a card (max 3 in data)
-    deck: float = 30.0            # cards remaining in a deck (max 25 at start)
-    bonus_color: float = 12.0     # purchased bonuses per gem colour (theoretical max ~12)
+
+    token: float = 10.0  # token counts per colour (max 4 gems / 2 pearl / 3 gold per pool)
+    points: float = 6.0  # card point values (max 6 in data)
+    bonus: float = 2.0  # card bonus values (max 2 in data)
+    cost: float = 8.0  # token cost per colour (max 8 in data)
+    card_crowns: float = 3.0  # crowns on a card (max 3 in data)
+    deck: float = 30.0  # cards remaining in a deck (max 25 at start)
+    bonus_color: float = 12.0  # purchased bonuses per gem colour (theoretical max ~12)
     prestige_color: float = 14.0  # prestige per gem colour (wins at 10, overshoot possible)
     total_prestige: float = 26.0  # total prestige (wins at 20, overshoot possible)
-    player_crowns: float = 13.0   # total crowns on a player (wins at 10, overshoot possible)
-    privileges: float = 3.0       # privilege tokens (max 3)
-    reserved: float = 3.0         # reserved card count (max 3)
-    extra_turns: float = 3.0      # extraTurns counter (reserved field)
-    table_priv: float = 3.0       # table-level privilege count (max 3)
+    player_crowns: float = 13.0  # total crowns on a player (wins at 10, overshoot possible)
+    privileges: float = 3.0  # privilege tokens (max 3)
+    reserved: float = 3.0  # reserved card count (max 3)
+    extra_turns: float = 3.0  # extraTurns counter (reserved field)
+    table_priv: float = 3.0  # table-level privilege count (max 3)
 
 
 DEFAULT_SCALES = EncoderScales()
 
 
 # -- Per-card encoding ---------------------------------------------------------
+
 
 def _encode_card(card: dict | None, out: np.ndarray, offset: int, scales: EncoderScales) -> None:
     """Write CARD_FEATURES floats for one card slot at out[offset]. Empty slot stays all-zero."""
@@ -247,6 +249,7 @@ def _encode_card(card: dict | None, out: np.ndarray, offset: int, scales: Encode
 
 
 # -- Per-player encoding -------------------------------------------------------
+
 
 def _encode_player(player: dict, out: np.ndarray, offset: int, scales: EncoderScales) -> None:
     """Write PLAYER_FEATURES floats for one player starting at out[offset]."""
@@ -375,7 +378,10 @@ def encode(state: dict, scales: EncoderScales | None = None) -> np.ndarray:
             logging.getLogger(__name__).warning(
                 "state_encoder: %d new out-of-range indices (over=%d, under=%d). "
                 "Samples: %s. Clamping to [0, 1].",
-                len(new_indices), int(over_mask.sum()), int(under_mask.sum()), samples,
+                len(new_indices),
+                int(over_mask.sum()),
+                int(under_mask.sum()),
+                samples,
             )
         np.clip(out, 0.0, 1.0, out=out)
     return out
@@ -417,6 +423,7 @@ def encode_card_ids(state: dict) -> np.ndarray:
 
 
 # -- Diagnostics ---------------------------------------------------------------
+
 
 def _describe_card_field(field: int) -> str:
     if field == C_PRESENT:

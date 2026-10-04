@@ -9,7 +9,7 @@ Index ranges:
   [282..286]  ASSIGN_WILD_COLOR         — 5 gem colors (white/blue/green/red/black)
                                           index = 282 + color_idx
                                           (only one wild card is ever pending per phase)
-  [287..311]  USE_PRIVILEGE             — 25 single board cell indices (0-24)
+  [287..311]  USE_PRIVILEGE             — 25 board cell indices (0-24), one privilege per action
   [312]       REPLENISH_BOARD
   [313]       END_OPTIONAL_PHASE
   [314]       SKIP_TO_MANDATORY
@@ -36,6 +36,7 @@ GEM_COLORS = ["white", "blue", "green", "red", "black"]
 TAKE_FROM_OPPONENT_COLORS = ["white", "blue", "green", "red", "black", "pearl"]
 
 # ── Valid board lines ─────────────────────────────────────────────────────────
+
 
 def _coord(idx: int) -> tuple[int, int]:
     return divmod(idx, 5)
@@ -73,24 +74,25 @@ LINE_TO_IDX: dict[tuple[int, ...], int] = {line: i for i, line in enumerate(VALI
 
 # ── Offset constants ──────────────────────────────────────────────────────────
 
-OFFSET_TAKE_TOKENS = 0        # 0..144
-OFFSET_PURCHASE_CARD = 145    # 145..211   (card id 1..67)
+OFFSET_TAKE_TOKENS = 0  # 0..144
+OFFSET_PURCHASE_CARD = 145  # 145..211   (card id 1..67)
 OFFSET_RESERVE_PYRAMID = 212  # 212..278   (card id 1..67)
-OFFSET_RESERVE_DECK = 279     # 279..281
-OFFSET_ASSIGN_WILD = 282      # 282..286   (color idx 0..4; one pending wild card per phase)
-OFFSET_USE_PRIVILEGE = 287    # 287..311   (single board cell 0-24)
-OFFSET_REPLENISH = 312        # 312
-OFFSET_END_OPTIONAL = 313     # 313
+OFFSET_RESERVE_DECK = 279  # 279..281
+OFFSET_ASSIGN_WILD = 282  # 282..286   (color idx 0..4; one pending wild card per phase)
+OFFSET_USE_PRIVILEGE = 287  # 287..311   (single board cell 0-24)
+OFFSET_REPLENISH = 312  # 312
+OFFSET_END_OPTIONAL = 313  # 313
 OFFSET_SKIP_TO_MANDATORY = 314  # 314
-OFFSET_DISCARD = 315          # 315..321   (one entry per token color)
+OFFSET_DISCARD = 315  # 315..321   (one entry per token color)
 OFFSET_TAKE_FROM_BOARD = 322  # 322..346   (25 board positions)
 OFFSET_TAKE_FROM_OPPONENT = 347  # 347..352  (6 colors: gem colors + pearl)
-OFFSET_CHOOSE_ROYAL = 353        # 353..356  (royal card id 1..4)
-OFFSET_PASS_MANDATORY = 357      # 357
+OFFSET_CHOOSE_ROYAL = 353  # 353..356  (royal card id 1..4)
+OFFSET_PASS_MANDATORY = 357  # 357
 
 _DECK_TO_IDX = {"deck_1": 279, "deck_2": 280, "deck_3": 281}
 
 # ── Conversion functions ──────────────────────────────────────────────────────
+
 
 def action_to_index(action: dict) -> int | None:
     """Convert a concrete Action dict to its canonical index. Returns None if unmappable."""
@@ -121,9 +123,9 @@ def action_to_index(action: dict) -> int | None:
             return OFFSET_ASSIGN_WILD + GEM_COLORS.index(color)
 
     if t == "USE_PRIVILEGE":
-        indices = action.get("indices", [])
-        if len(indices) == 1 and 0 <= indices[0] <= 24:
-            return OFFSET_USE_PRIVILEGE + indices[0]
+        idx = action.get("index")
+        if isinstance(idx, int) and 0 <= idx <= 24:
+            return OFFSET_USE_PRIVILEGE + idx
 
     if t == "REPLENISH_BOARD":
         return OFFSET_REPLENISH
@@ -135,11 +137,9 @@ def action_to_index(action: dict) -> int | None:
         return OFFSET_SKIP_TO_MANDATORY
 
     if t == "DISCARD_TOKENS":
-        tokens = action.get("tokens", {})
-        if len(tokens) == 1:
-            color = next(iter(tokens))
-            if tokens[color] == 1 and color in TOKEN_COLORS:
-                return OFFSET_DISCARD + TOKEN_COLORS.index(color)
+        color = action.get("color", "")
+        if color in TOKEN_COLORS:
+            return OFFSET_DISCARD + TOKEN_COLORS.index(color)
 
     if t == "TAKE_TOKEN_FROM_BOARD":
         idx = action.get("index")

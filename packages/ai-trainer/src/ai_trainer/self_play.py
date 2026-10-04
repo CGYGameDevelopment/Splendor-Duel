@@ -48,16 +48,16 @@ MAX_STEPS_PER_EPISODE = 2_000
 
 @dataclass
 class Transition:
-    obs: np.ndarray           # (STATE_DIM,)
-    card_ids: np.ndarray      # (N_CARD_SLOTS,) -- routes the card pointer head
+    obs: np.ndarray  # (STATE_DIM,)
+    card_ids: np.ndarray  # (N_CARD_SLOTS,) -- routes the card pointer head
     action: int
     log_prob: float
-    value: float              # always the learner's value estimate
+    value: float  # always the learner's value estimate
     reward: float
     done: bool
-    legal_mask: np.ndarray    # (ACTION_SPACE_SIZE,)
-    player_id: int            # 0 or 1 -- index of the player who acted
-    trainable: bool = True    # False when a frozen pool opponent chose this action
+    legal_mask: np.ndarray  # (ACTION_SPACE_SIZE,)
+    player_id: int  # 0 or 1 -- index of the player who acted
+    trainable: bool = True  # False when a frozen pool opponent chose this action
 
 
 @dataclass
@@ -69,6 +69,7 @@ class Episode:
     transition) or because the collection budget ran out mid-game, in which case
     terminal_value carries the bootstrap and the game continues in the next call.
     """
+
     transitions: list[Transition] = field(default_factory=list)
     # Value estimate for the state after the last transition.  Non-zero only for
     # segments cut by the collection budget or the step cap.
@@ -125,8 +126,9 @@ class OpponentPool:
 @dataclass
 class _SlotRun:
     """Bookkeeping for the game currently occupying one env slot."""
+
     episode: Episode
-    steps: int = 0            # decisions in the current GAME, across segments
+    steps: int = 0  # decisions in the current GAME, across segments
     # None = self-play (learner drives both seats); otherwise the seat the
     # learner occupies, with the other seat driven by `opponent`.
     learner_seat: int | None = None

@@ -147,18 +147,21 @@ class GreedyPurchaseAgent:
 
         # Rule 5: When discarding, never discard gold.
         if discard_moves:
-            safe = [(m, i) for m, i in discard_moves if "gold" not in m.get("tokens", {})]
+            safe = [(m, i) for m, i in discard_moves if m.get("color") != "gold"]
             pool = safe if safe else discard_moves
             return pool[int(self.rng.integers(len(pool)))][1]
 
         # Rule 1: Purchase a card that immediately wins the game.
         winning = [
-            (m, i) for m, i in purchase_moves
+            (m, i)
+            for m, i in purchase_moves
             if (card := card_lookup.get(m.get("cardId"))) and _would_win(me, card)
         ]
         if winning:
             best_level = max(card_level.get(m.get("cardId", 0), 0) for m, _ in winning)
-            candidates = [i for m, i in winning if card_level.get(m.get("cardId", 0), 0) == best_level]
+            candidates = [
+                i for m, i in winning if card_level.get(m.get("cardId", 0), 0) == best_level
+            ]
             return int(self.rng.choice(candidates))
 
         # Rule 2: Block opponent from winning — purchase the card if possible, else reserve it.
@@ -175,17 +178,23 @@ class GreedyPurchaseAgent:
             block_buy = [(m, i) for m, i in purchase_moves if m.get("cardId") in threat_ids]
             if block_buy:
                 return block_buy[int(self.rng.integers(len(block_buy)))][1]
-            block_reserve = [(m, i) for m, i in reserve_pyramid_moves if m.get("cardId") in threat_ids]
+            block_reserve = [
+                (m, i) for m, i in reserve_pyramid_moves if m.get("cardId") in threat_ids
+            ]
             if block_reserve:
                 return block_reserve[int(self.rng.integers(len(block_reserve)))][1]
 
         # Rule 3: Purchase the highest-level pyramid card available.
-        pyramid_purchases = [(m, i) for m, i in purchase_moves
-                             if card_level.get(m.get("cardId", 0), 0) > 0]
+        pyramid_purchases = [
+            (m, i) for m, i in purchase_moves if card_level.get(m.get("cardId", 0), 0) > 0
+        ]
         if pyramid_purchases:
             best_level = max(card_level.get(m.get("cardId", 0), 0) for m, _ in pyramid_purchases)
-            candidates = [i for m, i in pyramid_purchases
-                          if card_level.get(m.get("cardId", 0), 0) == best_level]
+            candidates = [
+                i
+                for m, i in pyramid_purchases
+                if card_level.get(m.get("cardId", 0), 0) == best_level
+            ]
             return int(self.rng.choice(candidates))
 
         if purchase_moves:
@@ -198,7 +207,8 @@ class GreedyPurchaseAgent:
 
             def _score_take(move: dict) -> float:
                 colors = [
-                    board[i] for i in move.get("indices", [])
+                    board[i]
+                    for i in move.get("indices", [])
                     if isinstance(i, int) and i < len(board) and board[i] in _SPENDABLE_COLORS
                 ]
                 return sum(1.0 / (resources.get(c, 0) + 1) for c in colors)

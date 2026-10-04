@@ -23,12 +23,14 @@ export function Pyramid({
 }: PyramidProps) {
   const renderRow = (level: 1 | 2 | 3, cards: CardType[]) => {
     const deckKey = `deck_${level}` as 'deck_1' | 'deck_2' | 'deck_3';
-    const deckRemaining = state.decks[`level${level}` as 'level1' | 'level2' | 'level3'].length;
+    const deckRemaining = state.deckCounts[`level${level}` as 'level1' | 'level2' | 'level3'];
     const canReserveDeck = isMyTurn && legal.reserveDeckBySource.has(deckKey);
 
     return (
-      <div className={styles.row} key={level}>
-        <span className={styles.rowLabel}>L{level}</span>
+      <div className={styles.row} data-level={level} key={level}>
+        <span className={styles.rowLabel}>
+          <span className={styles.tierBadge}>{level}</span>
+        </span>
         <div className={styles.cards}>
           {deckRemaining > 0 ? (
             <CardBack

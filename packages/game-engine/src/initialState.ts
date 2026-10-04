@@ -1,5 +1,6 @@
 import type { GameState, PlayerState, TokenPool, Card } from './types';
 import { SPIRAL_ORDER } from './board';
+import { shuffle, randomSeed, type Seed } from './rng';
 import {
   emptyPool, PYRAMID_LEVEL1_COUNT, PYRAMID_LEVEL2_COUNT, PYRAMID_LEVEL3_COUNT,
   STARTING_GEM_COUNT, STARTING_PEARL_COUNT, STARTING_GOLD_COUNT, BOARD_SIZE,
@@ -23,21 +24,32 @@ function makePlayer(): PlayerState {
   };
 }
 
-function shuffle<T>(arr: T[]): T[] {
-  const array = [...arr];
-  for (let index = array.length - 1; index > 0; index--) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
-    [array[index], array[swapIndex]] = [array[swapIndex], array[index]];
-  }
-  return array;
-}
+/**
+ * Returns a fresh game state ready to play.
+ *
+ * `seed` makes the whole game reproducible: the same seed always produces the
+ * same deck order, the same board layout and the same bag draws during later
+ * replenishes. Omit it for a real game and an unpredictable seed is drawn;
+ * pass one in tests, AI training runs and bug reproductions. Callers that need
+ * to replay a game later should record the seed they passed, or read the seed
+ * back off `state.rngSeed` before the first action is dispatched.
+ */
+export function createInitialState(
+  secondPlayerGetsPrivilege = true,
+  seed: Seed = randomSeed(),
+): GameState {
+  let rngSeed = seed;
 
-/** Returns a fresh game state ready to play. secondPlayerGetsPrivilege = true by default. */
-export function createInitialState(secondPlayerGetsPrivilege = true): GameState {
-  const level1 = shuffle(ALL_CARDS.filter(card => card.level === 1));
-  const level2 = shuffle(ALL_CARDS.filter(card => card.level === 2));
-  const level3 = shuffle(ALL_CARDS.filter(card => card.level === 3));
-  const royalDeck = shuffle(ALL_ROYAL_CARDS);
+  const shuffled = <T>(items: readonly T[]): T[] => {
+    const result = shuffle(items, rngSeed);
+    rngSeed = result.seed;
+    return result.items;
+  };
+
+  const level1 = shuffled(ALL_CARDS.filter(card => card.level === 1));
+  const level2 = shuffled(ALL_CARDS.filter(card => card.level === 2));
+  const level3 = shuffled(ALL_CARDS.filter(card => card.level === 3));
+  const royalDeck = shuffled(ALL_ROYAL_CARDS);
 
   // Reveal pyramid: PYRAMID_LEVEL1_COUNT, PYRAMID_LEVEL2_COUNT, PYRAMID_LEVEL3_COUNT
   const pyramid = {
@@ -67,7 +79,7 @@ export function createInitialState(secondPlayerGetsPrivilege = true): GameState 
   for (const [color, count] of Object.entries(startingTokens) as [keyof TokenPool, number][]) {
     for (let tokenIndex = 0; tokenIndex < count; tokenIndex++) tokenList.push(color);
   }
-  const shuffledTokens = shuffle(tokenList);
+  const shuffledTokens = shuffled(tokenList);
 
   const board = new Array(BOARD_SIZE).fill(null);
   for (let spiralIndex = 0; spiralIndex < Math.min(shuffledTokens.length, BOARD_SIZE); spiralIndex++) {
@@ -100,5 +112,6 @@ export function createInitialState(secondPlayerGetsPrivilege = true): GameState 
     lastPurchasedCard: null,
     winner: null,
     winCondition: null,
+    rngSeed,
   };
 }

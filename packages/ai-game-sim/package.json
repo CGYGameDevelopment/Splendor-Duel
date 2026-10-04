@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@splendor-duel/game-engine": "*",
+    "@splendor-duel/protocol": "*",
     "express": "^4.19.2",
     "uuid": "^10.0.0"
   },

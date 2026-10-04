@@ -1,53 +1,98 @@
+/*
+ * The 5x5 token board.
+ *
+ * Depth is the whole point here: each cell is a well cut into the board, with a
+ * shadow across its upper-left inner edge and a catch-light along its lower
+ * right. Tokens then sit *in* the wells rather than floating on a flat grid,
+ * and the empty cells still read as cells.
+ */
+
 .boardWrap {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .board {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  gap: 4px;
-  background: linear-gradient(180deg, #4d3520 0%, #2c1d10 100%);
-  padding: 8px;
+  gap: 7px;
+  padding: 14px;
   border-radius: var(--radius-lg);
-  border: 2px solid var(--border-strong);
+  background:
+    /* A pool of light over the middle of the board. */
+    radial-gradient(ellipse 70% 70% at 50% 35%, rgba(255, 255, 255, 0.07), transparent 70%),
+    repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.05) 0 3px, transparent 3px 6px),
+    linear-gradient(165deg, #35485a 0%, #223140 45%, #141f2a 100%);
+  border: 1px solid var(--border-strong);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -2px 6px rgba(0, 0, 0, 0.5),
+    var(--shadow-4);
 }
 
-.cell {
-  width: 50px;
-  height: 50px;
-  background: rgba(0, 0, 0, 0.25);
-  border: 1px solid rgba(0, 0, 0, 0.4);
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-}
-
-.cell.highlight {
-  outline: 2px solid var(--accent);
-  outline-offset: -1px;
-}
-
-.cell.dimmed > * {
-  opacity: 0.32;
+/* A thin inlaid frame, like the border printed on a real board. */
+.board::before {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius);
   pointer-events: none;
 }
 
-.empty {
-  color: rgba(255, 255, 255, 0.08);
-  font-size: 18px;
+.cell {
+  position: relative;
+  width: 54px;
+  height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 42%, rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0.26) 70%);
+  box-shadow:
+    inset 0 2px 5px rgba(0, 0, 0, 0.7),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.07);
+  transition: box-shadow 0.15s ease, background 0.15s ease;
 }
 
-.indexHint {
-  position: absolute;
-  top: 1px;
-  left: 3px;
-  font-size: 8px;
-  color: rgba(255, 255, 255, 0.18);
+/* An empty well shows its own floor. */
+.cell.vacant::after {
+  content: '';
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.38);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.7), 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* Cells the player can act on glow from inside the well. */
+.cell.selectable {
+  background: radial-gradient(circle at 50% 42%, rgba(224, 165, 68, 0.22) 0%, rgba(0, 0, 0, 0.3) 72%);
+  box-shadow:
+    inset 0 2px 5px rgba(0, 0, 0, 0.6),
+    inset 0 0 0 1.5px rgba(224, 165, 68, 0.5),
+    0 0 12px -2px rgba(224, 165, 68, 0.45);
+}
+
+.cell.highlight {
+  background: radial-gradient(circle at 50% 42%, rgba(248, 207, 122, 0.3) 0%, rgba(0, 0, 0, 0.28) 72%);
+  box-shadow:
+    inset 0 2px 5px rgba(0, 0, 0, 0.55),
+    inset 0 0 0 2px var(--accent-strong),
+    0 0 18px -2px rgba(248, 207, 122, 0.7);
+}
+
+/*
+ * Gold cannot be taken with the take-tokens action, so it is dimmed here most
+ * of the time. At 0.3 it read as broken artwork rather than an unavailable
+ * piece, so the dim is gentler and desaturates rather than fading out.
+ */
+.cell.dimmed > * {
+  opacity: 0.55;
+  filter: saturate(0.55);
   pointer-events: none;
 }
 
@@ -55,4 +100,11 @@
   font-size: 11px;
   color: var(--text-dim);
   text-align: center;
+}
+
+/* Scale the wells down on narrow screens so the board never drives a
+   horizontal scrollbar. */
+@media (max-width: 1100px) {
+  .cell { width: 46px; height: 46px; }
+  .board { gap: 5px; padding: 11px; }
 }

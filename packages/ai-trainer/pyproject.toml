@@ -23,3 +23,19 @@ play-vs-ai = "ai_trainer.bot_client:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ai_trainer"]
+
+[tool.pytest.ini_options]
+# `src` layout: make the package importable without installing it, so tests run
+# with a bare `pytest` in CI and locally.
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.black]
+line-length = 100
+# requires-python is >=3.11; without this Black assumes the newest grammar it
+# knows and its AST safety check then fails on an older interpreter.
+target-version = ["py311"]

@@ -1,4 +1,4 @@
-import type { Board as BoardType, TokenColor } from '@splendor-duel/game-engine';
+import type { Board as BoardType } from '@splendor-duel/game-engine';
 import { Token } from '../Token/Token';
 import styles from './Board.module.css';
 
@@ -26,22 +26,21 @@ export function Board({ board, selected, clickable, dimmed, onCellClick }: Board
 
           const cellCls = [
             styles.cell,
+            cell === null && styles.vacant,
             isSelected && styles.highlight,
+            isClickable && !isSelected && styles.selectable,
             isDimmed && styles.dimmed,
           ].filter(Boolean).join(' ');
 
           return (
             <div key={idx} className={cellCls}>
-              <span className={styles.indexHint}>{idx}</span>
-              {cell ? (
+              {cell && (
                 <Token
-                  color={cell as TokenColor}
+                  color={cell}
                   size="md"
                   selected={isSelected}
                   onClick={isClickable && onCellClick ? () => onCellClick(idx) : undefined}
                 />
-              ) : (
-                <span className={styles.empty}>·</span>
               )}
             </div>
           );

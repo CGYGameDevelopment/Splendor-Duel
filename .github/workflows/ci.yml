@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+# A new push to the same branch supersedes an in-flight run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typescript:
+    name: TypeScript (build, typecheck, lint, test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Build first: protocol, server, the clients and the sim all consume the
+      # engine's emitted .d.ts files, so a typecheck before the build would
+      # resolve against a stale dist.
+      - name: Build
+        run: npm run build
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+  python:
+    name: Python (lint, format, test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/ai-trainer
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # The action-space tests need numpy only. torch is a multi-hundred-megabyte
+      # download and nothing under test imports it, so the dev extra is installed
+      # without the project's runtime dependencies.
+      - name: Install dev tooling
+        run: pip install numpy pytest ruff black
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Check formatting
+        run: black --check .
+
+      - name: Test
+        run: pytest
+
+  action-space-drift:
+    name: Action space matches the engine
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          pip install numpy pytest
+
+      - name: Build the engine
+        run: npm run build -w packages/game-engine
+
+      # packages/ai-trainer/src/ai_trainer/action_space.py reimplements part of
+      # the engine's rules (the 145 valid token lines, card id ranges, action
+      # shapes). Nothing links the two, so an engine change can silently desync
+      # the RL action mask: training keeps running, against a wrong mask.
+      #
+      # Regenerating the fixture from the current engine and failing on a diff
+      # turns that silent drift into a failing build.
+      - name: Regenerate the action fixture from the engine
+        run: node packages/ai-trainer/scripts/generate_action_fixture.js
+
+      - name: Fail if the committed fixture is stale
+        run: |
+          if ! git diff --exit-code -- packages/ai-trainer/tests/fixtures/legal_moves.json; then
+            echo
+            echo "The engine's legal moves no longer match the committed fixture."
+            echo "Run: npm run build -w packages/game-engine && node packages/ai-trainer/scripts/generate_action_fixture.js"
+            echo "then review the diff and check action_space.py still maps every action."
+            exit 1
+          fi
+
+      - name: Check the action space still maps every engine action
+        working-directory: packages/ai-trainer
+        run: pytest

@@ -1,57 +1,113 @@
+/*
+ * The chip a gem sits in.
+ *
+ * Depth comes from four stacked effects rather than one drop shadow, which is
+ * what separates a disc from a thing sitting on a table:
+ *   1. a contact shadow on the surface below
+ *   2. a rim highlight along the top edge, where the light lands
+ *   3. a rim shadow along the bottom edge, in the bezel's own shade
+ *   4. an inner ring, so the gem looks seated in the metal rather than printed
+ */
+
 .token {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  border: 2px solid rgba(0, 0, 0, 0.4);
-  font-weight: 700;
-  font-size: 11px;
-  color: rgba(0, 0, 0, 0.55);
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25);
-  user-select: none;
   flex-shrink: 0;
+  padding: 2px;
+  background:
+    linear-gradient(160deg, var(--bezel-light) 0%, var(--bezel) 48%, var(--bezel-deep) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.55),
+    0 2px 3px rgba(0, 0, 0, 0.45),
+    0 4px 8px -2px rgba(0, 0, 0, 0.5);
+  --bezel-light: #cdb68a;
+  --bezel: #8d7448;
+  --bezel-deep: #4a3a1d;
 }
 
-/* Sizes */
-.size-sm { width: 22px; height: 22px; font-size: 10px; }
-.size-md { width: 34px; height: 34px; font-size: 12px; }
-.size-lg { width: 44px; height: 44px; font-size: 14px; }
+/* Pearl and gold get a cooler and warmer bezel so the chip reads as a set. */
+.pearl { --bezel-light: #e7e0d0; --bezel: #a99d86; --bezel-deep: #5e5747; }
+.gold  { --bezel-light: #ffe9a8; --bezel: #c79b35; --bezel-deep: #6b4e10; }
 
-/* Colors with radial sheen so they read as gems */
-.white  { background: radial-gradient(circle at 30% 30%, #fff 0%, #f1eee2 55%, #c8c2b1 100%); color: #5a5444; }
-.blue   { background: radial-gradient(circle at 30% 30%, #6b94d6 0%, #2a5cb6 55%, #143570 100%); color: #e6efff; text-shadow: 0 1px 0 rgba(0,0,0,0.3); }
-.green  { background: radial-gradient(circle at 30% 30%, #6cc28a 0%, #2e8a52 55%, #16542d 100%); color: #ecfff2; text-shadow: 0 1px 0 rgba(0,0,0,0.3); }
-.red    { background: radial-gradient(circle at 30% 30%, #de6c6d 0%, #b73031 55%, #6e1819 100%); color: #ffe9e9; text-shadow: 0 1px 0 rgba(0,0,0,0.3); }
-.black  { background: radial-gradient(circle at 30% 30%, #5b5757 0%, #2c2a2a 55%, #0d0c0c 100%); color: #f1eddf; text-shadow: 0 1px 0 rgba(0,0,0,0.3); }
-.pearl  { background: radial-gradient(circle at 30% 30%, #ffffff 0%, #efe7d8 50%, #c1b9a9 100%); border-color: rgba(120, 100, 80, 0.4); color: #5a5444; }
-.gold   { background: radial-gradient(circle at 30% 30%, #ffe89a 0%, #d8a93a 55%, #8c6a18 100%); color: #4a3300; }
+.size-sm { padding: 1.5px; }
+.size-md { padding: 2px; }
+.size-lg { padding: 2.5px; }
 
-/* Interactive states */
-.clickable { cursor: pointer; transition: transform 0.08s ease, box-shadow 0.08s ease; }
-.clickable:hover { transform: scale(1.08); box-shadow: 0 0 0 2px var(--accent); }
+/* ─── Interaction ────────────────────────────────────────────────────────── */
 
-.selected { box-shadow: 0 0 0 3px var(--accent-strong), 0 0 12px rgba(243, 193, 104, 0.7); }
-.dimmed   { opacity: 0.32; }
-
-.badge {
-  position: absolute;
-  bottom: -6px;
-  right: -6px;
-  background: var(--accent);
-  color: #1d1208;
-  border-radius: 999px;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  font-size: 11px;
-  font-weight: 700;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid #1d1208;
+.clickable {
+  cursor: pointer;
+  transition:
+    transform 0.14s cubic-bezier(0.2, 0.9, 0.3, 1.3),
+    box-shadow 0.14s ease,
+    filter 0.14s ease;
 }
+
+/* Lifting the token off the table and lengthening its shadow, rather than just
+   scaling it, is what sells the pick-up. */
+.clickable:hover,
+.clickable:focus-visible {
+  transform: translateY(-3px) scale(1.06);
+  outline: none;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.5),
+    0 6px 10px rgba(0, 0, 0, 0.5),
+    0 0 0 2px var(--accent);
+  filter: brightness(1.08);
+}
+
+.clickable:active {
+  transform: translateY(-1px) scale(1.02);
+}
+
+.selected {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    0 3px 6px rgba(0, 0, 0, 0.5),
+    0 0 0 3px var(--accent-strong),
+    0 0 16px 2px rgba(243, 193, 104, 0.55);
+  transform: translateY(-2px);
+}
+
+.dimmed {
+  opacity: 0.28;
+  filter: saturate(0.4);
+  pointer-events: none;
+}
+
+/* ─── Count badge ────────────────────────────────────────────────────────── */
 
 .wrap {
   position: relative;
-  display: inline-block;
+  display: inline-flex;
+}
+
+.badge {
+  position: absolute;
+  bottom: -5px;
+  right: -6px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--accent-strong) 0%, var(--accent) 100%);
+  color: #22160a;
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 17px;
+  text-align: center;
+  border: 1.5px solid #1b1109;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .clickable { transition: none; }
+  .clickable:hover, .clickable:focus-visible, .clickable:active { transform: none; }
 }
