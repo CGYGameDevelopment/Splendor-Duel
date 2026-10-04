@@ -8,6 +8,7 @@ import type { ClientMessage } from '@splendor-duel/protocol';
 import {
   createSession,
   joinSession,
+  reconnectSession,
   dispatchAction,
   undoTurn,
   handleDisconnect,
@@ -75,6 +76,14 @@ wss.on('connection', (ws: WebSocket) => {
       }
       case 'JOIN_SESSION': {
         const pid = joinSession(msg.sessionId, msg.playerName, ws);
+        if (pid !== null) {
+          sessionId = msg.sessionId;
+          playerId = pid;
+        }
+        break;
+      }
+      case 'RECONNECT_SESSION': {
+        const pid = reconnectSession(msg.sessionId, msg.reconnectToken, ws);
         if (pid !== null) {
           sessionId = msg.sessionId;
           playerId = pid;

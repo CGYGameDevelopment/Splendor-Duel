@@ -121,6 +121,8 @@ export interface SessionInfo {
 export type ClientMessage =
   | { type: 'CREATE_SESSION'; playerName: string }
   | { type: 'JOIN_SESSION'; sessionId: string; playerName: string }
+  /** Reclaim a seat after a reload or a dropped connection. */
+  | { type: 'RECONNECT_SESSION'; sessionId: string; reconnectToken: string }
   | { type: 'DISPATCH_ACTION'; action: Action }
   | { type: 'UNDO_TURN' }
   | { type: 'PING' };
@@ -128,15 +130,27 @@ export type ClientMessage =
 // ─── Server → Client (WebSocket) ─────────────────────────────────────────────
 
 export type ServerMessage =
-  /** Sent to player 0 after they create a session. */
-  | { type: 'SESSION_CREATED'; sessionId: string; playerId: 0 }
+  /**
+   * Sent to player 0 after they create a session.
+   *
+   * `reconnectToken` is the secret that lets this client reclaim its seat after
+   * a reload. It is per-seat, so holding it proves which player you were.
+   */
+  | { type: 'SESSION_CREATED'; sessionId: string; playerId: 0; reconnectToken: string }
   /** Sent to player 1 after they successfully join. */
-  | { type: 'SESSION_JOINED'; sessionId: string; playerId: 1; state: ClientGameState; canUndo: boolean }
+  | { type: 'SESSION_JOINED'; sessionId: string; playerId: 1; state: ClientGameState; canUndo: boolean; reconnectToken: string }
+  /** Sent after a successful RECONNECT_SESSION, restoring the client's view. */
+  | { type: 'SESSION_RESUMED'; sessionId: string; playerId: PlayerId; state: ClientGameState; canUndo: boolean; opponentName: string | null; opponentConnected: boolean }
+  /** Sent to the remaining player when the other reconnects. */
+  | { type: 'OPPONENT_RECONNECTED' }
   /** Sent to player 0 when player 1 connects, confirming the game can start. */
   | { type: 'GAME_STARTED'; state: ClientGameState; opponentName: string; canUndo: boolean }
   /** Sent to each player individually after every valid action. */
   | { type: 'STATE_UPDATE'; state: ClientGameState; canUndo: boolean }
-  /** Sent to the remaining player when the other disconnects mid-game. */
-  | { type: 'OPPONENT_DISCONNECTED' }
+  /**
+   * Sent to the remaining player when the other drops mid-game.
+   * `graceMs` is how long the seat is held open for a reconnect.
+   */
+  | { type: 'OPPONENT_DISCONNECTED'; graceMs: number }
   | { type: 'ERROR'; message: string }
   | { type: 'PONG' };

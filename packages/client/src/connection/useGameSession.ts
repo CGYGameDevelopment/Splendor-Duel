@@ -36,6 +36,8 @@ const INITIAL: SessionInfo = {
 
 export interface GameSession {
   info: SessionInfo;
+  /** Reclaim this tab's stored seat; false when there is nothing stored. */
+  resume: () => boolean;
   /** Connect and create a session as soon as the socket is open. */
   connectAndCreate: (url: string, playerName: string) => void;
   /** Connect and join an existing session as soon as the socket is open. */
@@ -48,7 +50,55 @@ export interface GameSession {
 type PendingIntent =
   | { kind: 'create' }
   | { kind: 'join'; sessionId: string }
+  | { kind: 'reconnect'; sessionId: string; reconnectToken: string }
   | null;
+
+/**
+ * Where a seat's reconnect credentials live across a reload.
+ *
+ * sessionStorage rather than localStorage: the credential is scoped to one tab,
+ * which is what a seat is. In localStorage a second tab would pick up the same
+ * token and the two would fight over the seat.
+ */
+const RESUME_KEY = 'splendor-duel:resume';
+
+interface ResumeRecord {
+  url: string;
+  sessionId: string;
+  reconnectToken: string;
+  playerName: string;
+}
+
+function readResume(): ResumeRecord | null {
+  try {
+    const raw = sessionStorage.getItem(RESUME_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<ResumeRecord>;
+    if (!parsed.url || !parsed.sessionId || !parsed.reconnectToken) return null;
+    return {
+      url: parsed.url,
+      sessionId: parsed.sessionId,
+      reconnectToken: parsed.reconnectToken,
+      playerName: parsed.playerName ?? '',
+    };
+  } catch {
+    // Private browsing and blocked storage both throw here. Losing the ability
+    // to resume is not worth failing the whole connection over.
+    return null;
+  }
+}
+
+function writeResume(record: ResumeRecord): void {
+  try {
+    sessionStorage.setItem(RESUME_KEY, JSON.stringify(record));
+  } catch { /* storage unavailable; resume is a convenience, not a requirement */ }
+}
+
+function clearResume(): void {
+  try {
+    sessionStorage.removeItem(RESUME_KEY);
+  } catch { /* as above */ }
+}
 
 export function useGameSession(): GameSession {
   const [info, setInfo] = useState<SessionInfo>(INITIAL);
@@ -69,6 +119,19 @@ export function useGameSession(): GameSession {
             playerId: msg.playerId,
             errorMessage: null,
           };
+        case 'SESSION_RESUMED':
+          return {
+            ...prev,
+            status: msg.state.phase === 'game_over' ? 'game_over' : 'in_game',
+            sessionId: msg.sessionId,
+            playerId: msg.playerId,
+            state: msg.state,
+            canUndo: msg.canUndo,
+            opponentName: msg.opponentName,
+            errorMessage: msg.opponentConnected ? null : 'Opponent is disconnected.',
+          };
+        case 'OPPONENT_RECONNECTED':
+          return { ...prev, status: 'in_game', errorMessage: null };
         case 'SESSION_JOINED':
           return {
             ...prev,
@@ -138,6 +201,12 @@ export function useGameSession(): GameSession {
         sendRaw(ws, { type: 'CREATE_SESSION', playerName });
       } else if (pending?.kind === 'join') {
         sendRaw(ws, { type: 'JOIN_SESSION', sessionId: pending.sessionId, playerName });
+      } else if (pending?.kind === 'reconnect') {
+        sendRaw(ws, {
+          type: 'RECONNECT_SESSION',
+          sessionId: pending.sessionId,
+          reconnectToken: pending.reconnectToken,
+        });
       }
     });
 
@@ -155,10 +224,31 @@ export function useGameSession(): GameSession {
     ws.addEventListener('message', (ev) => {
       let msg: ServerMessage;
       try {
-        msg = JSON.parse(ev.data) as ServerMessage;
+        msg = JSON.parse(ev.data as string) as ServerMessage;
       } catch {
         return;
       }
+
+      // Persisting the seat credential is a side effect, so it happens here
+      // rather than inside the state updater, which React may run twice.
+      if (msg.type === 'SESSION_CREATED' || msg.type === 'SESSION_JOINED') {
+        writeResume({
+          url,
+          sessionId: msg.sessionId,
+          reconnectToken: msg.reconnectToken,
+          playerName,
+        });
+      }
+      // A finished game cannot be rejoined, so stop advertising a seat in it.
+      if (msg.type === 'STATE_UPDATE' && msg.state.phase === 'game_over') {
+        clearResume();
+      }
+      // The token we presented was refused (expired session, or the grace
+      // period lapsed); drop it so we do not retry on the next reload.
+      if (msg.type === 'ERROR' && /reconnect token|Session not found/i.test(msg.message)) {
+        clearResume();
+      }
+
       handleMessageRef.current(msg);
     });
   }, [sendRaw]);
@@ -169,6 +259,23 @@ export function useGameSession(): GameSession {
 
   const connectAndJoin = useCallback((url: string, playerName: string, sessionId: string) => {
     connect(url, playerName, { kind: 'join', sessionId });
+  }, [connect]);
+
+  /**
+   * Reclaims the seat stored for this tab, if there is one.
+   *
+   * Returns false when there is nothing to resume, so the caller can fall
+   * through to showing the lobby.
+   */
+  const resume = useCallback((): boolean => {
+    const record = readResume();
+    if (!record) return false;
+    connect(record.url, record.playerName, {
+      kind: 'reconnect',
+      sessionId: record.sessionId,
+      reconnectToken: record.reconnectToken,
+    });
+    return true;
   }, [connect]);
 
   const dispatch = useCallback((action: Action) => {
@@ -191,8 +298,22 @@ export function useGameSession(): GameSession {
     }
     wsRef.current = null;
     pendingIntentRef.current = null;
+    // Leaving deliberately: do not resume back into the game on the next load.
+    clearResume();
     setInfo(INITIAL);
   }, []);
+
+  /**
+   * Resume once on mount, so a reload lands back at the table instead of the
+   * lobby. Guarded by a ref because StrictMode mounts effects twice in
+   * development and two sockets would race for the seat.
+   */
+  const resumeAttempted = useRef(false);
+  useEffect(() => {
+    if (resumeAttempted.current) return;
+    resumeAttempted.current = true;
+    resume();
+  }, [resume]);
 
   // cleanup on unmount
   useEffect(() => {
@@ -203,5 +324,5 @@ export function useGameSession(): GameSession {
     };
   }, []);
 
-  return { info, connectAndCreate, connectAndJoin, dispatch, undo, reset };
+  return { info, resume, connectAndCreate, connectAndJoin, dispatch, undo, reset };
 }

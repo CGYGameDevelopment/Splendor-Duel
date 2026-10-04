@@ -110,6 +110,7 @@ export function useDemoSession({
       canUndo: false,
       errorMessage,
     },
+    resume: () => false,
     connectAndCreate: () => undefined,
     connectAndJoin: () => undefined,
     dispatch,

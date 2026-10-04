@@ -5,4 +5,5 @@ export * from './helpers';
 export * from './reducer';
 export * from './legalMoves';
 export * from './validateAction';
+export * from './applyAction';
 export * from './initialState';

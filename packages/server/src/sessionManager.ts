@@ -1,5 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import WebSocket from 'ws';
-import { createInitialState, reducer, validateAction } from '@splendor-duel/game-engine';
+import { createInitialState, applyAction } from '@splendor-duel/game-engine';
 import type { Action, PlayerId } from '@splendor-duel/game-engine';
 import { toClientState } from '@splendor-duel/protocol';
 import type { ServerMessage, SessionInfo } from '@splendor-duel/protocol';
@@ -15,11 +16,31 @@ interface Session {
   hasActionsThisTurn: boolean;
   connections: [WebSocket | null, WebSocket | null];
   playerNames: [string, string | null];
+  /**
+   * Per-seat secret that lets a client reclaim its seat after a reload.
+   *
+   * Scoped to the seat rather than the session so holding one proves *which*
+   * player you were; a session-wide token would let either client claim either
+   * seat, and with it the other player's hidden reserved cards.
+   */
+  reconnectTokens: [string, string | null];
   status: 'waiting' | 'playing' | 'finished';
   cleanupTimer: ReturnType<typeof setTimeout> | null;
+  /** Set while a player is disconnected and their seat is being held open. */
+  abandonTimer: ReturnType<typeof setTimeout> | null;
 }
 
 const FINISHED_SESSION_TTL_MS = 60_000; // 1 minute
+
+/**
+ * How long a seat is held after a disconnect.
+ *
+ * A dropped connection used to end the game permanently: handleDisconnect
+ * deleted the session once both sockets were gone, and joinSession rejects
+ * anything not in the `waiting` state, so a browser refresh was fatal. Two
+ * minutes covers a reload, a brief network drop or a laptop lid.
+ */
+const RECONNECT_GRACE_MS = 120_000;
 
 function scheduleCleanup(session: Session): void {
   if (session.cleanupTimer !== null) return;
@@ -29,6 +50,17 @@ function scheduleCleanup(session: Session): void {
 }
 
 const sessions = new Map<string, Session>();
+
+/**
+ * A reconnect secret.
+ *
+ * randomUUID is used rather than Math.random: this value is the only thing
+ * standing between a stranger and someone else's seat, and session ids are only
+ * four digits, so a guessable token would make the whole scheme pointless.
+ */
+function generateReconnectToken(): string {
+  return randomUUID();
+}
 
 function generateSessionId(): string {
   let id: string;
@@ -93,6 +125,7 @@ export function createSession(requestedName: string, ws: WebSocket): string | nu
   }
   const id = generateSessionId();
   const initial = createInitialState(true);
+  const reconnectToken = generateReconnectToken();
   const session: Session = {
     id,
     state: initial,
@@ -100,11 +133,13 @@ export function createSession(requestedName: string, ws: WebSocket): string | nu
     hasActionsThisTurn: false,
     connections: [ws, null],
     playerNames: [playerName, null],
+    reconnectTokens: [reconnectToken, null],
     status: 'waiting',
     cleanupTimer: null,
+    abandonTimer: null,
   };
   sessions.set(id, session);
-  send(ws, { type: 'SESSION_CREATED', sessionId: id, playerId: 0 });
+  send(ws, { type: 'SESSION_CREATED', sessionId: id, playerId: 0, reconnectToken });
   return id;
 }
 
@@ -133,8 +168,10 @@ export function joinSession(
     return null;
   }
 
+  const reconnectToken = generateReconnectToken();
   session.connections[1] = ws;
   session.playerNames[1] = playerName;
+  session.reconnectTokens[1] = reconnectToken;
   session.status = 'playing';
 
   // Tell player 1 their identity and the starting state (their own reserved cards visible)
@@ -144,6 +181,7 @@ export function joinSession(
     playerId: 1,
     state: toClientState(session.state, 1),
     canUndo: canUndoFor(session, 1),
+    reconnectToken,
   });
 
   // Tell player 0 the opponent arrived and the game is starting (their own reserved cards visible)
@@ -188,39 +226,30 @@ export function dispatchAction(
     return;
   }
 
-  // Shape-check the payload before the rules engine sees it. The action came
-  // off the wire, so it is whatever the peer sent; validating here lets us tell
-  // the client *why* it was rejected instead of a bare "invalid action".
-  const validated = validateAction(action);
-  if (!validated.valid) {
-    send(ws, { type: 'ERROR', message: `Malformed action: ${validated.error.reason}` });
-    return;
-  }
-
   const previousPlayer = session.state.currentPlayer;
 
-  // The reducer throws on a violated engine invariant (see the crown-milestone
-  // and royal-card guards). Without this catch the throw would escape the
-  // WebSocket message handler and take down the process — and every other live
-  // session with it.
-  let nextState: Session['state'];
+  // applyAction validates the payload, applies it and explains any rejection.
+  // The engine owns that contract now, so the server no longer compares state
+  // references to find out whether its own move landed.
+  //
+  // The try/catch is for a violated engine invariant (see the crown-milestone
+  // and royal-card guards): the reducer throws, and without this the throw would
+  // escape the WebSocket message handler and take down the process — and every
+  // other live session with it.
+  let result: ReturnType<typeof applyAction>;
   try {
-    nextState = reducer(session.state, validated.action);
+    result = applyAction(session.state, action);
   } catch (err) {
-    console.error(
-      `Engine error (session=${session.id}, player=${playerId}, action=${validated.action.type}):`,
-      err,
-    );
+    console.error(`Engine error (session=${session.id}, player=${playerId}):`, err);
     send(ws, { type: 'ERROR', message: 'Internal engine error; the game state was not changed' });
     return;
   }
 
-  if (nextState === session.state) {
-    // Reducer returns the same reference for a move that is well-formed but
-    // not legal in the current phase.
-    send(ws, { type: 'ERROR', message: 'Illegal move in the current phase' });
+  if (!result.ok) {
+    send(ws, { type: 'ERROR', message: result.error.reason });
     return;
   }
+  const nextState = result.state;
 
   session.state = nextState;
   session.hasActionsThisTurn = true;
@@ -233,6 +262,10 @@ export function dispatchAction(
 
   if (nextState.phase === 'game_over') {
     session.status = 'finished';
+    if (session.abandonTimer !== null) {
+      clearTimeout(session.abandonTimer);
+      session.abandonTimer = null;
+    }
     scheduleCleanup(session);
   }
 
@@ -268,8 +301,69 @@ export function undoTurn(sessionId: string, playerId: PlayerId, ws: WebSocket): 
 }
 
 /**
+ * Reclaims a seat with the token issued when it was first taken.
+ *
+ * Returns the seat's PlayerId on success. The token is compared against the
+ * specific seat, so a client cannot present player 0's token to claim player 1
+ * (and with it sight of their hidden reserved cards).
+ */
+export function reconnectSession(
+  sessionId: string,
+  reconnectToken: string,
+  ws: WebSocket,
+): PlayerId | null {
+  const session = sessions.get(sessionId);
+  if (!session) {
+    send(ws, { type: 'ERROR', message: 'Session not found' });
+    return null;
+  }
+
+  const seat = ([0, 1] as PlayerId[]).find(
+    id => session.reconnectTokens[id] !== null && session.reconnectTokens[id] === reconnectToken,
+  );
+  if (seat === undefined) {
+    send(ws, { type: 'ERROR', message: 'That reconnect token is not valid for this session' });
+    return null;
+  }
+
+  // Replace whatever is in the seat. A second tab presenting a valid token is
+  // the same player moving, so the older socket is dropped rather than refused
+  // — refusing would strand a player whose previous socket is half-open.
+  const existing = session.connections[seat];
+  if (existing && existing !== ws && existing.readyState === WebSocket.OPEN) {
+    existing.close();
+  }
+  session.connections[seat] = ws;
+
+  // The seat is occupied again, so stop holding the session for abandonment.
+  if (session.abandonTimer !== null) {
+    clearTimeout(session.abandonTimer);
+    session.abandonTimer = null;
+  }
+
+  const opponentId = (1 - seat) as PlayerId;
+  send(ws, {
+    type: 'SESSION_RESUMED',
+    sessionId,
+    playerId: seat,
+    state: toClientState(session.state, seat),
+    canUndo: canUndoFor(session, seat),
+    opponentName: session.playerNames[opponentId],
+    opponentConnected: session.connections[opponentId] !== null,
+  });
+
+  const opponentWs = session.connections[opponentId];
+  if (opponentWs) send(opponentWs, { type: 'OPPONENT_RECONNECTED' });
+
+  return seat;
+}
+
+/**
  * Called when a WebSocket closes.
- * Notifies the other player and cleans up fully-disconnected sessions.
+ *
+ * The seat is vacated but the session is kept for RECONNECT_GRACE_MS, so a
+ * reload or a brief network drop does not end the game. Only when nobody has
+ * come back within the grace period is it discarded.
  */
 export function handleDisconnect(sessionId: string, playerId: PlayerId): void {
   const session = sessions.get(sessionId);
@@ -280,15 +374,33 @@ export function handleDisconnect(sessionId: string, playerId: PlayerId): void {
   const oppId = (1 - playerId) as PlayerId;
   const oppWs = session.connections[oppId];
   if (oppWs) {
-    send(oppWs, { type: 'OPPONENT_DISCONNECTED' });
+    send(oppWs, { type: 'OPPONENT_DISCONNECTED', graceMs: RECONNECT_GRACE_MS });
   }
 
-  // Remove sessions with no remaining connections, or waiting sessions where the host left
-  const bothGone = !session.connections[0] && !session.connections[1];
+  // A waiting session whose host left has nothing to come back to: no opponent
+  // has joined, so there is no game worth holding.
   const hostLeft = session.status === 'waiting' && !session.connections[0];
-  if (bothGone || hostLeft) {
+  if (hostLeft) {
     if (session.cleanupTimer !== null) clearTimeout(session.cleanupTimer);
+    if (session.abandonTimer !== null) clearTimeout(session.abandonTimer);
     sessions.delete(sessionId);
+    return;
+  }
+
+  // A finished session is already on its own short TTL.
+  if (session.status === 'finished') return;
+
+  // Hold the seat. The timer is only armed when nobody is connected: while one
+  // player is still at the table the game is plainly still live.
+  const bothGone = !session.connections[0] && !session.connections[1];
+  if (bothGone && session.abandonTimer === null) {
+    session.abandonTimer = setTimeout(() => {
+      const current = sessions.get(sessionId);
+      if (!current) return;
+      if (current.connections[0] || current.connections[1]) return; // someone came back
+      if (current.cleanupTimer !== null) clearTimeout(current.cleanupTimer);
+      sessions.delete(sessionId);
+    }, RECONNECT_GRACE_MS);
   }
 }
 

@@ -397,6 +397,18 @@ async function handleMessage(msg: ServerMessage, ws: WebSocket): Promise<void> {
       await onStateUpdate(gameState, ws);
       break;
 
+    case 'SESSION_RESUMED':
+      myPlayerId = msg.playerId;
+      gameState = msg.state;
+      console.log(`\nReconnected as Player ${myPlayerId}.`);
+      if (!msg.opponentConnected) console.log('Opponent is still disconnected.');
+      await onStateUpdate(gameState, ws);
+      break;
+
+    case 'OPPONENT_RECONNECTED':
+      console.log('\nOpponent reconnected.');
+      break;
+
     case 'GAME_STARTED':
       gameState = msg.state;
       opponentName = msg.opponentName;
