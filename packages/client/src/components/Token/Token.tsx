@@ -26,7 +26,7 @@ export interface TokenProps {
 export function Token({ color, size = 'md', count, selected, dimmed, onClick, title }: TokenProps) {
   const cls = [
     styles.token,
-    styles[`size-${size}` as `size-${TokenSize}`],
+    styles[`size-${size}`],
     styles[color],
     onClick && styles.clickable,
     selected && styles.selected,

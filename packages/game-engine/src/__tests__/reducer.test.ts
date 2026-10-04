@@ -2,7 +2,8 @@ import { reducer } from '../reducer';
 import { createInitialState } from '../initialState';
 import type { GameState } from '../types';
 import { emptyPool, totalPrivileges, totalTokensByColor, totalCardCount } from '../helpers';
-import { makeCard, makePlayer } from './fixtures';
+import { legalMoves } from '../legalMoves';
+import { makeCard, makePlayer, deadlockedMandatoryState } from './fixtures';
 
 // ─── TAKE_TOKENS ──────────────────────────────────────────────────────────────
 
@@ -207,7 +208,7 @@ describe('USE_PRIVILEGE', () => {
       players: [makePlayer({ privileges: 1 }), makePlayer()],
     };
 
-    const next = reducer(s, { type: 'USE_PRIVILEGE', indices: [5] });
+    const next = reducer(s, { type: 'USE_PRIVILEGE', index: 5 });
     expect(next.players[0].privileges).toBe(0);
     expect(next.players[0].tokens.green).toBe(1);
     expect(next.privileges).toBe(3);
@@ -224,7 +225,7 @@ describe('USE_PRIVILEGE', () => {
       players: [makePlayer({ privileges: 1 }), makePlayer()],
     };
 
-    const next = reducer(s, { type: 'USE_PRIVILEGE', indices: [5] });
+    const next = reducer(s, { type: 'USE_PRIVILEGE', index: 5 });
     expect(next.players[0].privileges).toBe(0);
     expect(next.phase).toBe('mandatory');
   });
@@ -239,7 +240,7 @@ describe('USE_PRIVILEGE', () => {
       players: [makePlayer({ privileges: 2 }), makePlayer()],
     };
 
-    const next = reducer(s, { type: 'USE_PRIVILEGE', indices: [5] });
+    const next = reducer(s, { type: 'USE_PRIVILEGE', index: 5 });
     expect(next.players[0].privileges).toBe(1);
     expect(next.players[0].tokens.green).toBe(1);
     expect(next.phase).toBe('optional_privilege');
@@ -259,7 +260,7 @@ describe('DISCARD_TOKENS', () => {
       ],
     };
 
-    const next = reducer(s, { type: 'DISCARD_TOKENS', tokens: { black: 1 } });
+    const next = reducer(s, { type: 'DISCARD_TOKENS', color: 'black' });
     expect(next.players[0].tokens.black).toBe(10);
     expect(next.currentPlayer).toBe(1);
   });
@@ -271,7 +272,7 @@ describe('DISCARD_TOKENS', () => {
       players: [makePlayer({ tokens: { ...emptyPool(), black: 12 } }), makePlayer()],
     };
 
-    const next = reducer(s, { type: 'DISCARD_TOKENS', tokens: { black: 1 } });
+    const next = reducer(s, { type: 'DISCARD_TOKENS', color: 'black' });
     expect(next.players[0].tokens.black).toBe(11);
     expect(next.phase).toBe('discard');
     expect(next.currentPlayer).toBe(0);
@@ -525,7 +526,10 @@ describe('wild ability', () => {
     expect(resolved.pendingAbility).toBeNull();
   });
 
-  it('skips wild ability when the player has no eligible target cards', () => {
+  // Rulebook: "You cannot purchase a Jewel Card with the wild ability unless you
+  // have a Jewel Card that has a color (null is not a color)." The purchase is
+  // refused outright — it is not allowed through with the ability skipped.
+  it('rejects the purchase when the player owns no colored card', () => {
     const wildCard = makeCard({ id: 112, ability: 'wild', color: null, cost: {} });
     const state = createInitialState(false);
     const s: GameState = {
@@ -535,13 +539,15 @@ describe('wild ability', () => {
       players: [makePlayer({ purchasedCards: [] }), makePlayer()],
     };
 
+    expect(legalMoves(s).some(
+      move => move.type === 'PURCHASE_CARD' && move.cardId === 112,
+    )).toBe(false);
+
     const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 112, goldUsage: {} });
-    expect(next.players[0].purchasedCards.some(c => c.id === 112)).toBe(true);
-    expect(next.phase).toBe('mandatory');
-    expect(next.pendingAbility).toBeNull();
+    expect(next).toBe(s);
   });
 
-  it('skips wild ability when all owned cards are wild or uncolored', () => {
+  it('rejects the purchase when all owned cards are wild or uncolored', () => {
     const wildCard1 = makeCard({ id: 113, ability: 'wild', color: null });
     const wildCard2 = makeCard({ id: 114, ability: 'wild', color: null });
     const wildCard3 = makeCard({ id: 200, ability: 'wild', color: null });
@@ -564,9 +570,15 @@ describe('wild ability', () => {
       ],
     };
 
+    // An already-assigned wild card does not itself count as "a Jewel Card that
+    // has a color": the engine reads intrinsic `color`, not `assignedColor`,
+    // consistently in legalMoves, the purchase guard and the assignment guard.
+    expect(legalMoves(s).some(
+      move => move.type === 'PURCHASE_CARD' && move.cardId === 200,
+    )).toBe(false);
+
     const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 200, goldUsage: {} });
-    expect(next.players[0].purchasedCards.some(c => c.id === 200)).toBe(true);
-    expect(next.phase).toBe('mandatory');
+    expect(next).toBe(s);
   });
 
   it('ASSIGN_WILD_COLOR is rejected if the player does not own a card with that color', () => {
@@ -660,6 +672,48 @@ describe('Turn Ability Chaining', () => {
     expect(next3.repeatTurn).toBe(false);
     expect(next3.currentPlayer).toBe(0);
     expect(next3.phase).toBe('mandatory');
+  });
+
+  // Rulebook: "If more than one Turn ability is played in a single turn, ignore
+  // this effect. Turn effects do not stack." The cap is one extra turn, not none
+  // — so two Turn abilities in the same turn grant exactly one repeat, which is
+  // what a boolean repeatTurn flag gives for free. This test pins that down,
+  // because the reachable path is easy to break: a Turn jewel card that crosses
+  // a crown milestone leads straight into a royal card that also has Turn.
+  it('caps a turn at one extra turn when two Turn abilities resolve in it', () => {
+    // Arrange — a 3-crown Turn jewel card, and only the Turn royal available.
+    const turnJewel = makeCard({ id: 133, ability: 'Turn', crowns: 3, cost: {} });
+    const state = createInitialState(false);
+    const royalTurnCards = state.royalDeck.filter(card => card.ability === 'Turn');
+    expect(royalTurnCards).toHaveLength(1);
+
+    const s: GameState = {
+      ...state,
+      phase: 'mandatory',
+      pyramid: { ...state.pyramid, level1: [turnJewel, ...state.pyramid.level1.slice(0, 4)] },
+      royalDeck: royalTurnCards,
+      players: [makePlayer(), makePlayer()],
+    };
+
+    // Act — buying the card plays one Turn and triggers the crown milestone.
+    const afterPurchase = reducer(s, { type: 'PURCHASE_CARD', cardId: 133, goldUsage: {} });
+    expect(afterPurchase.phase).toBe('choose_royal');
+    expect(afterPurchase.repeatTurn).toBe(true);
+
+    // The royal card plays a second Turn in the same turn.
+    const afterRoyal = reducer(afterPurchase, {
+      type: 'CHOOSE_ROYAL_CARD', cardId: royalTurnCards[0].id,
+    });
+
+    // Assert — exactly one extra turn: the same player acts again, and the flag
+    // has been consumed rather than left set for a further repeat.
+    expect(afterRoyal.currentPlayer).toBe(0);
+    expect(afterRoyal.repeatTurn).toBe(false);
+
+    // And that extra turn is a normal one: ending it passes play to the opponent.
+    const deadlocked = deadlockedMandatoryState(afterRoyal, { phase: 'mandatory' });
+    const afterExtraTurn = reducer(deadlocked, { type: 'PASS_MANDATORY' });
+    expect(afterExtraTurn.currentPlayer).toBe(1);
   });
 });
 
@@ -907,7 +961,7 @@ describe('Conservation Invariants', () => {
       ...state, board, phase: 'optional_privilege', privileges: 2,
       players: [makePlayer({ privileges: 1 }), makePlayer()],
     };
-    assertConserved(s, reducer(s, { type: 'USE_PRIVILEGE', indices: [5] }));
+    assertConserved(s, reducer(s, { type: 'USE_PRIVILEGE', index: 5 }));
   });
 
   it('REPLENISH_BOARD conserves tokens', () => {
@@ -929,7 +983,7 @@ describe('Conservation Invariants', () => {
       ...state, phase: 'discard',
       players: [makePlayer({ tokens: { ...emptyPool(), black: 11 } }), makePlayer()],
     };
-    assertConserved(s, reducer(s, { type: 'DISCARD_TOKENS', tokens: { black: 1 } }));
+    assertConserved(s, reducer(s, { type: 'DISCARD_TOKENS', color: 'black' }));
   });
 
   it('TAKE_TOKEN_FROM_BOARD (Token ability) conserves tokens', () => {
@@ -1046,7 +1100,7 @@ describe('Invalid phase rejection', () => {
       ...state, board, phase: 'mandatory',
       players: [makePlayer({ privileges: 1 }), makePlayer()],
     };
-    const next = reducer(s, { type: 'USE_PRIVILEGE', indices: [5] });
+    const next = reducer(s, { type: 'USE_PRIVILEGE', index: 5 });
     expect(next).toBe(s);
   });
 });
@@ -1062,7 +1116,7 @@ describe('USE_PRIVILEGE validation', () => {
       ...state, board, phase: 'optional_privilege', privileges: 3,
       players: [makePlayer({ privileges: 0 }), makePlayer()],
     };
-    const next = reducer(s, { type: 'USE_PRIVILEGE', indices: [5] });
+    const next = reducer(s, { type: 'USE_PRIVILEGE', index: 5 });
     expect(next).toBe(s);
   });
 
@@ -1074,7 +1128,7 @@ describe('USE_PRIVILEGE validation', () => {
       ...state, board, phase: 'optional_privilege', privileges: 2,
       players: [makePlayer({ privileges: 1 }), makePlayer()],
     };
-    const next = reducer(s, { type: 'USE_PRIVILEGE', indices: [5] });
+    const next = reducer(s, { type: 'USE_PRIVILEGE', index: 5 });
     expect(next).toBe(s);
   });
 });
@@ -1340,14 +1394,12 @@ describe('TAKE_TOKENS privilege penalty cap', () => {
 
 describe('legalMoves', () => {
   it('returns empty array during game_over phase', () => {
-    const { legalMoves } = require('../legalMoves');
     const state = createInitialState(false);
     const s: GameState = { ...state, phase: 'game_over', winner: 0, winCondition: 'prestige' };
     expect(legalMoves(s)).toHaveLength(0);
   });
 
   it('always includes END_OPTIONAL_PHASE and SKIP_TO_MANDATORY in optional_privilege phase', () => {
-    const { legalMoves } = require('../legalMoves');
     const state = createInitialState(false);
     const s: GameState = { ...state, phase: 'optional_privilege' };
     const moves = legalMoves(s);
@@ -1356,7 +1408,6 @@ describe('legalMoves', () => {
   });
 
   it('includes REPLENISH_BOARD in optional_replenish phase only when bag is non-empty', () => {
-    const { legalMoves } = require('../legalMoves');
     const state = createInitialState(false);
 
     const withTokens: GameState = { ...state, phase: 'optional_replenish', bag: { ...emptyPool(), black: 1 } };
@@ -1367,7 +1418,6 @@ describe('legalMoves', () => {
   });
 
   it('forces REPLENISH_BOARD in mandatory phase when no other mandatory moves exist and bag is non-empty', () => {
-    const { legalMoves } = require('../legalMoves');
     const state = createInitialState(false);
     const s: GameState = {
       ...state,
@@ -1384,7 +1434,6 @@ describe('legalMoves', () => {
   });
 
   it('returns only PASS_MANDATORY when bag is also empty and no mandatory moves exist', () => {
-    const { legalMoves } = require('../legalMoves');
     const state = createInitialState(false);
     const s: GameState = {
       ...state,
@@ -1406,11 +1455,9 @@ describe('legalMoves', () => {
 describe('PASS_MANDATORY', () => {
   it('advances the turn when the player is within the token limit', () => {
     const state = createInitialState(false);
-    const s: GameState = {
-      ...state,
-      phase: 'mandatory',
+    const s = deadlockedMandatoryState(state, {
       players: [makePlayer({ tokens: { ...emptyPool(), black: 5 } }), makePlayer()],
-    };
+    });
 
     const next = reducer(s, { type: 'PASS_MANDATORY' });
     expect(next.phase).toBe('mandatory');
@@ -1419,14 +1466,12 @@ describe('PASS_MANDATORY', () => {
 
   it('triggers discard phase when the player holds more than 10 tokens', () => {
     const state = createInitialState(false);
-    const s: GameState = {
-      ...state,
-      phase: 'mandatory',
+    const s = deadlockedMandatoryState(state, {
       players: [
         makePlayer({ tokens: { ...emptyPool(), white: 2, blue: 2, green: 4, red: 4 } }),
         makePlayer(),
       ],
-    };
+    });
 
     const next = reducer(s, { type: 'PASS_MANDATORY' });
     expect(next.phase).toBe('discard');
@@ -1439,6 +1484,38 @@ describe('PASS_MANDATORY', () => {
     const next = reducer(s, { type: 'PASS_MANDATORY' });
     expect(next).toBe(s);
   });
+
+  // Passing is a deadlock escape hatch, not a way to decline the mandatory
+  // action the rulebook requires.
+  it('is rejected while a mandatory action is still available', () => {
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      phase: 'mandatory',
+      players: [makePlayer(), makePlayer()],
+    };
+
+    // The opening board is full of tokens, so TAKE_TOKENS moves exist.
+    expect(legalMoves(s).some(move => move.type === 'TAKE_TOKENS')).toBe(true);
+
+    const next = reducer(s, { type: 'PASS_MANDATORY' });
+    expect(next).toBe(s);
+  });
+
+  it('is rejected when a replenish is available instead', () => {
+    const state = createInitialState(false);
+    const s = deadlockedMandatoryState(state, {
+      bag: { ...emptyPool(), black: 3 },
+      players: [makePlayer(), makePlayer()],
+    });
+
+    // The rulebook forces a replenish before choosing a mandatory action when
+    // none is otherwise possible, so passing is not yet allowed.
+    expect(legalMoves(s)).toEqual([{ type: 'REPLENISH_BOARD' }]);
+
+    const next = reducer(s, { type: 'PASS_MANDATORY' });
+    expect(next).toBe(s);
+  });
 });
 
 // ─── Turn Transition Phase Selection ─────────────────────────────────────────
@@ -1446,33 +1523,35 @@ describe('PASS_MANDATORY', () => {
 describe('Turn transition phase selection', () => {
   it('starts at optional_privilege when the next player has privileges', () => {
     const state = createInitialState(false);
-    const s: GameState = {
-      ...state, phase: 'mandatory',
+    const s = deadlockedMandatoryState(state, {
       players: [makePlayer(), makePlayer({ privileges: 1 })],
-    };
+    });
     const next = reducer(s, { type: 'PASS_MANDATORY' });
     expect(next.currentPlayer).toBe(1);
     expect(next.phase).toBe('optional_privilege');
   });
 
   it('starts at optional_replenish when the next player has no privileges and bag is non-empty', () => {
+    // A non-empty bag means PASS_MANDATORY is not available (the rulebook forces
+    // a replenish first), so the turn is ended by taking the single board token.
     const state = createInitialState(false);
-    const s: GameState = {
-      ...state, phase: 'mandatory',
+    const board = new Array(25).fill(null);
+    board[0] = 'black';
+    const s = deadlockedMandatoryState(state, {
+      board,
       bag: { ...emptyPool(), black: 3 },
       players: [makePlayer(), makePlayer()],
-    };
-    const next = reducer(s, { type: 'PASS_MANDATORY' });
+    });
+    const next = reducer(s, { type: 'TAKE_TOKENS', indices: [0] });
     expect(next.currentPlayer).toBe(1);
     expect(next.phase).toBe('optional_replenish');
   });
 
   it('starts at mandatory when the next player has no privileges and bag is empty', () => {
     const state = createInitialState(false);
-    const s: GameState = {
-      ...state, phase: 'mandatory',
+    const s = deadlockedMandatoryState(state, {
       players: [makePlayer(), makePlayer()],
-    };
+    });
     const next = reducer(s, { type: 'PASS_MANDATORY' });
     expect(next.currentPlayer).toBe(1);
     expect(next.phase).toBe('mandatory');

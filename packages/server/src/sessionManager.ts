@@ -1,7 +1,8 @@
 import WebSocket from 'ws';
-import { createInitialState, reducer } from '@splendor-duel/game-engine';
+import { createInitialState, reducer, validateAction } from '@splendor-duel/game-engine';
 import type { Action, PlayerId } from '@splendor-duel/game-engine';
-import type { ClientGameState, ServerMessage, SessionInfo } from '@splendor-duel/protocol';
+import { toClientState } from '@splendor-duel/protocol';
+import type { ServerMessage, SessionInfo } from '@splendor-duel/protocol';
 
 // ─── Internal session shape ───────────────────────────────────────────────────
 
@@ -39,24 +40,6 @@ function generateSessionId(): string {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/**
- * Returns a sanitized view of the game state for the given player.
- * The requesting player sees their own reserved cards in full.
- * The opponent's reserved cards are hidden: reservedCards is set to [] and
- * reservedCardCount carries the true count.
- */
-function sanitizeStateFor(
-  state: ReturnType<typeof createInitialState>,
-  viewerId: PlayerId
-): ClientGameState {
-  const players = state.players.map((p, i) => ({
-    ...p,
-    reservedCards: i === viewerId ? p.reservedCards : [],
-    reservedCardCount: p.reservedCards.length,
-  })) as [ClientGameState['players'][0], ClientGameState['players'][1]];
-  return { ...state, players };
-}
-
 function send(ws: WebSocket, msg: ServerMessage): void {
   if (ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify(msg));
@@ -80,7 +63,7 @@ function broadcastState(session: Session, kind: 'STATE_UPDATE' = 'STATE_UPDATE')
     if (playerWs) {
       send(playerWs, {
         type: kind,
-        state: sanitizeStateFor(session.state, pid),
+        state: toClientState(session.state, pid),
         canUndo: canUndoFor(session, pid),
       });
     }
@@ -102,13 +85,12 @@ function sanitizeName(name: string): string | null {
  * Creates a new session with player 0 already connected.
  * Returns the generated session ID.
  */
-export function createSession(playerName: string, ws: WebSocket): string | null {
-  const sanitized = sanitizeName(playerName);
-  if (!sanitized) {
+export function createSession(requestedName: string, ws: WebSocket): string | null {
+  const playerName = sanitizeName(requestedName);
+  if (!playerName) {
     send(ws, { type: 'ERROR', message: 'Invalid player name' });
     return null;
   }
-  playerName = sanitized;
   const id = generateSessionId();
   const initial = createInitialState(true);
   const session: Session = {
@@ -133,15 +115,14 @@ export function createSession(playerName: string, ws: WebSocket): string | null 
  */
 export function joinSession(
   sessionId: string,
-  playerName: string,
+  requestedName: string,
   ws: WebSocket
 ): PlayerId | null {
-  const sanitized = sanitizeName(playerName);
-  if (!sanitized) {
+  const playerName = sanitizeName(requestedName);
+  if (!playerName) {
     send(ws, { type: 'ERROR', message: 'Invalid player name' });
     return null;
   }
-  playerName = sanitized;
   const session = sessions.get(sessionId);
   if (!session) {
     send(ws, { type: 'ERROR', message: 'Session not found' });
@@ -161,7 +142,7 @@ export function joinSession(
     type: 'SESSION_JOINED',
     sessionId,
     playerId: 1,
-    state: sanitizeStateFor(session.state, 1),
+    state: toClientState(session.state, 1),
     canUndo: canUndoFor(session, 1),
   });
 
@@ -170,7 +151,7 @@ export function joinSession(
   if (p0) {
     send(p0, {
       type: 'GAME_STARTED',
-      state: sanitizeStateFor(session.state, 0),
+      state: toClientState(session.state, 0),
       opponentName: playerName,
       canUndo: canUndoFor(session, 0),
     });
@@ -207,11 +188,37 @@ export function dispatchAction(
     return;
   }
 
+  // Shape-check the payload before the rules engine sees it. The action came
+  // off the wire, so it is whatever the peer sent; validating here lets us tell
+  // the client *why* it was rejected instead of a bare "invalid action".
+  const validated = validateAction(action);
+  if (!validated.valid) {
+    send(ws, { type: 'ERROR', message: `Malformed action: ${validated.error.reason}` });
+    return;
+  }
+
   const previousPlayer = session.state.currentPlayer;
-  const nextState = reducer(session.state, action);
+
+  // The reducer throws on a violated engine invariant (see the crown-milestone
+  // and royal-card guards). Without this catch the throw would escape the
+  // WebSocket message handler and take down the process — and every other live
+  // session with it.
+  let nextState: Session['state'];
+  try {
+    nextState = reducer(session.state, validated.action);
+  } catch (err) {
+    console.error(
+      `Engine error (session=${session.id}, player=${playerId}, action=${validated.action.type}):`,
+      err,
+    );
+    send(ws, { type: 'ERROR', message: 'Internal engine error; the game state was not changed' });
+    return;
+  }
+
   if (nextState === session.state) {
-    // Reducer returns the same reference for illegal moves
-    send(ws, { type: 'ERROR', message: 'Invalid action' });
+    // Reducer returns the same reference for a move that is well-formed but
+    // not legal in the current phase.
+    send(ws, { type: 'ERROR', message: 'Illegal move in the current phase' });
     return;
   }
 

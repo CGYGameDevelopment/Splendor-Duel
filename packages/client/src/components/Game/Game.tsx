@@ -153,7 +153,7 @@ export function Game({ session }: GameProps) {
 
   const onConfirmTake = () => {
     if (tokenSelection.action) {
-      dispatch(tokenSelection.action as Action);
+      dispatch(tokenSelection.action);
       tokenSelection.clear();
     }
   };

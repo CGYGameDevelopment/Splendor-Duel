@@ -2,6 +2,7 @@ import WebSocket from 'ws';
 import * as readline from 'readline';
 import { legalMoves, adjacentCells } from '@splendor-duel/game-engine';
 import type { Action, PlayerId, Card } from '@splendor-duel/game-engine';
+import { decodeWireMessage } from '@splendor-duel/protocol';
 import type { ClientMessage, ServerMessage, ClientGameState } from '@splendor-duel/protocol';
 
 // ─── Session state ────────────────────────────────────────────────────────────
@@ -98,7 +99,7 @@ function displayBoard(board: ClientGameState['board']): void {
     const cells = [];
     for (let col = 0; col < 5; col++) {
       const idx = row * 5 + col;
-      const token = board[idx] ? abbr(board[idx]!) : '.';
+      const token = board[idx] ? abbr(board[idx]) : '.';
       cells.push(`${String(idx).padStart(2)}:${token.padEnd(3)}`);
     }
     console.log('  ' + cells.join('  '));
@@ -118,7 +119,7 @@ function displayPyramid(state: ClientGameState): void {
   for (const level of [3, 2, 1] as const) {
     const key = `level${level}` as 'level1' | 'level2' | 'level3';
     const cards = state.pyramid[key];
-    const deckCount = state.decks[key].length;
+    const deckCount = state.deckCounts[key];
     console.log(`  L${level}  (deck: ${deckCount})`);
     if (cards.length === 0) {
       console.log('    (empty)');
@@ -143,8 +144,8 @@ function displayPlayers(state: ClientGameState): void {
 
     console.log(`\n${name} — ⭐${player.prestige} | 👑${player.crowns} | 📜${player.privileges}${turnMark}`);
 
-    const total = totalTokens(player.tokens as { [key: string]: number });
-    console.log(`  Tokens (${total}): ${formatPool(player.tokens as { [key: string]: number })}`);
+    const total = totalTokens(player.tokens);
+    console.log(`  Tokens (${total}): ${formatPool(player.tokens)}`);
 
     const gems: { [key: string]: number } = {};
     for (const card of player.purchasedCards) {
@@ -178,7 +179,7 @@ function displayState(state: ClientGameState): void {
   displayPyramid(state);
   displayBoard(state.board);
   displayPlayers(state);
-  const bagTotal = totalTokens(state.bag as { [key: string]: number });
+  const bagTotal = totalTokens(state.bag);
   const abil = state.pendingAbility ? ` (pending ability: ${state.pendingAbility})` : '';
   console.log(`\nTable 📜: ${state.privileges} | Bag: ${bagTotal} tokens`);
   console.log(`Phase: ${state.phase}${abil}`);
@@ -203,10 +204,8 @@ function describeMove(action: Action, state: ClientGameState): string {
     }
 
     case 'USE_PRIVILEGE': {
-      const tokens = action.indices
-        .map(i => { const cell = state.board[i]; return cell ? `${abbr(cell)}[${i}]` : '?'; })
-        .join(' ');
-      return `Use privilege(s): take cells [${action.indices.join(',')}] → ${tokens}`;
+      const cell = state.board[action.index];
+      return `Use privilege: take ${cell ? abbr(cell) : '?'} from cell [${action.index}]`;
     }
 
     case 'REPLENISH_BOARD':
@@ -215,7 +214,7 @@ function describeMove(action: Action, state: ClientGameState): string {
     case 'PURCHASE_CARD': {
       const card = findCard(state, action.cardId);
       const goldStr = Object.values(action.goldUsage).some(v => v > 0)
-        ? ` (gold covers: ${formatPool(action.goldUsage as { [key: string]: number })})`
+        ? ` (gold covers: ${formatPool(action.goldUsage)})`
         : '';
       const info = card ? `${describeCard(card)} cost:${formatCost(card.cost)}` : `card #${action.cardId}`;
       return `Purchase ${info}${goldStr}`;
@@ -235,7 +234,7 @@ function describeMove(action: Action, state: ClientGameState): string {
     }
 
     case 'DISCARD_TOKENS':
-      return `Discard: ${formatPool(action.tokens as { [key: string]: number })}`;
+      return `Discard: 1 ${abbr(action.color)}`;
 
     case 'ASSIGN_WILD_COLOR': {
       const wild = findCard(state, action.wildCardId);
@@ -441,26 +440,36 @@ async function main(): Promise<void> {
 
   const ws = new WebSocket(url);
 
-  ws.on('open', async () => {
-    console.log(`Connected.\n`);
-    const choice = await question('[c]reate new session or [j]oin existing? ');
-    if (choice.trim().toLowerCase().startsWith('j')) {
-      const sid = (await question('Session ID: ')).trim();
-      send(ws, { type: 'JOIN_SESSION', sessionId: sid, playerName: myName });
-    } else {
-      send(ws, { type: 'CREATE_SESSION', playerName: myName });
-    }
+  // The `ws` event emitter ignores a returned promise, so an async listener that
+  // rejects becomes an unhandled rejection and takes the process down. Each
+  // handler below runs its async work explicitly and reports its own failures.
+  ws.on('open', () => {
+    void (async () => {
+      console.log(`Connected.\n`);
+      const choice = await question('[c]reate new session or [j]oin existing? ');
+      if (choice.trim().toLowerCase().startsWith('j')) {
+        const sid = (await question('Session ID: ')).trim();
+        send(ws, { type: 'JOIN_SESSION', sessionId: sid, playerName: myName });
+      } else {
+        send(ws, { type: 'CREATE_SESSION', playerName: myName });
+      }
+    })().catch((err: unknown) => {
+      console.error('Failed to start the session:', err);
+      ws.close();
+    });
   });
 
-  ws.on('message', async (data: WebSocket.RawData) => {
+  ws.on('message', (data: WebSocket.RawData) => {
     let msg: ServerMessage;
     try {
-      msg = JSON.parse(data.toString()) as ServerMessage;
+      msg = JSON.parse(decodeWireMessage(data)) as ServerMessage;
     } catch {
       console.error('Could not parse server message.');
       return;
     }
-    await handleMessage(msg, ws);
+    void handleMessage(msg, ws).catch((err: unknown) => {
+      console.error('Failed to handle server message:', err);
+    });
   });
 
   ws.on('close', () => {

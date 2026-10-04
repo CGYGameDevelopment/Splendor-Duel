@@ -74,4 +74,35 @@ describe('createInitialState', () => {
     const state = createInitialState(false);
     expect(state.repeatTurn).toBe(false);
   });
+
+  it('produces an identical state for the same seed', () => {
+    // Arrange / Act
+    const first = createInitialState(true, 123456);
+    const second = createInitialState(true, 123456);
+
+    // Assert — a full structural comparison, so any future field that is
+    // derived from randomness is covered without updating this test.
+    expect(first).toEqual(second);
+  });
+
+  it('produces different layouts for different seeds', () => {
+    // Arrange / Act
+    const first = createInitialState(true, 1);
+    const second = createInitialState(true, 2);
+
+    // Assert
+    expect(first.board).not.toEqual(second.board);
+    expect(first.pyramid.level1.map(card => card.id))
+      .not.toEqual(second.pyramid.level1.map(card => card.id));
+  });
+
+  it('records the advanced seed in state so later draws are reproducible', () => {
+    // Arrange / Act
+    const state = createInitialState(true, 777);
+
+    // Assert — the seed has advanced past the setup shuffles, so it is not the
+    // caller's seed, but it is deterministic for that seed.
+    expect(state.rngSeed).toBe(createInitialState(true, 777).rngSeed);
+    expect(state.rngSeed).not.toBe(createInitialState(true, 778).rngSeed);
+  });
 });

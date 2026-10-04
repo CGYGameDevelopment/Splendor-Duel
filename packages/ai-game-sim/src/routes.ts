@@ -4,8 +4,11 @@ import {
   createInitialState,
   reducer,
   legalMoves,
+  validateAction,
+  randomSeed,
 } from '@splendor-duel/game-engine';
-import type { Action, GameState } from '@splendor-duel/game-engine';
+import type { Action, GameState, Seed } from '@splendor-duel/game-engine';
+import { withoutHiddenEngineState } from '@splendor-duel/protocol';
 import * as store from './simStore';
 
 const router = Router();
@@ -24,20 +27,18 @@ const MAX_FORCED_MOVES = 64;
  * card arrays were 71.5% of every response body (8,819 of 12,332 bytes), paid
  * on every decision of every game.  Compact responses carry deckCounts instead.
  *
+ * The transformation is shared with the multiplayer server via the protocol
+ * package, which owns the rule about which engine fields are hidden -- so the
+ * PRNG seed is dropped here too.  Unlike the server, the sim does not hide the
+ * players' reserved cards: self-play controls both seats and is omniscient by
+ * design.
+ *
  * A compact state is for observation only -- it can no longer be fed back into
  * the engine, so /legal-moves-from-state and any caller that round-trips a
  * state must keep using the full form.
  */
 function compactState(state: GameState) {
-  const { decks, ...rest } = state;
-  return {
-    ...rest,
-    deckCounts: {
-      level1: decks.level1.length,
-      level2: decks.level2.length,
-      level3: decks.level3.length,
-    },
-  };
+  return withoutHiddenEngineState(state);
 }
 
 interface Advanced {
@@ -104,39 +105,63 @@ function withoutStore<T extends { _store: GameState }>(result: T) {
   return rest;
 }
 
-function newGame(secondPlayerGetsPrivilege: boolean, autoAdvanceEnabled: boolean) {
-  return autoAdvance(createInitialState(secondPlayerGetsPrivilege), autoAdvanceEnabled);
+/**
+ * Starts a game, optionally from a caller-supplied seed.
+ *
+ * The seed is echoed back so a training run can record it and replay the exact
+ * same game later -- without it, a run that produced an interesting trajectory
+ * could never be reproduced.  Omitting it draws a fresh unpredictable seed.
+ */
+function newGame(
+  secondPlayerGetsPrivilege: boolean,
+  autoAdvanceEnabled: boolean,
+  seed?: Seed,
+): Advanced & { seed: Seed } {
+  // Note this is the seed *handed to* createInitialState, not state.rngSeed,
+  // which has already advanced past the setup shuffles and would not reproduce
+  // the deck order or board layout.
+  const gameSeed = seed ?? randomSeed();
+  const initial = createInitialState(secondPlayerGetsPrivilege, gameSeed);
+  return { ...autoAdvance(initial, autoAdvanceEnabled), seed: gameSeed };
 }
 
 // POST /reset
-// Body: { sessionId?: string, secondPlayerGetsPrivilege?: boolean, autoAdvance?: boolean }
-// Returns: { sessionId, state, legalMoves }
+// Body: { sessionId?: string, seed?: number, secondPlayerGetsPrivilege?: boolean,
+//         autoAdvance?: boolean }
+// Returns: { sessionId, seed, state, legalMoves }
 router.post('/reset', (req, res) => {
   const sessionId: string = req.body.sessionId ?? uuidv4();
   const secondPlayerGetsPrivilege: boolean =
     req.body.secondPlayerGetsPrivilege ?? true;
   const autoAdvanceEnabled: boolean = req.body.autoAdvance ?? true;
   const compact: boolean = req.body.compact ?? false;
+  const seed: Seed | undefined =
+    typeof req.body.seed === 'number' ? req.body.seed : undefined;
 
-  const advanced = newGame(secondPlayerGetsPrivilege, autoAdvanceEnabled);
+  const advanced = newGame(secondPlayerGetsPrivilege, autoAdvanceEnabled, seed);
   store.set(sessionId, advanced.state);
 
   res.json({
     sessionId,
+    seed: advanced.seed,
     state: compact ? compactState(advanced.state) : advanced.state,
     legalMoves: advanced.moves,
   });
 });
 
 // POST /reset-batch
-// Body: { sessionIds?: string[], count?: number, secondPlayerGetsPrivilege?: boolean,
-//         autoAdvance?: boolean }
-// Returns: { results: [{ sessionId, state, legalMoves }] }
+// Body: { sessionIds?: string[], count?: number, seeds?: number[],
+//         secondPlayerGetsPrivilege?: boolean, autoAdvance?: boolean }
+// Returns: { results: [{ sessionId, seed, state, legalMoves }] }
+//
+// `seeds` is positional against the resolved session ids; a missing or
+// non-numeric entry draws a fresh seed.  Every result echoes the seed its game
+// was started from, so a run can be replayed exactly.
 //
 // One round trip instead of N.  The training loop resets tens of games at a
 // time and per-action HTTP latency, not compute, is the throughput ceiling.
 router.post('/reset-batch', (req, res) => {
-  const { sessionIds, count } = req.body;
+  const { sessionIds, count, seeds } = req.body;
   const secondPlayerGetsPrivilege: boolean =
     req.body.secondPlayerGetsPrivilege ?? true;
   const autoAdvanceEnabled: boolean = req.body.autoAdvance ?? true;
@@ -152,11 +177,14 @@ router.post('/reset-batch', (req, res) => {
     return;
   }
 
-  const results = ids.map(sessionId => {
-    const advanced = newGame(secondPlayerGetsPrivilege, autoAdvanceEnabled);
+  const results = ids.map((sessionId, position) => {
+    const seed: Seed | undefined =
+      Array.isArray(seeds) && typeof seeds[position] === 'number' ? seeds[position] : undefined;
+    const advanced = newGame(secondPlayerGetsPrivilege, autoAdvanceEnabled, seed);
     store.set(sessionId, advanced.state);
     return {
       sessionId,
+      seed: advanced.seed,
       state: compact ? compactState(advanced.state) : advanced.state,
       legalMoves: advanced.moves,
     };
@@ -178,6 +206,16 @@ router.post('/step', (req, res) => {
     return;
   }
 
+  // A malformed action would otherwise be a silent no-op: the reducer returns
+  // the same state and the caller sees a successful step that changed nothing.
+  // A training loop cannot distinguish that from a legitimately inert move, so
+  // reject it loudly instead.
+  const validated = validateAction(action);
+  if (!validated.valid) {
+    res.status(400).json({ error: `Malformed action: ${validated.error.reason}` });
+    return;
+  }
+
   const state = store.get(sessionId);
 
   if (!state) {
@@ -185,7 +223,7 @@ router.post('/step', (req, res) => {
     return;
   }
 
-  const result = stepResult(state, action, autoAdvanceEnabled, compact);
+  const result = stepResult(state, validated.action, autoAdvanceEnabled, compact);
   store.set(sessionId, result._store);
 
   res.json(withoutStore(result));
@@ -213,12 +251,16 @@ router.post('/step-batch', (req, res) => {
     if (!sessionId || !action) {
       return { sessionId, error: 'Each step needs a sessionId and an action' };
     }
+    const validated = validateAction(action);
+    if (!validated.valid) {
+      return { sessionId, error: `Malformed action: ${validated.error.reason}` };
+    }
     const state = store.get(sessionId);
     if (!state) {
       return { sessionId, error: `No session: ${sessionId}` };
     }
     try {
-      const result = stepResult(state, action, autoAdvanceEnabled, compact);
+      const result = stepResult(state, validated.action, autoAdvanceEnabled, compact);
       store.set(sessionId, result._store);
       return { sessionId, ...withoutStore(result) };
     } catch (err) {

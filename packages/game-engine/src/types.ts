@@ -1,3 +1,5 @@
+import type { Seed } from './rng';
+
 // ─── Tokens ──────────────────────────────────────────────────────────────────
 
 export type GemColor = 'white' | 'blue' | 'green' | 'red' | 'black';
@@ -95,6 +97,10 @@ export interface GameState {
   lastPurchasedCard: Card | null;
   winner: PlayerId | null;
   winCondition: WinCondition | null;
+  // PRNG state for every random draw the engine makes (deck shuffles, bag
+  // draws). Carried in state so the reducer stays pure and a game replays
+  // identically from (initial seed, action sequence). See rng.ts.
+  rngSeed: Seed;
 }
 
 // ─── Actions ─────────────────────────────────────────────────────────────────
@@ -102,7 +108,9 @@ export interface GameState {
 export type Action =
   | { type: 'END_OPTIONAL_PHASE' }                            // advance one optional phase
   | { type: 'SKIP_TO_MANDATORY' }                             // skip all remaining optional phases
-  | { type: 'USE_PRIVILEGE'; indices: number[] }              // board cell indices (1 per privilege, non-gold)
+  | { type: 'USE_PRIVILEGE'; index: number }                   // board cell holding the non-gold token to take
+                                                              // One privilege per action: to spend several, dispatch
+                                                              // this action once per privilege.
   | { type: 'REPLENISH_BOARD' }
   | { type: 'TAKE_TOKENS'; indices: number[] }                // board cell indices (1–3, must be adjacent line)
   | { type: 'RESERVE_CARD_FROM_PYRAMID'; cardId: number }
@@ -112,5 +120,6 @@ export type Action =
   | { type: 'TAKE_TOKEN_FROM_BOARD'; index: number }          // Token ability resolution
   | { type: 'TAKE_TOKEN_FROM_OPPONENT'; color: TokenColor }   // Take ability resolution
   | { type: 'ASSIGN_WILD_COLOR'; wildCardId: number; color: GemColor }
-  | { type: 'DISCARD_TOKENS'; tokens: Partial<Record<TokenColor, number>> }
+  | { type: 'DISCARD_TOKENS'; color: TokenColor }              // discard exactly 1 token of this color
+                                                              // One token per action: dispatch repeatedly to discard several.
   | { type: 'PASS_MANDATORY' };                                              // no legal moves exist; end mandatory step

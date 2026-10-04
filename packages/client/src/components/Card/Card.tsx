@@ -30,7 +30,7 @@ export function Card({ card, size = 'md', canBuy, canReserve, onBuy, onReserve, 
 
   const cls = [
     styles.card,
-    styles[`size-${size}` as `size-${CardSize}`],
+    styles[`size-${size}`],
     onClick && styles.clickable,
     canBuy && canReserve ? styles.both : canBuy ? styles.affordable : canReserve ? styles.reservable : '',
   ].filter(Boolean).join(' ');
@@ -95,7 +95,7 @@ export function CardBack({ level, remaining, canReserve, onReserve, size = 'md' 
   const cls = [
     styles.card,
     styles.back,
-    styles[`size-${size}` as `size-${CardSize}`],
+    styles[`size-${size}`],
     canReserve && styles.reservable,
   ].filter(Boolean).join(' ');
 
@@ -118,7 +118,7 @@ export function EmptyCardSlot({ size = 'md' }: { size?: CardSize }) {
   const cls = [
     styles.card,
     styles.empty,
-    styles[`size-${size}` as `size-${CardSize}`],
+    styles[`size-${size}`],
   ].filter(Boolean).join(' ');
   return <div className={cls}>(empty)</div>;
 }

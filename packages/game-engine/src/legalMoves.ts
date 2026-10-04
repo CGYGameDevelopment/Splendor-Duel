@@ -2,9 +2,45 @@ import type { GameState, Action, TokenColor, GemColor, Card, TokenPool } from '.
 import { isValidTokenLine } from './board';
 import { netCost, canAfford, GEM_COLORS, MAX_RESERVED, totalTokens, MAX_TOKENS, MAX_TOKENS_IN_LINE, TOKEN_COLORS, CARD_LEVELS } from './helpers';
 
+// ─── Input ────────────────────────────────────────────────────────────────────
+
+/** Remaining undrawn cards per level. */
+export interface DeckSizes {
+  level1: number;
+  level2: number;
+  level3: number;
+}
+
+/**
+ * The information needed to enumerate legal moves.
+ *
+ * Deck *contents* are deliberately not part of it: whether a player may reserve
+ * from the top of a deck depends only on whether that deck is non-empty, never
+ * on which card is on top. Accepting either the engine's full `GameState` or a
+ * state carrying only `deckCounts` lets a client compute exactly the same move
+ * list from its sanitized view that the server computes from the real state —
+ * without the server having to reveal the draw order to do it.
+ *
+ * The PRNG seed is excluded for the same reason: move legality never depends on
+ * future random draws.
+ */
+export type LegalMovesState =
+  Omit<GameState, 'decks' | 'rngSeed'> &
+  ({ decks: GameState['decks'] } | { deckCounts: DeckSizes });
+
+/** Remaining cards per level, from whichever form the caller supplied. */
+function deckSizes(state: LegalMovesState): DeckSizes {
+  if ('deckCounts' in state) return state.deckCounts;
+  return {
+    level1: state.decks.level1.length,
+    level2: state.decks.level2.length,
+    level3: state.decks.level3.length,
+  };
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
-export function legalMoves(state: GameState): Action[] {
+export function legalMoves(state: LegalMovesState): Action[] {
   switch (state.phase) {
     case 'optional_privilege':   return optionalPrivilegeMoves(state);
     case 'optional_replenish':   return optionalReplenishMoves(state);
@@ -19,7 +55,7 @@ export function legalMoves(state: GameState): Action[] {
 
 // ─── Optional: Use Privilege ──────────────────────────────────────────────────
 
-function optionalPrivilegeMoves(state: GameState): Action[] {
+function optionalPrivilegeMoves(state: LegalMovesState): Action[] {
   const moves: Action[] = [{ type: 'END_OPTIONAL_PHASE' }, { type: 'SKIP_TO_MANDATORY' }];
   const player = state.players[state.currentPlayer];
   if (player.privileges === 0) return moves;
@@ -30,7 +66,7 @@ function optionalPrivilegeMoves(state: GameState): Action[] {
   if (availableIndices.length === 0) return moves;
 
   for (const index of availableIndices) {
-    moves.push({ type: 'USE_PRIVILEGE', indices: [index] });
+    moves.push({ type: 'USE_PRIVILEGE', index });
   }
 
   return moves;
@@ -38,7 +74,7 @@ function optionalPrivilegeMoves(state: GameState): Action[] {
 
 // ─── Optional: Replenish ──────────────────────────────────────────────────────
 
-function optionalReplenishMoves(state: GameState): Action[] {
+function optionalReplenishMoves(state: LegalMovesState): Action[] {
   const moves: Action[] = [{ type: 'END_OPTIONAL_PHASE' }, { type: 'SKIP_TO_MANDATORY' }];
   // Can only replenish if bag is non-empty
   if (Object.values(state.bag).some(count => count > 0)) {
@@ -49,7 +85,7 @@ function optionalReplenishMoves(state: GameState): Action[] {
 
 // ─── Mandatory ────────────────────────────────────────────────────────────────
 
-function mandatoryMoves(state: GameState): Action[] {
+function mandatoryMoves(state: LegalMovesState): Action[] {
   const moves: Action[] = [];
   moves.push(...takeTokenMoves(state));
   moves.push(...reserveMoves(state));
@@ -69,7 +105,7 @@ function mandatoryMoves(state: GameState): Action[] {
 }
 
 // Take up to 3 tokens in a line
-function takeTokenMoves(state: GameState): Action[] {
+function takeTokenMoves(state: LegalMovesState): Action[] {
   const moves: Action[] = [];
   const board = state.board;
 
@@ -95,7 +131,7 @@ function takeTokenMoves(state: GameState): Action[] {
 }
 
 // Reserve from pyramid (by card id) or from deck top
-function reserveMoves(state: GameState): Action[] {
+function reserveMoves(state: LegalMovesState): Action[] {
   const player = state.players[state.currentPlayer];
   if (player.reservedCards.length >= MAX_RESERVED) return [];
 
@@ -104,14 +140,15 @@ function reserveMoves(state: GameState): Action[] {
   if (!hasGold) return [];
 
   const moves: Action[] = [];
+  const remaining = deckSizes(state);
 
   for (const level of CARD_LEVELS) {
     const levelKey = `level${level}` as 'level1' | 'level2' | 'level3';
     for (const card of state.pyramid[levelKey]) {
       moves.push({ type: 'RESERVE_CARD_FROM_PYRAMID', cardId: card.id });
     }
-    if (state.decks[levelKey].length > 0) {
-      moves.push({ type: 'RESERVE_CARD_FROM_DECK', source: `deck_${level}` as 'deck_1' | 'deck_2' | 'deck_3' });
+    if (remaining[levelKey] > 0) {
+      moves.push({ type: 'RESERVE_CARD_FROM_DECK', source: `deck_${level}` });
     }
   }
 
@@ -119,7 +156,7 @@ function reserveMoves(state: GameState): Action[] {
 }
 
 // Purchase moves — enumerate all affordable cards with valid gold usage.
-function purchaseMoves(state: GameState): Action[] {
+function purchaseMoves(state: LegalMovesState): Action[] {
   const player = state.players[state.currentPlayer];
   const moves: Action[] = [];
 
@@ -137,11 +174,18 @@ function purchaseMoves(state: GameState): Action[] {
   for (const card of candidates) {
     const isWild = card.ability === 'wild' || card.ability === 'wild and turn';
     if (isWild && !hasColoredCard) continue;
-    if (!canAfford(card, player)) continue;
 
+    // Build the gold allocation first, then check affordability *with* it.
+    //
+    // This used to call canAfford(card, player) with no allocation before
+    // computing one, which filtered out every card that needed gold — so gold
+    // could never be spent on a purchase at all, and goldUsageCombinations below
+    // was unreachable for any non-zero shortfall. Gold was effectively reduced
+    // to a card-reservation token.
     const cost = netCost(card, player);
     const goldOptions = goldUsageCombinations(cost, player.tokens);
     for (const goldUsage of goldOptions) {
+      if (!canAfford(card, player, goldUsage)) continue;
       moves.push({ type: 'PURCHASE_CARD', cardId: card.id, goldUsage });
     }
   }
@@ -154,6 +198,26 @@ function purchaseMoves(state: GameState): Action[] {
  * - If affordable without gold, returns [{}]
  * - If gold needed, returns one option with minimal allocation
  * - Card must be pre-validated by canAfford()
+ *
+ * Why only the minimal allocation, when the rules permit more
+ * -----------------------------------------------------------
+ * Spending a gold token in place of a gem the player already holds is legal: a
+ * gold is wild and nothing in the rulebook requires paying with the gem first.
+ * The reducer accepts any well-formed allocation accordingly (see `canAfford`),
+ * so a client that wants to overpay with gold can.
+ *
+ * `legalMoves` deliberately does not enumerate those allocations. Overpaying
+ * with gold is strictly worse than paying with the gem: gold is the scarcest
+ * token (3 in the game), it is the only way to reserve a card, and it
+ * substitutes for any colour later — so trading it for a gem the player was
+ * holding anyway only ever loses flexibility. Enumerating the variants would
+ * multiply the move list combinatorially per purchasable card, inflate the AI's
+ * branching factor and add a UI choice with no upside.
+ *
+ * The practical consequence is that `legalMoves` is a list of *reasonable* moves
+ * rather than the complete set of legal ones for purchases. That is the one
+ * place the two differ, and the fuzz suite's "every action outside legalMoves is
+ * inert" property is scoped to exclude gold variants for exactly this reason.
  */
 function goldUsageCombinations(
   cost: Partial<Record<TokenColor, number>>,
@@ -182,13 +246,13 @@ function goldUsageCombinations(
 
 // ─── Choose Royal Card ────────────────────────────────────────────────────────
 
-function chooseRoyalMoves(state: GameState): Action[] {
+function chooseRoyalMoves(state: LegalMovesState): Action[] {
   return state.royalDeck.map(card => ({ type: 'CHOOSE_ROYAL_CARD' as const, cardId: card.id }));
 }
 
 // ─── Ability resolution ───────────────────────────────────────────────────────
 
-function resolveAbilityMoves(state: GameState): Action[] {
+function resolveAbilityMoves(state: LegalMovesState): Action[] {
   const currentPlayerId = state.currentPlayer;
   const card = state.lastPurchasedCard;
   if (!card) return [];
@@ -199,15 +263,15 @@ function resolveAbilityMoves(state: GameState): Action[] {
     // are unreachable here. Enumerate the valid target indices directly.
     const color = card.color as TokenColor;
     const boardIndices = state.board.reduce<number[]>((indices, cell, boardIndex) => { if (cell === color) indices.push(boardIndex); return indices; }, []);
-    return boardIndices.map(index => ({ type: 'TAKE_TOKEN_FROM_BOARD', index }) as Action);
+    return boardIndices.map(index => ({ type: 'TAKE_TOKEN_FROM_BOARD', index }));
   }
 
   if (state.pendingAbility === 'Take') {
     const opponentId = (1 - currentPlayerId) as 0 | 1;
     const oppTokens = state.players[opponentId].tokens;
     const eligible = (GEM_COLORS as TokenColor[]).concat('pearl').filter(
-      color => oppTokens[color as TokenColor] > 0
-    ) as TokenColor[];
+      color => oppTokens[color] > 0,
+    );
     return eligible.map(color => ({ type: 'TAKE_TOKEN_FROM_OPPONENT', color }));
   }
 
@@ -216,7 +280,7 @@ function resolveAbilityMoves(state: GameState): Action[] {
 
 // ─── Assign Wild ─────────────────────────────────────────────────────────────
 
-function assignWildColorMoves(state: GameState): Action[] {
+function assignWildColorMoves(state: LegalMovesState): Action[] {
   const player = state.players[state.currentPlayer];
   const wildCard = state.lastPurchasedCard;
   if (!wildCard) return [];
@@ -236,7 +300,7 @@ function assignWildColorMoves(state: GameState): Action[] {
 
 // ─── Discard ──────────────────────────────────────────────────────────────────
 
-function discardMoves(state: GameState): Action[] {
+function discardMoves(state: LegalMovesState): Action[] {
   const player = state.players[state.currentPlayer];
   const excess = totalTokens(player.tokens) - MAX_TOKENS;
   if (excess <= 0) return [];
@@ -246,7 +310,7 @@ function discardMoves(state: GameState): Action[] {
 
   for (const color of TOKEN_COLORS) {
     if (pool[color] > 0) {
-      moves.push({ type: 'DISCARD_TOKENS', tokens: { [color]: 1 } });
+      moves.push({ type: 'DISCARD_TOKENS', color });
     }
   }
 
@@ -255,7 +319,7 @@ function discardMoves(state: GameState): Action[] {
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
 
-function getAvailableBoardIndices(board: GameState['board']): number[] {
+function getAvailableBoardIndices(board: LegalMovesState['board']): number[] {
   return board.map((cell, i) => (cell && cell !== 'gold' ? i : -1)).filter(i => i !== -1);
 }
 

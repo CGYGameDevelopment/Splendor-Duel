@@ -33,7 +33,7 @@ export function PlayerArea({
 
   const bonusByColor: Partial<Record<GemColor, number>> = {};
   for (const card of player.purchasedCards) {
-    const c = (card.assignedColor ?? card.color) as GemColor | null;
+    const c = card.assignedColor ?? card.color;
     if (c !== null) bonusByColor[c] = (bonusByColor[c] ?? 0) + card.bonus;
   }
 
@@ -75,7 +75,7 @@ export function PlayerArea({
                 <Token
                   color={c}
                   size="md"
-                  onClick={clickable ? () => onTakeOpponentToken!(c) : undefined}
+                  onClick={clickable ? () => onTakeOpponentToken(c) : undefined}
                   title={clickable ? `Take ${c} from opponent` : undefined}
                 />
                 <span className={styles.tokenCount}>{n}</span>
