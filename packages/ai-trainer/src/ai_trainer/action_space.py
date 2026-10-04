@@ -37,6 +37,7 @@ TAKE_FROM_OPPONENT_COLORS = ["white", "blue", "green", "red", "black", "pearl"]
 
 # ── Valid board lines ─────────────────────────────────────────────────────────
 
+
 def _coord(idx: int) -> tuple[int, int]:
     return divmod(idx, 5)
 
@@ -73,24 +74,25 @@ LINE_TO_IDX: dict[tuple[int, ...], int] = {line: i for i, line in enumerate(VALI
 
 # ── Offset constants ──────────────────────────────────────────────────────────
 
-OFFSET_TAKE_TOKENS = 0        # 0..144
-OFFSET_PURCHASE_CARD = 145    # 145..211   (card id 1..67)
+OFFSET_TAKE_TOKENS = 0  # 0..144
+OFFSET_PURCHASE_CARD = 145  # 145..211   (card id 1..67)
 OFFSET_RESERVE_PYRAMID = 212  # 212..278   (card id 1..67)
-OFFSET_RESERVE_DECK = 279     # 279..281
-OFFSET_ASSIGN_WILD = 282      # 282..286   (color idx 0..4; one pending wild card per phase)
-OFFSET_USE_PRIVILEGE = 287    # 287..311   (single board cell 0-24)
-OFFSET_REPLENISH = 312        # 312
-OFFSET_END_OPTIONAL = 313     # 313
+OFFSET_RESERVE_DECK = 279  # 279..281
+OFFSET_ASSIGN_WILD = 282  # 282..286   (color idx 0..4; one pending wild card per phase)
+OFFSET_USE_PRIVILEGE = 287  # 287..311   (single board cell 0-24)
+OFFSET_REPLENISH = 312  # 312
+OFFSET_END_OPTIONAL = 313  # 313
 OFFSET_SKIP_TO_MANDATORY = 314  # 314
-OFFSET_DISCARD = 315          # 315..321   (one entry per token color)
+OFFSET_DISCARD = 315  # 315..321   (one entry per token color)
 OFFSET_TAKE_FROM_BOARD = 322  # 322..346   (25 board positions)
 OFFSET_TAKE_FROM_OPPONENT = 347  # 347..352  (6 colors: gem colors + pearl)
-OFFSET_CHOOSE_ROYAL = 353        # 353..356  (royal card id 1..4)
-OFFSET_PASS_MANDATORY = 357      # 357
+OFFSET_CHOOSE_ROYAL = 353  # 353..356  (royal card id 1..4)
+OFFSET_PASS_MANDATORY = 357  # 357
 
 _DECK_TO_IDX = {"deck_1": 279, "deck_2": 280, "deck_3": 281}
 
 # ── Conversion functions ──────────────────────────────────────────────────────
+
 
 def action_to_index(action: dict) -> int | None:
     """Convert a concrete Action dict to its canonical index. Returns None if unmappable."""

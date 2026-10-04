@@ -48,6 +48,7 @@ def _reward_for_actor(actor: int, done: bool, winner: int | None) -> float:
 @dataclass
 class _Slot:
     """One in-flight game inside a VecSplendorDuelEnv."""
+
     session_id: str
     state: dict = field(default_factory=dict)
     legal_moves: list[dict] = field(default_factory=list)
@@ -64,6 +65,7 @@ class _Slot:
 @dataclass
 class VecStepResult:
     """Outcome of one slot's step, from the perspective of the player who moved."""
+
     actor: int
     reward: float
     done: bool
@@ -176,9 +178,7 @@ class VecSplendorDuelEnv:
             actors.append(slot.current_player)
             steps.append({"sessionId": slot.session_id, "action": concrete})
 
-        results = self.client.step_batch(
-            steps, auto_advance=self._auto_advance, compact=True
-        )
+        results = self.client.step_batch(steps, auto_advance=self._auto_advance, compact=True)
 
         out: dict[int, VecStepResult] = {}
         for slot_idx, actor, result in zip(slots, actors, results):

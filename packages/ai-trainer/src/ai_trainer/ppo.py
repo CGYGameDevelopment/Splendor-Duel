@@ -43,8 +43,8 @@ from .model import ActorCriticNet
 from .state_encoder import STATE_DIM, N_CARD_SLOTS
 from .action_space import ACTION_SPACE_SIZE
 
-_ADV_STD_EPSILON = 1e-6   # prevents division by zero in advantage normalisation
-_ADV_CLIP_RANGE = 5.0     # clip normalised advantages to +/-5 sigma
+_ADV_STD_EPSILON = 1e-6  # prevents division by zero in advantage normalisation
+_ADV_CLIP_RANGE = 5.0  # clip normalised advantages to +/-5 sigma
 
 
 @dataclass
@@ -153,11 +153,16 @@ def update(
         player_ids = [t.player_id for t in ep.transitions]
 
         _compute_gae(
-            rewards, values, dones, player_ids,
-            config.gamma, config.lam,
+            rewards,
+            values,
+            dones,
+            player_ids,
+            config.gamma,
+            config.lam,
             all_advantages[ptr : ptr + ep_n],
             all_returns[ptr : ptr + ep_n],
-            ep.terminal_value, ep.terminal_player_id,
+            ep.terminal_value,
+            ep.terminal_player_id,
         )
 
         for i, t in enumerate(ep.transitions):
@@ -262,7 +267,9 @@ def update(
 
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
-            grad_norm = float(nn.utils.clip_grad_norm_(model.parameters(), max_norm=config.max_grad_norm))
+            grad_norm = float(
+                nn.utils.clip_grad_norm_(model.parameters(), max_norm=config.max_grad_norm)
+            )
             optimizer.step()
 
             total_policy_loss += policy_loss.detach()

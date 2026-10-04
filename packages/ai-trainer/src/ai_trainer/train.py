@@ -38,9 +38,20 @@ _COLLECT_RETRY_ATTEMPTS = 4
 _COLLECT_RETRY_BASE_DELAY = 1.0  # seconds
 
 _LOG_COLUMNS = [
-    "iteration", "transitions", "segments", "completed_games", "policy_loss",
-    "value_loss", "entropy", "entropy_coef", "kl", "grad_norm", "trainable_frac",
-    "pool_size", "win_rate_vs_greedy", "win_rate_vs_random",
+    "iteration",
+    "transitions",
+    "segments",
+    "completed_games",
+    "policy_loss",
+    "value_loss",
+    "entropy",
+    "entropy_coef",
+    "kl",
+    "grad_norm",
+    "trainable_frac",
+    "pool_size",
+    "win_rate_vs_greedy",
+    "win_rate_vs_random",
 ]
 
 
@@ -58,7 +69,7 @@ def _collect_with_retries(
             last_exc = exc
             if attempt == _COLLECT_RETRY_ATTEMPTS - 1:
                 break
-            delay = _COLLECT_RETRY_BASE_DELAY * (2 ** attempt)
+            delay = _COLLECT_RETRY_BASE_DELAY * (2**attempt)
             typer.echo(
                 f"  !! transient network error ({type(exc).__name__}); "
                 f"retrying in {delay:.1f}s...",
@@ -106,13 +117,15 @@ def main(
     transitions_per_iter: int = typer.Option(
         16384,
         help="Transitions collected per iteration. Collection runs to this budget "
-             "rather than an episode count, so every step batch stays full width.",
+        "rather than an episode count, so every step batch stays full width.",
     ),
     eval_every: int = typer.Option(50, help="Evaluate vs baselines every N iterations"),
     eval_games: int = typer.Option(200, help="Games per baseline evaluation"),
     checkpoint_every: int = typer.Option(5, help="Save latest checkpoint every N iterations"),
     sim_url: str = typer.Option("http://127.0.0.1:3002", help="game-sim server URL"),
-    checkpoint_dir: Path = typer.Option(Path(__file__).resolve().parent.parent.parent / "checkpoints", help="Checkpoint directory"),
+    checkpoint_dir: Path = typer.Option(
+        Path(__file__).resolve().parent.parent.parent / "checkpoints", help="Checkpoint directory"
+    ),
     lr: float = typer.Option(3e-4, help="Learning rate"),
     lr_decay: bool = typer.Option(True, help="Linearly decay LR to 0 across the run"),
     entropy_coef: float = typer.Option(0.01, help="Initial entropy regularization coefficient"),
@@ -159,9 +172,7 @@ def main(
     optimizer = optim.Adam(model.parameters(), lr=lr)
     config = PPOConfig(entropy_coef=entropy_coef)
     opponent_pool = OpponentPool(max_size=opponent_pool_size)
-    collector = RolloutCollector(
-        model, env, device=device, opponent_pool=opponent_pool, rng=rng
-    )
+    collector = RolloutCollector(model, env, device=device, opponent_pool=opponent_pool, rng=rng)
 
     start_iteration = 1
     start_lr = lr
@@ -292,7 +303,10 @@ def main(
                         err=True,
                     )
                     _save_checkpoint(
-                        checkpoint_dir / "latest.pt", iteration - 1, model, optimizer,
+                        checkpoint_dir / "latest.pt",
+                        iteration - 1,
+                        model,
+                        optimizer,
                         opponent_pool=opponent_pool,
                     )
                     raise typer.Exit(code=1)
@@ -322,13 +336,11 @@ def main(
 
                 avg_segment = n_transitions / n_segments if n_segments else 0
                 current_lr = optimizer.param_groups[0]["lr"]
-                wc_str = "  ".join(
-                    f"{k}={v}" for k, v in sorted(win_condition_counts.items())
-                ) or "none"
-                kl_val = losses.get("kl", 0.0)
-                pool_str = (
-                    f"  vs_pool={pool_wins}/{pool_games}" if pool_games else ""
+                wc_str = (
+                    "  ".join(f"{k}={v}" for k, v in sorted(win_condition_counts.items())) or "none"
                 )
+                kl_val = losses.get("kl", 0.0)
+                pool_str = f"  vs_pool={pool_wins}/{pool_games}" if pool_games else ""
                 typer.echo(
                     f"[{iteration:4d}] "
                     f"lr={current_lr:.2e}  "
@@ -397,27 +409,32 @@ def main(
                     prev_model.load_state_dict(model.state_dict())
                     prev_model.eval()
 
-                writer.writerow([
-                    iteration,
-                    n_transitions,
-                    n_segments,
-                    completed_games,
-                    f"{losses['policy_loss']:.6f}",
-                    f"{losses['value_loss']:.6f}",
-                    f"{losses['entropy']:.6f}",
-                    f"{config.entropy_coef:.6f}",
-                    f"{losses.get('kl', 0.0):.6f}",
-                    f"{losses.get('grad_norm', 0.0):.6f}",
-                    f"{losses.get('trainable_frac', 1.0):.4f}",
-                    len(opponent_pool),
-                    f"{win_rate:.4f}" if win_rate is not None else "",
-                    f"{win_rate_random:.4f}" if win_rate_random is not None else "",
-                ])
+                writer.writerow(
+                    [
+                        iteration,
+                        n_transitions,
+                        n_segments,
+                        completed_games,
+                        f"{losses['policy_loss']:.6f}",
+                        f"{losses['value_loss']:.6f}",
+                        f"{losses['entropy']:.6f}",
+                        f"{config.entropy_coef:.6f}",
+                        f"{losses.get('kl', 0.0):.6f}",
+                        f"{losses.get('grad_norm', 0.0):.6f}",
+                        f"{losses.get('trainable_frac', 1.0):.4f}",
+                        len(opponent_pool),
+                        f"{win_rate:.4f}" if win_rate is not None else "",
+                        f"{win_rate_random:.4f}" if win_rate_random is not None else "",
+                    ]
+                )
                 log_file.flush()
 
                 if iteration % checkpoint_every == 0:
                     _save_checkpoint(
-                        checkpoint_dir / "latest.pt", iteration, model, optimizer,
+                        checkpoint_dir / "latest.pt",
+                        iteration,
+                        model,
+                        optimizer,
                         opponent_pool=opponent_pool,
                     )
     finally:

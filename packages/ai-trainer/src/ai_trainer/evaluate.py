@@ -33,8 +33,7 @@ _FIRST_PLAYER_BIAS_THRESHOLD = 0.1
 class Policy(Protocol):
     """Chooses one action index for each of the given env slots."""
 
-    def act(self, env: VecSplendorDuelEnv, slots: list[int]) -> list[int]:
-        ...
+    def act(self, env: VecSplendorDuelEnv, slots: list[int]) -> list[int]: ...
 
 
 class ModelPolicy:
@@ -181,14 +180,19 @@ def _play_matches(
     return wins_a, wins_p0, games_p0, wins_p1, games_p1
 
 
-def _warn_on_seat_bias(label: str, wins_p0: int, games_p0: int, wins_p1: int, games_p1: int) -> None:
+def _warn_on_seat_bias(
+    label: str, wins_p0: int, games_p0: int, wins_p1: int, games_p1: int
+) -> None:
     wr_p0 = wins_p0 / games_p0 if games_p0 else 0.0
     wr_p1 = wins_p1 / games_p1 if games_p1 else 0.0
     bias = abs(wr_p0 - wr_p1)
     if games_p0 and games_p1 and bias > _FIRST_PLAYER_BIAS_THRESHOLD:
         logging.getLogger(__name__).warning(
             "%s: first-player bias detected -- win rate as P0=%.1f%%, as P1=%.1f%% (gap %.1f%%)",
-            label, wr_p0 * 100, wr_p1 * 100, bias * 100,
+            label,
+            wr_p0 * 100,
+            wr_p1 * 100,
+            bias * 100,
         )
 
 

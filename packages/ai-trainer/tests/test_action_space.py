@@ -60,20 +60,20 @@ def test_valid_lines_count_matches_the_documented_vocabulary():
 def test_offsets_tile_the_space_without_gaps_or_overlap():
     # Arrange — the documented layout, in order.
     boundaries = [
-        (0, 145),    # TAKE_TOKENS
-        (145, 67),   # PURCHASE_CARD
-        (212, 67),   # RESERVE_CARD_FROM_PYRAMID
-        (279, 3),    # RESERVE_CARD_FROM_DECK
-        (282, 5),    # ASSIGN_WILD_COLOR
-        (287, 25),   # USE_PRIVILEGE
-        (312, 1),    # REPLENISH_BOARD
-        (313, 1),    # END_OPTIONAL_PHASE
-        (314, 1),    # SKIP_TO_MANDATORY
-        (315, 7),    # DISCARD_TOKENS
-        (322, 25),   # TAKE_TOKEN_FROM_BOARD
-        (347, 6),    # TAKE_TOKEN_FROM_OPPONENT
-        (353, 4),    # CHOOSE_ROYAL_CARD
-        (357, 1),    # PASS_MANDATORY
+        (0, 145),  # TAKE_TOKENS
+        (145, 67),  # PURCHASE_CARD
+        (212, 67),  # RESERVE_CARD_FROM_PYRAMID
+        (279, 3),  # RESERVE_CARD_FROM_DECK
+        (282, 5),  # ASSIGN_WILD_COLOR
+        (287, 25),  # USE_PRIVILEGE
+        (312, 1),  # REPLENISH_BOARD
+        (313, 1),  # END_OPTIONAL_PHASE
+        (314, 1),  # SKIP_TO_MANDATORY
+        (315, 7),  # DISCARD_TOKENS
+        (322, 25),  # TAKE_TOKEN_FROM_BOARD
+        (347, 6),  # TAKE_TOKEN_FROM_OPPONENT
+        (353, 4),  # CHOOSE_ROYAL_CARD
+        (357, 1),  # PASS_MANDATORY
     ]
 
     # Act / Assert — each range starts exactly where the previous one ended.

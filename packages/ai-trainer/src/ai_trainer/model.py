@@ -111,8 +111,8 @@ from .action_space import (
 
 # -- Derived input widths ------------------------------------------------------
 
-_BOARD_IN = BOARD_END - BOARD_START                                   # 200
-_PLAYER_SCALARS = P_SCALAR_END + (PLAYER_FEATURES - P_ROYAL_START)    # 27
+_BOARD_IN = BOARD_END - BOARD_START  # 200
+_PLAYER_SCALARS = P_SCALAR_END + (PLAYER_FEATURES - P_ROYAL_START)  # 27
 _GLOBAL_IN = (BAG_END - BAG_START) + (CUR_START - DECK_START) + (PENDING_END - PHASE_START)  # 33
 
 # -- Branch output dimensions --------------------------------------------------
@@ -122,23 +122,23 @@ _BOARD_OUT = 128
 _CARD_DIM = 64
 _PLAYER_OUT = 64
 _GLOBAL_OUT = 64
-_TRUNK_IN = _BOARD_OUT + 3 * _CARD_DIM + 2 * _PLAYER_OUT + _GLOBAL_OUT   # 512
+_TRUNK_IN = _BOARD_OUT + 3 * _CARD_DIM + 2 * _PLAYER_OUT + _GLOBAL_OUT  # 512
 _HIDDEN = 256
 
 # -- Action-space segment widths, in index order -------------------------------
 # Every logit lands in exactly one of these; the widths must sum to 358.
-_N_LINES = len(VALID_LINES)                                    # 145
-_N_PRIV = N_BOARD_CELLS                                        # 25
-_N_TAKE_BOARD = N_BOARD_CELLS                                  # 25
+_N_LINES = len(VALID_LINES)  # 145
+_N_PRIV = N_BOARD_CELLS  # 25
+_N_TAKE_BOARD = N_BOARD_CELLS  # 25
 _MISC_WIDTHS = (
-    OFFSET_USE_PRIVILEGE - OFFSET_RESERVE_DECK,                # 8  deck reserve + wild
-    OFFSET_DISCARD - OFFSET_REPLENISH,                         # 3  replenish/end/skip
-    OFFSET_TAKE_FROM_BOARD - OFFSET_DISCARD,                   # 7  discards
-    OFFSET_CHOOSE_ROYAL - OFFSET_TAKE_FROM_OPPONENT,           # 6  take from opponent
-    OFFSET_PASS_MANDATORY - OFFSET_CHOOSE_ROYAL,               # 4  royal choice
-    ACTION_SPACE_SIZE - OFFSET_PASS_MANDATORY,                 # 1  pass
+    OFFSET_USE_PRIVILEGE - OFFSET_RESERVE_DECK,  # 8  deck reserve + wild
+    OFFSET_DISCARD - OFFSET_REPLENISH,  # 3  replenish/end/skip
+    OFFSET_TAKE_FROM_BOARD - OFFSET_DISCARD,  # 7  discards
+    OFFSET_CHOOSE_ROYAL - OFFSET_TAKE_FROM_OPPONENT,  # 6  take from opponent
+    OFFSET_PASS_MANDATORY - OFFSET_CHOOSE_ROYAL,  # 4  royal choice
+    ACTION_SPACE_SIZE - OFFSET_PASS_MANDATORY,  # 1  pass
 )
-_N_MISC = sum(_MISC_WIDTHS)                                    # 29
+_N_MISC = sum(_MISC_WIDTHS)  # 29
 
 
 def _mlp(*dims: int) -> nn.Sequential:
@@ -164,8 +164,11 @@ class ResBlock(nn.Module):
     def __init__(self, width: int) -> None:
         super().__init__()
         self.body = nn.Sequential(
-            nn.Linear(width, width), nn.LayerNorm(width), nn.ReLU(),
-            nn.Linear(width, width), nn.LayerNorm(width),
+            nn.Linear(width, width),
+            nn.LayerNorm(width),
+            nn.ReLU(),
+            nn.Linear(width, width),
+            nn.LayerNorm(width),
         )
         self.act = nn.ReLU()
 
@@ -204,7 +207,9 @@ class ActorCriticNet(nn.Module):
         self.global_encoder = _mlp(_GLOBAL_IN, _GLOBAL_OUT)
 
         trunk: list[nn.Module] = [
-            nn.Linear(_TRUNK_IN, trunk_width), nn.LayerNorm(trunk_width), nn.ReLU(),
+            nn.Linear(_TRUNK_IN, trunk_width),
+            nn.LayerNorm(trunk_width),
+            nn.ReLU(),
         ]
         if dropout > 0.0:
             trunk.append(nn.Dropout(dropout))
@@ -217,14 +222,10 @@ class ActorCriticNet(nn.Module):
         # every cell / card slot, so the per-element heads stay cheap.
         self.head_ctx = nn.Linear(_HIDDEN, 64)
         # Per cell: (take-line score, privilege score, ability-take score)
-        self.cell_scores = nn.Sequential(
-            nn.Linear(_CELL_DIM + 64, 64), nn.ReLU(), nn.Linear(64, 3)
-        )
+        self.cell_scores = nn.Sequential(nn.Linear(_CELL_DIM + 64, 64), nn.ReLU(), nn.Linear(64, 3))
         self.line_length_bias = nn.Parameter(torch.zeros(3))
         # Per visible card slot: (purchase score, reserve score)
-        self.card_scores = nn.Sequential(
-            nn.Linear(_CARD_DIM + 64, 64), nn.ReLU(), nn.Linear(64, 2)
-        )
+        self.card_scores = nn.Sequential(nn.Linear(_CARD_DIM + 64, 64), nn.ReLU(), nn.Linear(64, 2))
         self.misc_head = nn.Linear(_HIDDEN, _N_MISC)
         self.value_head = nn.Linear(_HIDDEN, 1)
 
@@ -253,7 +254,7 @@ class ActorCriticNet(nn.Module):
         reserved = p[..., P_RESERVED_START:P_RESERVED_END].reshape(
             *batch, N_RESERVED, CARD_FEATURES
         )
-        res_emb = self.card_encoder(reserved)                    # (..., 3, _CARD_DIM)
+        res_emb = self.card_encoder(reserved)  # (..., 3, _CARD_DIM)
         # Max-pool so a single high-value reserved card dominates the summary.
         h_res = res_emb.max(dim=-2).values
         h_sc = self.player_scalar_enc(scalars)
@@ -261,9 +262,7 @@ class ActorCriticNet(nn.Module):
 
     # -- Policy assembly -------------------------------------------------------
 
-    def _scatter_card_scores(
-        self, scores: torch.Tensor, card_ids: torch.Tensor
-    ) -> torch.Tensor:
+    def _scatter_card_scores(self, scores: torch.Tensor, card_ids: torch.Tensor) -> torch.Tensor:
         """
         Route per-slot scores to their card ids, producing a (batch, 67) segment.
 
@@ -295,28 +294,29 @@ class ActorCriticNet(nn.Module):
         batch = obs.shape[0]
 
         cells = obs[:, BOARD_START:BOARD_END].reshape(batch, N_BOARD_CELLS, BOARD_CELL_FEATURES)
-        cell_emb = self.cell_encoder(cells)                       # (b, 25, _CELL_DIM)
+        cell_emb = self.cell_encoder(cells)  # (b, 25, _CELL_DIM)
         h_board = self.board_summary(cell_emb.reshape(batch, -1))
 
         pyr = obs[:, PYRAMID_START:PYRAMID_END].reshape(batch, N_PYRAMID, CARD_FEATURES)
-        pyr_emb = self.card_encoder(pyr)                          # (b, 12, _CARD_DIM)
+        pyr_emb = self.card_encoder(pyr)  # (b, 12, _CARD_DIM)
         h_l1 = pyr_emb[:, :N_L1].sum(1)
-        h_l2 = pyr_emb[:, N_L1:N_L1 + N_L2].sum(1)
-        h_l3 = pyr_emb[:, N_L1 + N_L2:].sum(1)
+        h_l2 = pyr_emb[:, N_L1 : N_L1 + N_L2].sum(1)
+        h_l3 = pyr_emb[:, N_L1 + N_L2 :].sum(1)
 
         h_cur, cur_res_emb = self._encode_player(obs[:, CUR_START:CUR_END])
         h_opp, opp_res_emb = self._encode_player(obs[:, OPP_START:OPP_END])
 
-        global_ctx = torch.cat([
-            obs[:, BAG_START:BAG_END],
-            obs[:, DECK_START:CUR_START],
-            obs[:, PHASE_START:PENDING_END],
-        ], dim=-1)
+        global_ctx = torch.cat(
+            [
+                obs[:, BAG_START:BAG_END],
+                obs[:, DECK_START:CUR_START],
+                obs[:, PHASE_START:PENDING_END],
+            ],
+            dim=-1,
+        )
         h_global = self.global_encoder(global_ctx)
 
-        h = self.trunk(
-            torch.cat([h_board, h_l1, h_l2, h_l3, h_cur, h_opp, h_global], dim=-1)
-        )
+        h = self.trunk(torch.cat([h_board, h_l1, h_l2, h_l3, h_cur, h_opp, h_global], dim=-1))
         ctx = self.head_ctx(h)
 
         # Board-addressed logits, computed from the cells they name.
@@ -330,7 +330,7 @@ class ActorCriticNet(nn.Module):
         take_logits = cell_out[..., 2]
 
         # Card-addressed logits, computed from each visible card's embedding.
-        slot_emb = torch.cat([pyr_emb, cur_res_emb, opp_res_emb], dim=1)     # (b, 18, _CARD_DIM)
+        slot_emb = torch.cat([pyr_emb, cur_res_emb, opp_res_emb], dim=1)  # (b, 18, _CARD_DIM)
         slot_ctx = ctx.unsqueeze(1).expand(-1, N_CARD_SLOTS, -1)
         slot_out = self.card_scores(torch.cat([slot_emb, slot_ctx], dim=-1))  # (b, 18, 2)
         # Purchase is legal from the pyramid and the player's own reserved cards;
@@ -344,19 +344,22 @@ class ActorCriticNet(nn.Module):
 
         misc = self.misc_head(h).split(_MISC_WIDTHS, dim=-1)
 
-        logits = torch.cat([
-            line_logits,        # [0:145]     TAKE_TOKENS
-            purchase_logits,    # [145:212]   PURCHASE_CARD
-            reserve_logits,     # [212:279]   RESERVE_CARD_FROM_PYRAMID
-            misc[0],            # [279:287]   reserve from deck + assign wild
-            priv_logits,        # [287:312]   USE_PRIVILEGE
-            misc[1],            # [312:315]   replenish / end optional / skip
-            misc[2],            # [315:322]   DISCARD_TOKENS
-            take_logits,        # [322:347]   TAKE_TOKEN_FROM_BOARD
-            misc[3],            # [347:353]   TAKE_TOKEN_FROM_OPPONENT
-            misc[4],            # [353:357]   CHOOSE_ROYAL_CARD
-            misc[5],            # [357:358]   PASS_MANDATORY
-        ], dim=-1)
+        logits = torch.cat(
+            [
+                line_logits,  # [0:145]     TAKE_TOKENS
+                purchase_logits,  # [145:212]   PURCHASE_CARD
+                reserve_logits,  # [212:279]   RESERVE_CARD_FROM_PYRAMID
+                misc[0],  # [279:287]   reserve from deck + assign wild
+                priv_logits,  # [287:312]   USE_PRIVILEGE
+                misc[1],  # [312:315]   replenish / end optional / skip
+                misc[2],  # [315:322]   DISCARD_TOKENS
+                take_logits,  # [322:347]   TAKE_TOKEN_FROM_BOARD
+                misc[3],  # [347:353]   TAKE_TOKEN_FROM_OPPONENT
+                misc[4],  # [353:357]   CHOOSE_ROYAL_CARD
+                misc[5],  # [357:358]   PASS_MANDATORY
+            ],
+            dim=-1,
+        )
 
         return logits, self.value_head(h)
 
