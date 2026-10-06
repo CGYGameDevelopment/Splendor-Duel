@@ -35,13 +35,12 @@ from dataclasses import dataclass
 
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.optim as optim
+from torch import nn, optim
 
-from .self_play import Episode
-from .model import ActorCriticNet
-from .state_encoder import STATE_DIM, N_CARD_SLOTS
 from .action_space import ACTION_SPACE_SIZE
+from .model import ActorCriticNet
+from .self_play import Episode
+from .state_encoder import N_CARD_SLOTS, STATE_DIM
 
 _ADV_STD_EPSILON = 1e-6  # prevents division by zero in advantage normalisation
 _ADV_CLIP_RANGE = 5.0  # clip normalised advantages to +/-5 sigma
