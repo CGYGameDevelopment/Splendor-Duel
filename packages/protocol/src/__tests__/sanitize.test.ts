@@ -95,9 +95,11 @@ describe('toClientState hides secret information', () => {
     // Assert — walk the view and collect every jewel card id it mentions; none
     // may come from a deck.
     //
-    // Jewel ids (1..67) and royal ids (1..4) are separate namespaces that
-    // overlap, so a bare id is ambiguous: royal cards are face-up on the table
-    // and legitimately public. Only nodes with a numeric level are jewel cards.
+    // Jewel ids (1..67) and royal ids (1..4) are separate id spaces that overlap
+    // by design — the two are separate decks with different gameplay functions —
+    // so a bare id is ambiguous: royal cards are face-up on the table and
+    // legitimately public. `level` discriminates: only nodes with a numeric
+    // level are jewel cards.
     const foundIds: number[] = [];
     const walk = (node: unknown): void => {
       if (Array.isArray(node)) { node.forEach(walk); return; }

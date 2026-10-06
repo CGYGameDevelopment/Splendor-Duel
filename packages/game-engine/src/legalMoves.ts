@@ -1,6 +1,6 @@
 import type { GameState, Action, TokenColor, GemColor, Card, TokenPool } from './types';
 import { isValidTokenLine } from './board';
-import { netCost, canAfford, GEM_COLORS, MAX_RESERVED, totalTokens, MAX_TOKENS, MAX_TOKENS_IN_LINE, TOKEN_COLORS, CARD_LEVELS } from './helpers';
+import { netCost, canAfford, GEM_COLORS, MAX_RESERVED, totalTokens, MAX_TOKENS, MAX_TOKENS_IN_LINE, TOKEN_COLORS, CARD_LEVELS, unlockedColors } from './helpers';
 
 // ─── Input ────────────────────────────────────────────────────────────────────
 
@@ -167,13 +167,13 @@ function purchaseMoves(state: LegalMovesState): Action[] {
     ...player.reservedCards,
   ];
 
-  // Wild cards may only be purchased if the player already owns a Jewel Card
-  // with an intrinsic gem color (see rulebook: "null is not a color").
-  const hasColoredCard = player.purchasedCards.some(ownedCard => ownedCard.color !== null);
+  // Wild cards may only be purchased if the player has a colour to assign them
+  // to (see rulebook: "null is not a color").
+  const hasUnlockedColor = unlockedColors(player).size > 0;
 
   for (const card of candidates) {
     const isWild = card.ability === 'wild' || card.ability === 'wild and turn';
-    if (isWild && !hasColoredCard) continue;
+    if (isWild && !hasUnlockedColor) continue;
 
     // Build the gold allocation first, then check affordability *with* it.
     //
@@ -285,13 +285,9 @@ function assignWildColorMoves(state: LegalMovesState): Action[] {
   const wildCard = state.lastPurchasedCard;
   if (!wildCard) return [];
 
-  const availableColors = new Set<GemColor>(
-    player.purchasedCards
-      .filter(card => card.id !== wildCard.id && card.color !== null)
-      .map(card => card.color as GemColor)
-  );
-
-  return Array.from(availableColors).map(color => ({
+  // The pending wild is itself in `purchasedCards` and still unassigned, so it
+  // contributes no colour of its own.
+  return Array.from(unlockedColors(player)).map(color => ({
     type: 'ASSIGN_WILD_COLOR' as const,
     wildCardId: wildCard.id,
     color,

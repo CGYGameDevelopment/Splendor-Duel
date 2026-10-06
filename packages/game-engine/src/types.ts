@@ -16,7 +16,14 @@ export type CardColor = GemColor;
 export type Cost = Partial<Record<TokenColor, number>>;
 
 export interface Card {
+  // Unique within a card's own deck, not across all cards. Jewel cards are
+  // numbered 1..67 and royal cards 1..4: the two are entirely separate decks
+  // with different gameplay functions, and their numbers overlap. Any lookup by
+  // id must therefore be scoped to one kind — jewel cards live in `decks`,
+  // `pyramid`, `purchasedCards` and `reservedCards`, royal cards in `royalDeck`
+  // and `royalCards`, and nothing moves between the two groups.
   id: number;
+  // Also the discriminator between the two decks: 'royal' marks a royal card.
   level: 1 | 2 | 3 | 'royal';
   color: CardColor | null;
   points: number;

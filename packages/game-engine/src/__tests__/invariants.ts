@@ -111,20 +111,38 @@ export function assertStateInvariants(state: GameState, context = ''): void {
   // ── No card exists in two places at once ────────────────────────────────────
   // Jewel and royal ids are separate namespaces that overlap, so uniqueness is
   // checked per namespace.
-  const jewelIds = [
+  const jewelZoneCards = [
     ...state.decks.level1, ...state.decks.level2, ...state.decks.level3,
     ...state.pyramid.level1, ...state.pyramid.level2, ...state.pyramid.level3,
     ...state.players[0].purchasedCards, ...state.players[0].reservedCards,
     ...state.players[1].purchasedCards, ...state.players[1].reservedCards,
-  ].map(card => card.id);
+  ];
+  const jewelIds = jewelZoneCards.map(card => card.id);
   if (new Set(jewelIds).size !== jewelIds.length) {
     fail('a jewel card appears in more than one zone');
   }
-  const royalIds = [
+  const royalZoneCards = [
     ...state.royalDeck, ...state.players[0].royalCards, ...state.players[1].royalCards,
-  ].map(card => card.id);
+  ];
+  const royalIds = royalZoneCards.map(card => card.id);
   if (new Set(royalIds).size !== royalIds.length) {
     fail('a royal card appears in more than one zone');
+  }
+
+  // ── The two decks never mix ─────────────────────────────────────────────────
+  // Jewel and royal cards are separate decks with separate id spaces, so the
+  // uniqueness checks above are only sound while each zone holds its own kind:
+  // a royal card sitting in a jewel zone would be compared against jewel ids it
+  // shares numbers with. `level` is what tells the two apart.
+  for (const card of jewelZoneCards) {
+    if (card.level === 'royal') {
+      fail(`royal card ${card.id} is in a jewel zone`);
+    }
+  }
+  for (const card of royalZoneCards) {
+    if (card.level !== 'royal') {
+      fail(`jewel card ${card.id} (level ${card.level}) is in a royal zone`);
+    }
   }
 
   // ── Reserve limit ───────────────────────────────────────────────────────────
