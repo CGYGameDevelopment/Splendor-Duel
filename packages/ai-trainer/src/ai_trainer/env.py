@@ -28,7 +28,7 @@ import numpy as np
 
 from .action_space import ACTION_SPACE_SIZE, build_legal_index_map_and_mask
 from .sim_client import SimClient
-from .state_encoder import STATE_DIM, N_CARD_SLOTS, encode, encode_card_ids
+from .state_encoder import N_CARD_SLOTS, STATE_DIM, encode, encode_card_ids
 
 
 def _reward_for_actor(actor: int, done: bool, winner: int | None) -> float:

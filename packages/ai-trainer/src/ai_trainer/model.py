@@ -58,55 +58,57 @@ discards, take-from-opponent, royal choice, pass) keep a small dense head.
 
 from __future__ import annotations
 
-import torch
-import torch.nn as nn
+from itertools import pairwise
 
-from .state_encoder import (
-    STATE_DIM,
-    CARD_FEATURES,
-    PLAYER_FEATURES,
-    BOARD_START,
-    BOARD_END,
-    BOARD_CELL_FEATURES,
-    N_BOARD_CELLS,
-    BAG_START,
-    BAG_END,
-    PYRAMID_START,
-    PYRAMID_END,
-    DECK_START,
-    CUR_START,
-    CUR_END,
-    OPP_START,
-    OPP_END,
-    PHASE_START,
-    PENDING_END,
-    N_PYRAMID,
-    N_L1,
-    N_L2,
-    N_RESERVED,
-    N_CARD_SLOTS,
-    N_PYRAMID_SLOTS,
-    N_PURCHASABLE_SLOTS,
-    MAX_CARD_ID,
-    P_SCALAR_END,
-    P_RESERVED_START,
-    P_RESERVED_END,
-    P_ROYAL_START,
-)
+import torch
+from torch import nn
+
 from .action_space import (
     ACTION_SPACE_SIZE,
-    VALID_LINES,
-    OFFSET_TAKE_TOKENS,
-    OFFSET_PURCHASE_CARD,
-    OFFSET_RESERVE_PYRAMID,
-    OFFSET_RESERVE_DECK,
-    OFFSET_USE_PRIVILEGE,
-    OFFSET_REPLENISH,
+    OFFSET_CHOOSE_ROYAL,
     OFFSET_DISCARD,
+    OFFSET_PASS_MANDATORY,
+    OFFSET_PURCHASE_CARD,
+    OFFSET_REPLENISH,
+    OFFSET_RESERVE_DECK,
+    OFFSET_RESERVE_PYRAMID,
     OFFSET_TAKE_FROM_BOARD,
     OFFSET_TAKE_FROM_OPPONENT,
-    OFFSET_CHOOSE_ROYAL,
-    OFFSET_PASS_MANDATORY,
+    OFFSET_TAKE_TOKENS,
+    OFFSET_USE_PRIVILEGE,
+    VALID_LINES,
+)
+from .state_encoder import (
+    BAG_END,
+    BAG_START,
+    BOARD_CELL_FEATURES,
+    BOARD_END,
+    BOARD_START,
+    CARD_FEATURES,
+    CUR_END,
+    CUR_START,
+    DECK_START,
+    MAX_CARD_ID,
+    N_BOARD_CELLS,
+    N_CARD_SLOTS,
+    N_L1,
+    N_L2,
+    N_PURCHASABLE_SLOTS,
+    N_PYRAMID,
+    N_PYRAMID_SLOTS,
+    N_RESERVED,
+    OPP_END,
+    OPP_START,
+    P_RESERVED_END,
+    P_RESERVED_START,
+    P_ROYAL_START,
+    P_SCALAR_END,
+    PENDING_END,
+    PHASE_START,
+    PLAYER_FEATURES,
+    PYRAMID_END,
+    PYRAMID_START,
+    STATE_DIM,
 )
 
 # -- Derived input widths ------------------------------------------------------
@@ -144,7 +146,7 @@ _N_MISC = sum(_MISC_WIDTHS)  # 29
 def _mlp(*dims: int) -> nn.Sequential:
     """Linear -> LayerNorm -> ReLU stack.  All layers including the last are activated."""
     layers: list[nn.Module] = []
-    for in_d, out_d in zip(dims, dims[1:]):
+    for in_d, out_d in pairwise(dims):
         layers += [nn.Linear(in_d, out_d), nn.LayerNorm(out_d), nn.ReLU()]
     return nn.Sequential(*layers)
 
