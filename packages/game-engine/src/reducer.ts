@@ -6,7 +6,7 @@ import { randomInt } from './rng';
 import { validateAction } from './validateAction';
 import { legalMoves } from './legalMoves';
 import {
-  totalTokens, netCost, canAfford, grantPrivileges,
+  totalTokens, netCost, canAfford, grantPrivileges, unlockedColors,
   checkVictory, GEM_COLORS, TOKEN_COLORS, MAX_TOKENS, MAX_RESERVED,
   CROWN_MILESTONES, CARD_LEVELS, PENALTY_SAME_COLOR_COUNT, PENALTY_PEARL_COUNT,
 } from './helpers';
@@ -267,12 +267,11 @@ function resolveAbility(state: GameState, card: Card): GameState {
 
     case 'wild':
     case 'wild and turn': {
-      // Player must own at least one Jewel Card with a GemColor to assign this wild
+      // The player must have at least one unlocked colour to assign this wild
+      // to. The card just purchased is already in `purchasedCards` by now, but
+      // it is still unassigned, so it contributes no colour of its own.
       const player = state.players[state.currentPlayer];
-      const hasColoredCard = player.purchasedCards.some(
-        ownedCard => ownedCard.id !== card.id && ownedCard.color !== null
-      );
-      if (!hasColoredCard) {
+      if (unlockedColors(player).size === 0) {
         return { ...state, pendingAbility: null };
       }
       return { ...state, phase: 'assign_wild', pendingAbility: card.ability, lastPurchasedCard: card };
@@ -478,7 +477,7 @@ export function reducer(state: GameState, incomingAction: Action): GameState {
       // toward no colour for the same-colour victory condition. A property test
       // comparing the reducer against legalMoves surfaced it.
       const isWild = card.ability === 'wild' || card.ability === 'wild and turn';
-      if (isWild && !player.purchasedCards.some(owned => owned.color !== null)) return state;
+      if (isWild && unlockedColors(player).size === 0) return state;
 
       if (!canAfford(card, player, goldUsage)) return state;
 
@@ -545,15 +544,21 @@ export function reducer(state: GameState, incomingAction: Action): GameState {
     case 'ASSIGN_WILD_COLOR': {
       if (state.phase !== 'assign_wild') return state;
       const { wildCardId, color } = action;
+
+      // Only the wild card whose ability is being resolved may be assigned, and
+      // only while it is still unassigned: the rulebook makes the assignment
+      // permanent ("cannot be changed"). Looking the card up by id alone let a
+      // client re-colour an *older* wild card instead of the pending one, which
+      // moved its bonus and its prestige to a different colour — legalMoves
+      // only ever offered `lastPurchasedCard`.
+      if (state.lastPurchasedCard?.id !== wildCardId) return state;
       const wildCard = player.purchasedCards.find(card => card.id === wildCardId);
       const isWild = wildCard?.ability === 'wild' || wildCard?.ability === 'wild and turn';
-      if (!wildCard || !isWild) return state;
+      if (!wildCard || !isWild || wildCard.assignedColor !== null) return state;
 
-      // Validate: player owns at least one Jewel Card with this color
-      const hasColor = player.purchasedCards.some(
-        card => card.id !== wildCardId && card.color === color
-      );
-      if (!hasColor) return state;
+      // Validate: the player has that colour unlocked. The pending wild is
+      // unassigned, so it cannot authorize its own colour.
+      if (!unlockedColors(player).has(color)) return state;
 
       const updatedCards = player.purchasedCards.map(card =>
         card.id === wildCardId ? { ...card, assignedColor: color } : card

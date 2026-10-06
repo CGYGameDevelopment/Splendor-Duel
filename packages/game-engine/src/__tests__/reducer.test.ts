@@ -547,38 +547,88 @@ describe('wild ability', () => {
     expect(next).toBe(s);
   });
 
-  it('rejects the purchase when all owned cards are wild or uncolored', () => {
-    const wildCard1 = makeCard({ id: 113, ability: 'wild', color: null });
-    const wildCard2 = makeCard({ id: 114, ability: 'wild', color: null });
-    const wildCard3 = makeCard({ id: 200, ability: 'wild', color: null });
+  it('rejects the purchase when every owned card is colourless', () => {
+    const unassignedWild = makeCard({ id: 113, ability: 'wild', color: null });
+    const wildToBuy = makeCard({ id: 200, ability: 'wild', color: null });
     const nullColor = makeCard({ id: 116, color: null });
 
     const state = createInitialState(false);
     const s: GameState = {
       ...state,
       phase: 'mandatory',
-      pyramid: { ...state.pyramid, level1: [wildCard3, ...state.pyramid.level1.slice(0, 4)] },
+      pyramid: { ...state.pyramid, level1: [wildToBuy, ...state.pyramid.level1.slice(0, 4)] },
       players: [
-        makePlayer({
-          purchasedCards: [
-            nullColor,
-            { ...wildCard1, assignedColor: 'red' },
-            { ...wildCard2, assignedColor: 'blue' },
-          ],
-        }),
+        makePlayer({ purchasedCards: [nullColor, unassignedWild] }),
         makePlayer(),
       ],
     };
 
-    // An already-assigned wild card does not itself count as "a Jewel Card that
-    // has a color": the engine reads intrinsic `color`, not `assignedColor`,
-    // consistently in legalMoves, the purchase guard and the assignment guard.
+    // A card with no colour unlocks nothing, and neither does a wild that has
+    // not been assigned one yet.
     expect(legalMoves(s).some(
       move => move.type === 'PURCHASE_CARD' && move.cardId === 200,
     )).toBe(false);
 
     const next = reducer(s, { type: 'PURCHASE_CARD', cardId: 200, goldUsage: {} });
     expect(next).toBe(s);
+  });
+
+  // An assigned wild card *is* a Jewel Card with a colour: once a player owns a
+  // Jewel Card of a given colour, that colour is unlocked, however the card came
+  // by it. legalMoves, the purchase guard and the assignment guard must agree.
+  it('treats an already-assigned wild as a coloured card for a later wild', () => {
+    const assignedWild = makeCard({ id: 113, ability: 'wild', color: null, assignedColor: 'red' });
+    const wildToBuy = makeCard({ id: 200, ability: 'wild', color: null, cost: {} });
+
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      phase: 'mandatory',
+      pyramid: { ...state.pyramid, level1: [wildToBuy, ...state.pyramid.level1.slice(0, 4)] },
+      players: [
+        makePlayer({ purchasedCards: [assignedWild] }),
+        makePlayer(),
+      ],
+    };
+
+    expect(legalMoves(s).some(
+      move => move.type === 'PURCHASE_CARD' && move.cardId === 200,
+    )).toBe(true);
+
+    const purchased = reducer(s, { type: 'PURCHASE_CARD', cardId: 200, goldUsage: {} });
+    expect(purchased.phase).toBe('assign_wild');
+
+    // Red is the only unlocked colour, and it came from the assigned wild.
+    const assigned = reducer(purchased, { type: 'ASSIGN_WILD_COLOR', wildCardId: 200, color: 'red' });
+    expect(assigned.players[0].purchasedCards.find(card => card.id === 200)?.assignedColor).toBe('red');
+    expect(reducer(purchased, { type: 'ASSIGN_WILD_COLOR', wildCardId: 200, color: 'blue' })).toBe(purchased);
+  });
+
+  // The assignment is permanent, so only the wild being resolved is assignable.
+  it('refuses to re-colour a wild card other than the one being resolved', () => {
+    const oldWild = makeCard({ id: 117, ability: 'wild', color: null, assignedColor: 'red' });
+    const pendingWild = makeCard({ id: 118, ability: 'wild', color: null });
+    const blueCard = makeCard({ id: 119, color: 'blue' });
+
+    const state = createInitialState(false);
+    const s: GameState = {
+      ...state,
+      phase: 'assign_wild',
+      pendingAbility: 'wild',
+      lastPurchasedCard: pendingWild,
+      players: [
+        makePlayer({ purchasedCards: [oldWild, blueCard, pendingWild] }),
+        makePlayer(),
+      ],
+    };
+
+    // Blue is unlocked, but card 117 is not the wild under resolution.
+    expect(reducer(s, { type: 'ASSIGN_WILD_COLOR', wildCardId: 117, color: 'blue' })).toBe(s);
+
+    // The pending wild still assigns normally.
+    const assigned = reducer(s, { type: 'ASSIGN_WILD_COLOR', wildCardId: 118, color: 'blue' });
+    expect(assigned.players[0].purchasedCards.find(card => card.id === 118)?.assignedColor).toBe('blue');
+    expect(assigned.players[0].purchasedCards.find(card => card.id === 117)?.assignedColor).toBe('red');
   });
 
   it('ASSIGN_WILD_COLOR is rejected if the player does not own a card with that color', () => {

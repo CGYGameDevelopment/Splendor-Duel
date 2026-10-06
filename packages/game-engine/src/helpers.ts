@@ -72,6 +72,31 @@ export function effectiveCardColor(card: Card): GemColor | null {
   return card.assignedColor ?? card.color;
 }
 
+/**
+ * The gem colors a player has "unlocked" — the distinct effective colors of the
+ * Jewel Cards in front of them.
+ *
+ * This is the set a wild card may be assigned to, and a non-empty set is what
+ * makes a wild card purchasable at all. Rulebook: "The card with the wild
+ * ability permanently becomes the colour of any Jewel Card with a colour which
+ * you have."
+ *
+ * A wild card that has *already* been assigned a color is a Jewel Card with a
+ * colour, so it unlocks that color for a later wild — once a player owns a
+ * Jewel Card of a given colour, that colour is unlocked, however the card came
+ * by it. An *unassigned* wild has no colour and unlocks nothing, which is what
+ * keeps the purchase gate meaningful: a player whose only cards are colourless
+ * still cannot buy a wild.
+ */
+export function unlockedColors(player: PlayerState): Set<GemColor> {
+  const colors = new Set<GemColor>();
+  for (const card of player.purchasedCards) {
+    const color = effectiveCardColor(card);
+    if (color) colors.add(color);
+  }
+  return colors;
+}
+
 // ─── Cost calculation ─────────────────────────────────────────────────────────
 
 /**

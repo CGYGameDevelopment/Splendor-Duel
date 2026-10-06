@@ -22,7 +22,7 @@ import type { Action, GameState } from './types';
 import { reducer } from './reducer';
 import { legalMoves } from './legalMoves';
 import { validateAction } from './validateAction';
-import { canAfford, MAX_RESERVED, totalTokens, MAX_TOKENS } from './helpers';
+import { canAfford, MAX_RESERVED, totalTokens, MAX_TOKENS, unlockedColors } from './helpers';
 
 export type ActionRejection =
   /** The payload is not a well-formed Action — wrong shape, unknown colour, bad index. */
@@ -85,7 +85,7 @@ function explainRejection(state: GameState, action: Action): string {
       if (!card) return 'That card is not in the pyramid or your reserve.';
 
       const isWild = card.ability === 'wild' || card.ability === 'wild and turn';
-      if (isWild && !player.purchasedCards.some(owned => owned.color !== null)) {
+      if (isWild && unlockedColors(player).size === 0) {
         return 'You need a card with a colour before you can buy a wild card.';
       }
       if (!canAfford(card, player, action.goldUsage)) {

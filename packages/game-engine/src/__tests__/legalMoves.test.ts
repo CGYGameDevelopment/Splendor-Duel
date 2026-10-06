@@ -2,7 +2,7 @@ import { legalMoves } from '../legalMoves';
 import { reducer } from '../reducer';
 import { createInitialState } from '../initialState';
 import { emptyPool, BOARD_SIZE } from '../helpers';
-import type { Action, GameState } from '../types';
+import type { Action, GameState, GemColor } from '../types';
 import { makeCard, makePlayer, deadlockedMandatoryState } from './fixtures';
 
 /**
@@ -424,7 +424,12 @@ describe('resolve_ability', () => {
 });
 
 describe('assign_wild', () => {
-  it('offers each distinct intrinsic color the player owns, excluding the wild itself', () => {
+  const assignColorsIn = (state: GameState): GemColor[] => legalMoves(state)
+    .filter((m): m is Extract<Action, { type: 'ASSIGN_WILD_COLOR' }> =>
+      m.type === 'ASSIGN_WILD_COLOR')
+    .map(m => m.color);
+
+  it('offers each distinct color the player owns, excluding the pending wild itself', () => {
     // Arrange
     const base = createInitialState(false, 1);
     const wild = makeCard({ id: 930, ability: 'wild', color: null });
@@ -447,14 +452,40 @@ describe('assign_wild', () => {
     };
 
     // Act
-    const colors = legalMoves(state)
-      .filter((m): m is Extract<Action, { type: 'ASSIGN_WILD_COLOR' }> =>
-        m.type === 'ASSIGN_WILD_COLOR')
-      .map(m => m.color);
+    const colors = assignColorsIn(state);
 
-    // Assert — deduplicated, and the wild contributes nothing itself.
+    // Assert — deduplicated, and the unassigned wild contributes nothing itself.
     expect(new Set(colors)).toEqual(new Set(['red', 'blue']));
     expect(colors).toHaveLength(2);
+  });
+
+  it('offers the color of an already-assigned wild card', () => {
+    // Arrange — the only coloured card the player owns is a wild assigned to
+    // black, which unlocks black for the wild now being resolved.
+    const base = createInitialState(false, 1);
+    const wild = makeCard({ id: 940, ability: 'wild', color: null });
+    const state: GameState = {
+      ...base,
+      phase: 'assign_wild',
+      pendingAbility: 'wild',
+      lastPurchasedCard: wild,
+      players: [
+        makePlayer({
+          purchasedCards: [
+            makeCard({ id: 941, ability: 'wild', color: null, assignedColor: 'black' }),
+            makeCard({ id: 942, color: null }),
+            wild,
+          ],
+        }),
+        makePlayer(),
+      ],
+    };
+
+    // Act
+    const colors = assignColorsIn(state);
+
+    // Assert
+    expect(colors).toEqual(['black']);
   });
 });
 
