@@ -10,12 +10,13 @@ from __future__ import annotations
 import csv
 import time
 from pathlib import Path
+from pickle import UnpicklingError
 
 import numpy as np
 import requests
 import torch
-import torch.optim as optim
 import typer
+from torch import optim
 
 from .env import VecSplendorDuelEnv
 from .evaluate import win_rate_vs_greedy, win_rate_vs_model, win_rate_vs_random
@@ -26,10 +27,29 @@ from .self_play import OpponentPool, RolloutCollector
 app = typer.Typer(add_completion=False)
 
 
+# Resolved once at import rather than inside the CLI signature: a call in a
+# parameter default is evaluated at definition time anyway, so a constant says
+# so plainly -- packages/ai-trainer/checkpoints, three levels up from this file.
+_DEFAULT_CHECKPOINT_DIR = Path(__file__).resolve().parent.parent.parent / "checkpoints"
+
 # v7: pointer policy heads (board actions computed from the cells they name,
 # card actions from card embeddings), residual trunk, dropout removed.  Every
 # weight shape changed again, so v6 checkpoints cannot be loaded.
 CHECKPOINT_VERSION = 7
+
+# torch.load raises any of the first four on a truncated or corrupt archive; the
+# last three cover a best.pt whose payload is not the mapping this file writes
+# (`.get` on a non-mapping, `float()` on a non-numeric win rate). Anything else
+# is a bug worth surfacing, so it is deliberately left to propagate.
+_CHECKPOINT_READ_ERRORS = (
+    OSError,
+    RuntimeError,
+    EOFError,
+    UnpicklingError,
+    AttributeError,
+    TypeError,
+    ValueError,
+)
 
 # Transient network errors get retried with exponential backoff before the
 # run surrenders.  HTTP errors from the server (4xx/5xx) are not retried --
@@ -123,9 +143,7 @@ def main(
     eval_games: int = typer.Option(200, help="Games per baseline evaluation"),
     checkpoint_every: int = typer.Option(5, help="Save latest checkpoint every N iterations"),
     sim_url: str = typer.Option("http://127.0.0.1:3002", help="game-sim server URL"),
-    checkpoint_dir: Path = typer.Option(
-        Path(__file__).resolve().parent.parent.parent / "checkpoints", help="Checkpoint directory"
-    ),
+    checkpoint_dir: Path = typer.Option(_DEFAULT_CHECKPOINT_DIR, help="Checkpoint directory"),
     lr: float = typer.Option(3e-4, help="Learning rate"),
     lr_decay: bool = typer.Option(True, help="Linearly decay LR to 0 across the run"),
     entropy_coef: float = typer.Option(0.01, help="Initial entropy regularization coefficient"),
@@ -262,8 +280,16 @@ def main(
                     "its win rate is not comparable to the current model.",
                     err=True,
                 )
-        except Exception:
-            pass
+        except _CHECKPOINT_READ_ERRORS as exc:
+            # An unreadable best.pt is not worth ending a training run over -- the
+            # bar simply starts unset -- but it is worth saying so: silently
+            # swallowing this looks identical to a first run with no best.pt, and
+            # the next save would then overwrite a file that may be recoverable.
+            typer.echo(
+                f"Could not read {best_ckpt_path.name} ({type(exc).__name__}: {exc}); "
+                "starting with no best win rate.",
+                err=True,
+            )
 
     log_path = checkpoint_dir / "training_log.csv"
     log_existed = log_path.exists()

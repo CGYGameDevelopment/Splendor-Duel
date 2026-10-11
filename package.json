@@ -10,7 +10,10 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "test": "npm run test --workspaces --if-present",
-    "verify": "npm run build && npm run typecheck && npm run lint && npm test"
+    "lint:python": "cd packages/ai-trainer && ruff check . && black --check .",
+    "test:python": "cd packages/ai-trainer && python -m pytest",
+    "verify:python": "npm run lint:python && npm run test:python",
+    "verify": "npm run build && npm run typecheck && npm run lint && npm test && npm run verify:python"
   },
   "devDependencies": {
     "@eslint/js": "^9.12.0",

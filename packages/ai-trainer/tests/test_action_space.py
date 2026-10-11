@@ -14,7 +14,7 @@ scripts/generate_action_fixture.js, and CI regenerates it and fails on a diff.
 from __future__ import annotations
 
 import json
-from itertools import combinations
+from itertools import combinations, pairwise
 from pathlib import Path
 
 import pytest
@@ -94,7 +94,7 @@ def test_every_valid_line_is_a_straight_unbroken_run():
         delta = (coords[1][0] - coords[0][0], coords[1][1] - coords[0][1])
         assert abs(delta[0]) <= 1 and abs(delta[1]) <= 1
         assert delta != (0, 0)
-        for previous, current in zip(coords, coords[1:]):
+        for previous, current in pairwise(coords):
             assert (current[0] - previous[0], current[1] - previous[1]) == delta
 
 
@@ -112,7 +112,7 @@ def test_no_invalid_line_sneaks_into_the_vocabulary():
                 continue
             if all(
                 (current[0] - previous[0], current[1] - previous[1]) == delta
-                for previous, current in zip(coords, coords[1:])
+                for previous, current in pairwise(coords)
             ):
                 expected.add(combo)
 

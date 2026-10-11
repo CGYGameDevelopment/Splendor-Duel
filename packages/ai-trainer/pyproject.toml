@@ -34,6 +34,13 @@ testpaths = ["tests"]
 line-length = 100
 src = ["src", "tests"]
 
+[tool.ruff.lint.flake8-bugbear]
+# Typer reads a parameter's default to build the CLI: `typer.Option(...)` and
+# `typer.Argument(...)` in a default *are* the framework's interface, not the
+# accidental-shared-mutable-state that B008 exists to catch. There is no way to
+# express a Typer command without them, so they are treated as immutable calls.
+extend-immutable-calls = ["typer.Option", "typer.Argument"]
+
 [tool.black]
 line-length = 100
 # requires-python is >=3.11; without this Black assumes the newest grammar it
