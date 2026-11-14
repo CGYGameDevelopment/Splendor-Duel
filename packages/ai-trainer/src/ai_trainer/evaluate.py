@@ -9,6 +9,16 @@ Two things differ from the earlier revision:
   weaker player than the one being saved.
 * Games are run through a VecSplendorDuelEnv.  A 100-game evaluation is ~35,000
   engine calls; batching turns that into ~350 round trips.
+
+Seeded, paired deals
+--------------------
+With fresh random deals every time, two checkpoints were measured on different
+games, and a 200-game win rate carries about +/-3.5 points of sampling noise --
+enough to crown a "best" model on luck.  Evaluations now take a seed: game k
+is dealt from `deal_seeds(seed, n)[k // 2]` with the seats swapped between the
+two games of each pair.  Every checkpoint then plays the same deals, from both
+seats, which removes the deal and the seat from the comparison and leaves only
+the difference between the players.
 """
 
 from __future__ import annotations
@@ -97,42 +107,59 @@ def greedy_purchase_policy(seed: int | None = None) -> BaselinePolicy:
 # -- Match runner --------------------------------------------------------------
 
 
+def deal_seeds(seed: int, n_games: int) -> list[int]:
+    """The deal seeds for an n_games evaluation: one per pair of games."""
+    rng = np.random.default_rng(seed)
+    return [int(x) for x in rng.integers(0, 2**31 - 1, size=(n_games + 1) // 2)]
+
+
 def _play_matches(
     env: VecSplendorDuelEnv,
     n_games: int,
     policy_a: Policy,
     policy_b: Policy,
     max_steps: int = MAX_EVAL_STEPS,
+    seed: int | None = None,
 ) -> tuple[int, int, int, int, int]:
     """
-    Play n_games between policy_a and policy_b, alternating seats.
+    Play n_games between policy_a and policy_b.
+
+    Game k puts policy_a in seat k % 2.  With `seed`, games 2j and 2j+1 share
+    one deal, so each deal is played from both seats; without it every game is
+    dealt at random.
 
     Returns (wins_a, wins_a_as_p0, games_as_p0, wins_a_as_p1, games_as_p1).
     Games that hit max_steps count as neither side's win.
     """
     assert n_games > 0
-    env.reset_all()
-    n_slots = env.n_envs
+    seeds = deal_seeds(seed, n_games) if seed is not None else None
+    schedule: list[tuple[int | None, int]] = [
+        (seeds[k // 2] if seeds else None, k % 2) for k in range(n_games)
+    ]
 
-    # Seat that policy_a occupies in the game currently held by each slot.
-    a_seat: list[int] = []
+    n_slots = env.n_envs
+    # Index into `schedule` of the game each slot is playing; None = idle.
+    slot_game: list[int | None] = [k if k < n_games else None for k in range(n_slots)]
+    env.reset_all(seeds=[schedule[k][0] if k is not None else None for k in slot_game])
+    next_game = min(n_slots, n_games)
     steps = [0] * n_slots
-    dealt = 0
-    for _ in range(n_slots):
-        a_seat.append(dealt % 2)
-        dealt += 1
 
     wins_a = wins_p0 = wins_p1 = games_p0 = games_p1 = 0
     completed = 0
 
+    def seat_of(slot: int) -> int:
+        game = slot_game[slot]
+        assert game is not None
+        return schedule[game][1]
+
     while completed < n_games:
-        active = [i for i in env.active_slots() if steps[i] < max_steps]
+        active = [i for i in env.active_slots() if slot_game[i] is not None]
         if not active:
             break
 
         # Split by which policy is on turn, so each side acts on a full batch.
-        slots_a = [i for i in active if env.slots[i].current_player == a_seat[i]]
-        slots_b = [i for i in active if env.slots[i].current_player != a_seat[i]]
+        slots_a = [i for i in active if env.slots[i].current_player == seat_of(i)]
+        slots_b = [i for i in active if env.slots[i].current_player != seat_of(i)]
 
         chosen: dict[int, int] = {}
         if slots_a:
@@ -140,10 +167,10 @@ def _play_matches(
         if slots_b:
             chosen.update(dict(zip(slots_b, policy_b.act(env, slots_b))))
 
-        ordered = [chosen[i] for i in active]
-        results = env.step(active, ordered)
+        results = env.step(active, [chosen[i] for i in active])
 
         to_reset: list[int] = []
+        reset_seeds: list[int | None] = []
         for slot in active:
             steps[slot] += 1
             result = results[slot]
@@ -151,31 +178,28 @@ def _play_matches(
             if not (result.done or timed_out):
                 continue
 
-            seat = a_seat[slot]
+            seat = seat_of(slot)
+            won = result.done and result.winner == seat
             if seat == 0:
                 games_p0 += 1
+                wins_p0 += int(won)
             else:
                 games_p1 += 1
-            if result.done and result.winner == seat:
-                wins_a += 1
-                if seat == 0:
-                    wins_p0 += 1
-                else:
-                    wins_p1 += 1
-
+                wins_p1 += int(won)
+            wins_a += int(won)
             completed += 1
-            if completed >= n_games:
-                break
-            if dealt < n_games:
-                a_seat[slot] = dealt % 2
-                dealt += 1
+
+            if next_game < n_games:
+                slot_game[slot] = next_game
                 steps[slot] = 0
                 to_reset.append(slot)
+                reset_seeds.append(schedule[next_game][0])
+                next_game += 1
+            else:
+                slot_game[slot] = None
 
-        if completed >= n_games:
-            break
         if to_reset:
-            env.reset_slots(to_reset)
+            env.reset_slots(to_reset, seeds=reset_seeds)
 
     return wins_a, wins_p0, games_p0, wins_p1, games_p1
 
@@ -209,10 +233,15 @@ def win_rate_vs_greedy(
     """
     Play n_games against the greedy-purchase agent and return the model's win rate.
 
-    The model plays greedily and alternates seats to cancel first-player bias.
+    The model plays greedily.  With `seed`, the deals and the baseline's
+    tie-breaking are fixed, so the result is comparable across checkpoints.
     """
     wins, w0, g0, w1, g1 = _play_matches(
-        env, n_games, ModelPolicy(model, device, greedy=True), greedy_purchase_policy(seed)
+        env,
+        n_games,
+        ModelPolicy(model, device, greedy=True),
+        greedy_purchase_policy(seed),
+        seed=seed,
     )
     _warn_on_seat_bias("win_rate_vs_greedy", w0, g0, w1, g1)
     return wins / n_games
@@ -223,15 +252,11 @@ def win_rate_vs_random(
     env: VecSplendorDuelEnv,
     n_games: int = 50,
     device: torch.device | None = None,
-    seed: int = 0,
+    seed: int | None = 0,
 ) -> float:
-    """
-    Play n_games against a random agent and return the model's win rate.
-
-    A fixed RNG seed keeps results comparable across checkpoints.
-    """
+    """Play n_games against a random agent and return the model's win rate."""
     wins, w0, g0, w1, g1 = _play_matches(
-        env, n_games, ModelPolicy(model, device, greedy=True), random_policy(seed)
+        env, n_games, ModelPolicy(model, device, greedy=True), random_policy(seed), seed=seed
     )
     _warn_on_seat_bias("win_rate_vs_random", w0, g0, w1, g1)
     return wins / n_games
@@ -243,12 +268,19 @@ def win_rate_vs_model(
     env: VecSplendorDuelEnv,
     n_games: int = 50,
     device: torch.device | None = None,
+    seed: int | None = None,
 ) -> float:
-    """Play n_games between model_a and model_b; returns model_a's win rate."""
+    """
+    Play n_games between model_a and model_b; returns model_a's win rate.
+
+    Both play greedily, so with `seed` the whole match is deterministic and a
+    rematch gives the same number.
+    """
     wins, _, _, _, _ = _play_matches(
         env,
         n_games,
         ModelPolicy(model_a, device, greedy=True),
         ModelPolicy(model_b, device, greedy=True),
+        seed=seed,
     )
     return wins / n_games

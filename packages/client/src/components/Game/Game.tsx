@@ -197,8 +197,7 @@ export function Game({ session }: GameProps) {
           )}
         </div>
         <div className={styles.headerMeta}>
-          <span>Session <strong>{info.sessionId}</strong></span>
-          <span>Player <strong>{myPlayerId}</strong></span>
+          Session <strong>{info.sessionId}</strong>
         </div>
       </div>
 
@@ -206,7 +205,7 @@ export function Game({ session }: GameProps) {
         <GameOver state={state} myPlayerId={myPlayerId} onPlayAgain={reset} />
       ) : (
         <div className={styles.layout}>
-          <div className={styles.opponentSlot}>
+          <div className={styles.players}>
             <PlayerArea
               state={state}
               legal={legal}
@@ -218,50 +217,6 @@ export function Game({ session }: GameProps) {
               onBuyReserved={() => { /* opponent's reserved are hidden */ }}
               onTakeOpponentToken={onTakeOpponentToken}
             />
-          </div>
-
-          <div className={styles.stage}>
-            <Pyramid
-              state={state}
-              legal={legal}
-              isMyTurn={isMyTurn}
-              onBuyCard={onBuyCard}
-              onReservePyramidCard={onReservePyramidCard}
-              onReserveDeckTop={onReserveDeckTop}
-            />
-
-            <div className={styles.tableInfo}>
-              <span className={styles.tableStat}>Privileges on table <strong>{state.privileges}</strong></span>
-              <span className={styles.tableStat}>Bag <strong>{bagTotal}</strong></span>
-            </div>
-
-            <div className={styles.stageLower}>
-              <Board
-                board={state.board}
-                selected={new Set(tokenSelection.selected)}
-                clickable={cellInteraction.clickable}
-                dimmed={cellInteraction.dimmed}
-                onCellClick={cellInteraction.onClick}
-              />
-              <TurnControls
-                state={state}
-                legal={legal}
-                isMyTurn={isMyTurn}
-                canUndo={info.canUndo}
-                selectionLength={tokenSelection.selected.length}
-                canConfirmTake={tokenSelection.canConfirm}
-                errorMessage={info.errorMessage}
-                onConfirmTake={onConfirmTake}
-                onCancelTake={tokenSelection.clear}
-                onUndo={undo}
-                onDispatch={dispatch}
-                privilegeModeOn={privilegeModeOn}
-                togglePrivilegeMode={() => setPrivilegeModeOn(v => !v)}
-              />
-            </div>
-          </div>
-
-          <div className={styles.youSlot}>
             <PlayerArea
               state={state}
               legal={legal}
@@ -274,7 +229,46 @@ export function Game({ session }: GameProps) {
             />
           </div>
 
-          <div className={styles.rail}>
+          <div className={styles.stage}>
+            <Pyramid
+              state={state}
+              legal={legal}
+              isMyTurn={isMyTurn}
+              onBuyCard={onBuyCard}
+              onReservePyramidCard={onReservePyramidCard}
+              onReserveDeckTop={onReserveDeckTop}
+            />
+          </div>
+
+          <div className={styles.table}>
+            <div className={`surface ${styles.boardPanel}`}>
+              <Board
+                board={state.board}
+                selected={new Set(tokenSelection.selected)}
+                clickable={cellInteraction.clickable}
+                dimmed={cellInteraction.dimmed}
+                onCellClick={cellInteraction.onClick}
+              />
+              <div className={styles.tableInfo}>
+                <span>Bag <strong>{bagTotal}</strong></span>
+                <span>Privileges on table <strong>{state.privileges}</strong></span>
+              </div>
+            </div>
+            <TurnControls
+              state={state}
+              legal={legal}
+              isMyTurn={isMyTurn}
+              canUndo={info.canUndo}
+              selectionLength={tokenSelection.selected.length}
+              canConfirmTake={tokenSelection.canConfirm}
+              errorMessage={info.errorMessage}
+              onConfirmTake={onConfirmTake}
+              onCancelTake={tokenSelection.clear}
+              onUndo={undo}
+              onDispatch={dispatch}
+              privilegeModeOn={privilegeModeOn}
+              togglePrivilegeMode={() => setPrivilegeModeOn(v => !v)}
+            />
             <RoyalCards state={state} />
           </div>
         </div>

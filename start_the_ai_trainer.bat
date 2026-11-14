@@ -163,8 +163,8 @@ echo ==============================================
 echo.
 set /p ITERS="  Number of iterations        [default: 500]:  "
 if "%ITERS%"=="" set ITERS=500
-set /p EPS="  Episodes per iteration      [default: 20]:   "
-if "%EPS%"=="" set EPS=20
+set /p TPI="  Transitions per iteration   [default: 16384]: "
+if "%TPI%"=="" set TPI=16384
 set /p LR="  Learning rate               [default: 3e-4]: "
 if "%LR%"=="" set LR=3e-4
 goto START_TRAINING_CUSTOM
@@ -245,12 +245,12 @@ call :LOG_EXIT
 goto END
 
 :RUN_CUSTOM
-echo   Starting fresh training: %ITERS% iters, %EPS% eps/iter, lr=%LR%...
+echo   Starting fresh training: %ITERS% iters, %TPI% transitions/iter, lr=%LR%...
 echo.
 call :CHECK_TRAIN_CMD
 if %ERRORLEVEL% neq 0 goto ERROR_NOTFOUND
-call :LOG_START "custom training: %ITERS% iters, %EPS% eps, lr=%LR%"
-train --iterations %ITERS% --episodes-per-iter %EPS% --lr %LR% --checkpoint-dir %CHECKPOINT_DIR%
+call :LOG_START "custom training: %ITERS% iters, %TPI% transitions, lr=%LR%"
+train --iterations %ITERS% --transitions-per-iter %TPI% --lr %LR% --checkpoint-dir %CHECKPOINT_DIR%
 call :LOG_EXIT
 goto END
 

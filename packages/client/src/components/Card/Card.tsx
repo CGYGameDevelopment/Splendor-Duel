@@ -1,143 +1,120 @@
-import type { Card as CardType, GemColor, TokenColor } from '@splendor-duel/game-engine';
-import { TOKEN_COLORS } from '@splendor-duel/game-engine';
-import { Token } from '../Token/Token';
+import type { Card as CardType, CardAbility, GemColor, TokenColor } from '@splendor-duel/game-engine';
+import { TOKEN_COLORS, effectiveCardColor } from '@splendor-duel/game-engine';
+import { Gem } from '../Gem/Gem';
 import styles from './Card.module.css';
-
-export type CardSize = 'sm' | 'md' | 'lg';
 
 export interface CardProps {
   card: CardType;
-  size?: CardSize;
   canBuy?: boolean;
   canReserve?: boolean;
   onBuy?: () => void;
   onReserve?: () => void;
-  onClick?: () => void;       // generic click (used for choose-royal etc.)
 }
 
-const ABILITY_LABEL: Record<string, string> = {
-  Turn: '↻ Extra turn',
-  Token: '◈ Take token',
-  Take: '✋ Steal',
-  Privilege: '📜 Privilege',
-  wild: '✦ Wild',
-  'wild and turn': '✦ Wild · ↻',
+/**
+ * The wild half of an ability is already shown by the card's band ("Wild" until
+ * a colour is assigned, the colour itself afterwards), so only the remainder
+ * needs a label.
+ */
+const ABILITY_LABEL: Record<CardAbility, string | null> = {
+  Turn: 'Extra turn',
+  Token: 'Take gem',
+  Take: 'Steal',
+  Privilege: 'Privilege',
+  wild: null,
+  'wild and turn': 'Extra turn',
 };
 
 /**
- * The outer shell owns the perspective, the inner element does the rotating.
- * They have to be separate: a transform on the same element the perspective is
- * declared on is not projected by it.
+ * A jewel card.
+ *
+ * Every dimension inside the card is a multiple of `--card-w`, which the
+ * container sets. That is what lets the same component serve the pyramid and
+ * the reserved row at different sizes without a size prop.
+ *
+ * Layout mirrors the physical card: a band in the card's colour carrying the
+ * prestige and the bonus, crowns and ability in the middle, cost along the
+ * bottom.
  */
-export function Card({ card, size = 'md', canBuy, canReserve, onBuy, onReserve, onClick }: CardProps) {
-  const effectiveColor: GemColor | null = card.assignedColor ?? card.color;
-  const colorClass = effectiveColor ?? 'none';
+export function Card({ card, canBuy, canReserve, onBuy, onReserve }: CardProps) {
+  const color: GemColor | null = effectiveCardColor(card);
+  const abilityLabel = card.ability ? ABILITY_LABEL[card.ability] : null;
+  const hasActions = (canBuy && onBuy) || (canReserve && onReserve);
 
   const cls = [
     styles.card,
-    styles[`size-${size}`],
-    styles[colorClass],
-    onClick && styles.clickable,
-    canBuy && canReserve ? styles.both : canBuy ? styles.affordable : canReserve ? styles.reservable : '',
+    styles[color ?? 'wild'],
+    canBuy && styles.affordable,
   ].filter(Boolean).join(' ');
 
   const costEntries = TOKEN_COLORS
     .map(c => [c, card.cost[c] ?? 0] as [TokenColor, number])
     .filter(([, n]) => n > 0);
 
-  const tokenSize = size === 'lg' ? 'md' : 'sm';
-
   return (
-    <div className={styles.cardShell}>
-      <div className={cls} onClick={onClick}>
-        <div className={styles.body}>
-          <div className={styles.header}>
-            <span className={styles.points}>{card.points > 0 ? card.points : ''}</span>
-            {card.crowns > 0 && <span className={styles.crowns}>👑{card.crowns}</span>}
-          </div>
-
-          <div className={styles.bonus}>
-            {effectiveColor !== null && card.bonus > 0 && (
-              Array.from({ length: card.bonus }).map((_, i) => (
-                <Token key={i} color={effectiveColor} size={tokenSize} />
-              ))
-            )}
-            {effectiveColor === null && <span className={styles.wildMark}>✦</span>}
-          </div>
-
-          {card.ability && (
-            <div className={styles.ability}>{ABILITY_LABEL[card.ability] ?? card.ability}</div>
-          )}
-
-          <div className={styles.cost}>
-            {costEntries.length === 0
-              ? <span className={styles.costEmpty}>Free</span>
-              : costEntries.map(([c, n]) => (
-                  <Token key={c} color={c} size={tokenSize} count={n > 1 ? n : undefined} />
-                ))
-            }
-          </div>
-        </div>
-
-        {(canBuy || canReserve) && (onBuy || onReserve) && (
-          <div className={styles.actions} onClick={e => e.stopPropagation()}>
-            {canBuy && onBuy && <button className="primary" onClick={onBuy}>Buy</button>}
-            {canReserve && onReserve && <button onClick={onReserve}>Reserve</button>}
-          </div>
-        )}
+    <div className={cls}>
+      <div className={styles.band}>
+        <span className={styles.points}>{card.points > 0 ? card.points : ''}</span>
+        <span className={styles.bonus}>
+          {color === null
+            ? <span className={styles.wildMark}>Wild</span>
+            : Array.from({ length: card.bonus }).map((_, i) => (
+                <Gem key={i} color={color} size="sm" label={`${color} bonus`} />
+              ))}
+        </span>
       </div>
+
+      <div className={styles.middle}>
+        {card.crowns > 0 && (
+          <span className={styles.crowns} title={`${card.crowns} crown${card.crowns === 1 ? '' : 's'}`}>
+            {'♛'.repeat(card.crowns)}
+          </span>
+        )}
+        {abilityLabel && <span className={styles.ability}>{abilityLabel}</span>}
+      </div>
+
+      <div className={styles.cost}>
+        {costEntries.map(([c, n]) => (
+          <span key={c} className={`${styles.pip} ${styles[`pip-${c}`]}`} title={`${n} ${c}`}>{n}</span>
+        ))}
+      </div>
+
+      {hasActions && (
+        <div className={styles.actions}>
+          {canBuy && onBuy && <button className="primary" onClick={onBuy}>Buy</button>}
+          {canReserve && onReserve && <button onClick={onReserve}>Reserve</button>}
+        </div>
+      )}
     </div>
   );
 }
 
-// ─── Card-back (face-down deck) ──────────────────────────────────────────────
+// ─── Face-down deck ──────────────────────────────────────────────────────────
 
 export interface CardBackProps {
   level: 1 | 2 | 3;
   remaining: number;
   canReserve?: boolean;
   onReserve?: () => void;
-  size?: CardSize;
 }
 
-export function CardBack({ level, remaining, canReserve, onReserve, size = 'md' }: CardBackProps) {
-  const cls = [
-    styles.card,
-    styles.back,
-    styles[`size-${size}`],
-    canReserve && styles.reservable,
-  ].filter(Boolean).join(' ');
-
+export function CardBack({ level, remaining, canReserve, onReserve }: CardBackProps) {
   return (
-    <div className={`${styles.cardShell} ${styles.deckStack}`}>
-      <div className={cls}>
-        <div className={styles.backInner}>
-          <span className={styles.backLevel}>{level}</span>
-          {/* One pip per level: the deck's rank without relying on the numeral. */}
-          <span className={styles.backPips}>
-            {Array.from({ length: level }).map((_, i) => (
-              <span key={i} className={styles.backPip} />
-            ))}
-          </span>
-          <span className={styles.backCount}>{remaining} left</span>
+    <div className={`${styles.card} ${styles.back}`} data-level={level}>
+      <span className={styles.backLabel}>Level</span>
+      <span className={styles.backLevel}>{level}</span>
+      <span className={styles.backCount}>{remaining} left</span>
+      {canReserve && onReserve && (
+        <div className={styles.actions}>
+          <button onClick={onReserve}>Reserve top</button>
         </div>
-        {canReserve && onReserve && (
-          <div className={styles.actions} onClick={e => e.stopPropagation()}>
-            <button onClick={onReserve}>Reserve top</button>
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 }
 
 // ─── Empty pyramid slot ─────────────────────────────────────────────────────
 
-export function EmptyCardSlot({ size = 'md' }: { size?: CardSize }) {
-  const cls = [styles.card, styles.empty, styles[`size-${size}`]].join(' ');
-  return (
-    <div className={styles.cardShell}>
-      <div className={cls}>Empty</div>
-    </div>
-  );
+export function EmptyCardSlot() {
+  return <div className={`${styles.card} ${styles.empty}`} />;
 }

@@ -50,9 +50,9 @@ export function TurnControls({
 }: TurnControlsProps) {
   if (!isMyTurn) {
     return (
-      <div className={styles.controls}>
+      <div className={`surface ${styles.controls}`}>
         <div className={styles.phaseLine}>
-          Phase:<strong>{PHASE_LABEL[state.phase] ?? state.phase}</strong>
+          <strong>{PHASE_LABEL[state.phase] ?? state.phase}</strong>
         </div>
         <div className={styles.hint}>Waiting for opponent...</div>
       </div>
@@ -64,9 +64,9 @@ export function TurnControls({
   const replenish = legal.replenish;
 
   return (
-    <div className={styles.controls}>
+    <div className={`surface ${styles.controls}`}>
       <div className={styles.phaseLine}>
-        Phase:<strong>{PHASE_LABEL[state.phase] ?? state.phase}</strong>
+        <strong>{PHASE_LABEL[state.phase] ?? state.phase}</strong>
         {state.pendingAbility && <> · ability: <strong>{state.pendingAbility}</strong></>}
       </div>
 
@@ -76,7 +76,7 @@ export function TurnControls({
         <div className={styles.row}>
           <span className={styles.hint}>
             {selectionLength === 0
-              ? 'Click gems on the board to take a line of 1–3, or click a card to buy/reserve.'
+              ? 'Pick 1–3 gems in a line on the board, or hover a card to buy or reserve it.'
               : `Selected ${selectionLength} gem${selectionLength === 1 ? '' : 's'}.`}
           </span>
           {selectionLength > 0 && (

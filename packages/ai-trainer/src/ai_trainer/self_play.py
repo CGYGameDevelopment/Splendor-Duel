@@ -30,6 +30,8 @@ valid value targets -- but the policy loss skips them, because their actions
 did not come from the policy being optimised.  The learner's value head is
 evaluated on *every* state, including opponent-played ones, so the whole GAE
 chain speaks in one value function.
+
+See OpponentPool for how snapshots are retained.
 """
 
 from __future__ import annotations
@@ -90,23 +92,39 @@ class Episode:
 
 class OpponentPool:
     """
-    Bounded FIFO of past model snapshots, kept on CPU.
+    Bounded league of past model snapshots, kept on CPU.
 
     Snapshots are state dicts rather than live modules: the pool may hold many
     more entries than are ever instantiated at once, and only a handful get
     materialised per collection call.
+
+    Eviction keeps history.  A plain FIFO of 8 snapshots taken every 10
+    iterations only ever spans the last 80 iterations, so a strategy the agent
+    abandoned 100 iterations ago is never faced again -- exactly the forgetting
+    the pool exists to prevent.  Instead the newest half of the pool is
+    protected, and on overflow one of the *older* snapshots is evicted at
+    random.  An old snapshot then survives with steadily decreasing
+    probability, so the pool keeps a recent core plus a thinning tail reaching
+    back towards the start of the run.
     """
 
-    def __init__(self, max_size: int = 8) -> None:
+    def __init__(self, max_size: int = 8, rng: np.random.Generator | None = None) -> None:
         assert max_size >= 1
         self.max_size = max_size
+        self.rng = rng or np.random.default_rng()
         self._snapshots: list[dict] = []
+
+    @property
+    def _protected(self) -> int:
+        """How many of the newest snapshots are never evicted."""
+        return max(1, self.max_size // 2)
 
     def add(self, model: ActorCriticNet) -> None:
         snapshot = {k: v.detach().to("cpu").clone() for k, v in model.state_dict().items()}
         self._snapshots.append(snapshot)
         if len(self._snapshots) > self.max_size:
-            self._snapshots.pop(0)
+            evictable = len(self._snapshots) - self._protected
+            self._snapshots.pop(int(self.rng.integers(evictable)))
 
     def sample(self, rng: np.random.Generator) -> dict | None:
         if not self._snapshots:

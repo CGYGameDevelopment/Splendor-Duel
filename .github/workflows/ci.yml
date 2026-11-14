@@ -53,11 +53,13 @@ jobs:
         with:
           python-version: '3.11'
 
-      # The action-space tests need numpy only. torch is a multi-hundred-megabyte
-      # download and nothing under test imports it, so the dev extra is installed
-      # without the project's runtime dependencies.
-      - name: Install dev tooling
-        run: pip install numpy pytest ruff black
+      # The model, PPO, opponent-pool and evaluation tests need torch. The
+      # CPU-only wheel is a fraction of the default CUDA build's download, and
+      # without it those tests would skip silently rather than run.
+      - name: Install dependencies
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install numpy requests pytest ruff black
 
       - name: Lint
         run: ruff check .

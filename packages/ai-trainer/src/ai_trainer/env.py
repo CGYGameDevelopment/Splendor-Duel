@@ -101,27 +101,36 @@ class VecSplendorDuelEnv:
 
     # -- Lifecycle -------------------------------------------------------------
 
-    def reset_all(self) -> None:
-        """Start (or restart) every slot in a single request."""
+    def reset_all(self, seeds: list[int | None] | None = None) -> None:
+        """
+        Start (or restart) every slot in a single request.
+
+        `seeds`, one per slot, deals specific games (None = random); evaluation
+        uses it so every checkpoint is measured on the same deals.
+        """
         session_ids = [s.session_id for s in self.slots] if self.slots else None
         results = self.client.reset_batch(
             session_ids=session_ids,
             count=None if session_ids else self.n_envs,
             auto_advance=self._auto_advance,
             compact=True,
+            seeds=seeds,
         )
         if not self.slots:
             self.slots = [_Slot(session_id=r["sessionId"]) for r in results]
         for i, result in enumerate(results):
             self._install(i, result["state"], result["legalMoves"], done=False, winner=None)
 
-    def reset_slots(self, slots: list[int]) -> None:
+    def reset_slots(self, slots: list[int], seeds: list[int | None] | None = None) -> None:
         """Restart the given slots in a single request, reusing their session ids."""
         if not slots:
             return
         session_ids = [self.slots[i].session_id for i in slots]
         results = self.client.reset_batch(
-            session_ids=session_ids, auto_advance=self._auto_advance, compact=True
+            session_ids=session_ids,
+            auto_advance=self._auto_advance,
+            compact=True,
+            seeds=seeds,
         )
         for i, result in zip(slots, results):
             self._install(i, result["state"], result["legalMoves"], done=False, winner=None)

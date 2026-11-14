@@ -1,22 +1,25 @@
 /*
  * Table layout.
  *
- * The old grid gave the three columns equal weight, which pushed the token
- * board below the fold on a 1080p screen while leaving the right column almost
- * empty. The board is the thing players look at most, so it and the pyramid now
- * own a centre stage that spans the full height, with the two player panels
- * stacked in a narrow left rail and the reference material in a narrower right
- * one.
+ * Three columns sized to their content: both player panels on the left, the
+ * pyramid in the middle, and the token board with its controls on the right.
+ * On a desktop screen the whole game is visible without scrolling — the
+ * pyramid sizes its cards from the space this grid leaves it (--pyramid-avail).
  */
 
 .gameRoot {
+  --side-l: 300px;
+  --side-r: 318px;
+  --gutter: 14px;
+  --page-pad: 18px;
+
   min-height: 100vh;
-  max-width: 1680px;
+  max-width: 1500px;
   margin: 0 auto;
-  padding: 14px 20px 28px;
+  padding: 12px var(--page-pad) 20px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 /* ─── Header ─────────────────────────────────────────────────────────────── */
@@ -27,7 +30,7 @@
   align-items: center;
   gap: 16px;
   flex-wrap: wrap;
-  padding-bottom: 12px;
+  padding-bottom: 10px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -39,21 +42,14 @@
 
 .topBar h1 {
   font-family: var(--font-display);
-  font-size: 25px;
+  font-size: 21px;
   font-weight: 700;
   letter-spacing: 0.5px;
   margin: 0;
-  /* Gold leaf: a gradient clipped to the glyphs. */
-  background: linear-gradient(180deg, #ffe9b0 0%, var(--accent) 55%, #9c6c1d 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--accent);
 }
 
 .headerMeta {
-  display: flex;
-  align-items: center;
-  gap: 16px;
   font-size: 12px;
   color: var(--text-dim);
 }
@@ -81,9 +77,7 @@
 
 .turnMine {
   color: #16300f;
-  background: linear-gradient(180deg, #8ad99d 0%, var(--success) 100%);
-  border-color: #a7e6b6;
-  box-shadow: 0 0 18px -3px rgba(95, 194, 126, 0.65);
+  background: var(--success);
 }
 
 .turnTheirs {
@@ -111,97 +105,62 @@
 /* ─── Main grid ──────────────────────────────────────────────────────────── */
 
 .layout {
+  --pyramid-avail: calc(
+    min(100vw, 1500px) - 2 * var(--page-pad) - var(--side-l) - var(--side-r) - 2 * var(--gutter)
+  );
+
   display: grid;
-  grid-template-areas:
-    "opponent stage rail"
-    "you      stage rail";
-  grid-template-columns: minmax(248px, 292px) minmax(0, 1fr) minmax(198px, 236px);
-  grid-template-rows: auto 1fr;
-  gap: 16px;
+  grid-template-columns: var(--side-l) minmax(0, 1fr) var(--side-r);
+  gap: var(--gutter);
   align-items: start;
 }
 
-.opponentSlot { grid-area: opponent; }
-.youSlot { grid-area: you; }
-.rail { grid-area: rail; display: flex; flex-direction: column; gap: 12px; }
-
-.stage {
-  grid-area: stage;
+.players,
+.table {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 10px;
+  gap: var(--gutter);
   min-width: 0;
 }
 
-/*
- * Board and turn controls sit side by side: the board is roughly square and the
- * controls are a tall narrow column, so stacking them wasted the width the
- * pyramid had already claimed.
- */
-.stageLower {
-  display: flex;
-  gap: 18px;
-  align-items: flex-start;
-  justify-content: center;
-  flex-wrap: wrap;
-  width: 100%;
-}
+.stage { min-width: 0; }
 
-/* ─── Table HUD ──────────────────────────────────────────────────────────── */
+.boardPanel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+}
 
 .tableInfo {
   display: flex;
-  gap: 18px;
-  align-items: center;
+  justify-content: space-between;
+  width: 100%;
   font-size: 12px;
   color: var(--text-dim);
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.14));
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 6px 18px;
-  box-shadow: inset 0 1px 0 var(--edge-light);
 }
 
 .tableInfo strong {
   color: var(--text);
-  font-weight: 700;
   font-variant-numeric: tabular-nums;
-}
-
-.tableStat {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
 }
 
 /* ─── Responsive ─────────────────────────────────────────────────────────── */
 
-/* Drop the right rail under the stage before the board starts shrinking. */
-@media (max-width: 1340px) {
+/* Too narrow for three columns: the pyramid takes the full width and the two
+   side columns sit beneath it. */
+@media (max-width: 1180px) {
   .layout {
-    grid-template-areas:
-      "opponent stage"
-      "you      stage"
-      "rail     rail";
-    grid-template-columns: minmax(230px, 280px) minmax(0, 1fr);
+    --pyramid-avail: calc(100vw - 2 * var(--page-pad));
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
-  .rail { flex-direction: row; flex-wrap: wrap; }
-  .rail > * { flex: 1 1 260px; }
+  .stage { grid-column: 1 / -1; grid-row: 1; }
+  .table { align-items: stretch; }
 }
 
-/* Single column: table first, then you, then the opponent and reference. */
-@media (max-width: 960px) {
-  .gameRoot { padding: 12px 12px 24px; }
-  .layout {
-    grid-template-areas:
-      "stage"
-      "you"
-      "opponent"
-      "rail";
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: none;
-  }
-  .rail { flex-direction: column; }
-  .topBar h1 { font-size: 20px; }
+@media (max-width: 700px) {
+  .gameRoot { --page-pad: 10px; }
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .table { grid-row: 2; }
 }

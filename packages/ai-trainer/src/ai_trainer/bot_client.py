@@ -10,6 +10,10 @@ using the CLI client. Once both players are connected the game starts automatica
 The bot plays the highest-probability legal move under the trained policy.  It
 does not sample: sampling from a policy that still carries exploration entropy
 makes the opponent feel random regardless of how well trained it is.
+
+With tactics on (the default) the bot also never misses a one-move win: if a
+legal purchase is certain to win the game, it plays that instead of the
+policy's choice.  See tactics.winning_purchase.
 """
 
 from __future__ import annotations
@@ -26,6 +30,8 @@ from .action_space import build_legal_mask, index_to_action
 from .model import build_from_checkpoint
 from .sim_client import SimClient
 from .state_encoder import encode, encode_card_ids
+from .tactics import winning_purchase
+from .train import CHECKPOINT_VERSION
 
 app = typer.Typer(add_completion=False)
 
@@ -37,8 +43,13 @@ def _pick_action(
     legal_moves: list[dict],
     device: torch.device,
     greedy: bool,
+    tactics: bool,
 ) -> dict | None:
-    """Run the policy and return a concrete action dict."""
+    """Return a concrete action dict: a certain win if tactics allow, else the policy's choice."""
+    if tactics and (win := winning_purchase(legal_moves, state)) is not None:
+        typer.echo("[AI] Taking a winning purchase.")
+        return win
+
     obs_t = torch.tensor(encode(state), dtype=torch.float32, device=device).unsqueeze(0)
     ids_t = torch.tensor(encode_card_ids(state), dtype=torch.long, device=device).unsqueeze(0)
     mask_t = torch.tensor(build_legal_mask(legal_moves), dtype=torch.bool, device=device).unsqueeze(
@@ -57,6 +68,7 @@ async def _take_turn(
     client: SimClient,
     device: torch.device,
     greedy: bool,
+    tactics: bool,
 ) -> None:
     # Run the blocking HTTP calls in a thread executor so the asyncio event loop
     # is not blocked while waiting for the game-sim response.
@@ -67,7 +79,7 @@ async def _take_turn(
     )
     if not legal_moves:
         return
-    action = _pick_action(model, state, legal_moves, device, greedy)
+    action = _pick_action(model, state, legal_moves, device, greedy, tactics)
     if action is None:
         typer.echo("[AI] Could not map a legal action -- skipping.", err=True)
         return
@@ -80,10 +92,19 @@ async def _run(
     sim_url: str,
     bot_name: str,
     greedy: bool,
+    tactics: bool,
 ) -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     ckpt = torch.load(str(checkpoint), map_location=device, weights_only=True)
+    if ckpt.get("version", 0) != CHECKPOINT_VERSION:
+        typer.echo(
+            f"ERROR: {checkpoint} is checkpoint version {ckpt.get('version', 0)}; this bot "
+            f"needs version {CHECKPOINT_VERSION} (the observation layout changed). "
+            "Train a new model.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
     model = build_from_checkpoint(ckpt).to(device)
     model.load_state_dict(ckpt["model_state"])
     model.eval()
@@ -121,7 +142,7 @@ async def _run(
                 typer.echo(f"Game started! Opponent: {msg.get('opponentName', 'Human')}")
                 typer.echo(f"AI is Player {my_player_id}. Mode: {mode}\n")
                 if state.get("currentPlayer") == my_player_id:
-                    await _take_turn(ws, model, state, client, device, greedy)
+                    await _take_turn(ws, model, state, client, device, greedy, tactics)
 
             elif msg_type == "STATE_UPDATE":
                 state = msg["state"]
@@ -133,7 +154,7 @@ async def _run(
                         typer.echo("Game over -- Human wins!")
                     break
                 if state.get("currentPlayer") == my_player_id:
-                    await _take_turn(ws, model, state, client, device, greedy)
+                    await _take_turn(ws, model, state, client, device, greedy, tactics)
 
             elif msg_type == "OPPONENT_DISCONNECTED":
                 typer.echo("Opponent disconnected.")
@@ -153,9 +174,10 @@ def main(
     sim_url: str = typer.Option("http://127.0.0.1:3002", help="game-sim server URL"),
     name: str = typer.Option("AI", help="Display name shown to the human player"),
     greedy: bool = typer.Option(True, help="Pick the highest-probability move instead of sampling"),
+    tactics: bool = typer.Option(True, help="Always play a purchase that wins on the spot"),
 ) -> None:
     """Run the AI bot. It creates a session and waits for a human to join."""
-    asyncio.run(_run(checkpoint, server, sim_url, name, greedy))
+    asyncio.run(_run(checkpoint, server, sim_url, name, greedy, tactics))
 
 
 if __name__ == "__main__":

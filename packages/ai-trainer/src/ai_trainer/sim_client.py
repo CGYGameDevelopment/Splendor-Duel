@@ -103,8 +103,14 @@ class SimClient:
         second_player_gets_privilege: bool = True,
         auto_advance: bool = True,
         compact: bool = False,
+        seeds: list[int | None] | None = None,
     ) -> list[dict]:
-        """Start several games at once. Returns a list of {sessionId, state, legalMoves}."""
+        """
+        Start several games at once. Returns a list of {sessionId, seed, state, legalMoves}.
+
+        `seeds` is positional against the sessions; a None entry (or omitting
+        the list) deals a fresh random game.
+        """
         payload: dict = {
             "secondPlayerGetsPrivilege": second_player_gets_privilege,
             "autoAdvance": auto_advance,
@@ -116,6 +122,8 @@ class SimClient:
             payload["count"] = count
         else:
             raise ValueError("reset_batch needs either session_ids or count")
+        if seeds is not None:
+            payload["seeds"] = seeds
         return self._post("/reset-batch", payload)["results"]
 
     def step_batch(
