@@ -30,8 +30,9 @@ const MAX_FORCED_MOVES = 64;
  * The transformation is shared with the multiplayer server via the protocol
  * package, which owns the rule about which engine fields are hidden -- so the
  * PRNG seed is dropped here too.  Unlike the server, the sim does not hide the
- * players' reserved cards: self-play controls both seats and is omniscient by
- * design.
+ * players' reserved cards: the scripted baselines read them.  The trainer's
+ * state encoder discards the opponent's, so the policy only ever learns from
+ * what a real player could see.
  *
  * A compact state is for observation only -- it can no longer be fed back into
  * the engine, so /legal-moves-from-state and any caller that round-trips a

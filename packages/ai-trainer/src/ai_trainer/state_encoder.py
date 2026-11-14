@@ -11,6 +11,20 @@ entire economy of this game and have no ordinal relationship, so the net had to
 spend capacity carving a 1-D line into bins before it could represent "this
 card costs blue".
 
+Hidden information
+------------------
+Reserved cards are secret (rulebook: "Reserved cards are kept secret from your
+opponent ... Your opponent may see the number of reserved cards which you
+have").  The sim is omniscient and sends both players' reserved cards, but the
+multiplayer server only ever sends the opponent's *count*.  A policy trained on
+the former and deployed against the latter learns to rely on information it
+will not have -- and, worse, the earlier encoder took the count from the
+(empty) list, so the deployed bot always believed its opponent held nothing.
+
+The opponent's reserved-card slots are therefore always encoded as empty, and
+the count is read from `reservedCardCount` when present.  The slots stay in the
+layout so both players share one per-player sub-layout and encoder.
+
 The 5x5 token board is encoded in full.  It was previously omitted entirely on
 the theory that the aggregate bag counts were sufficient; they are not.  54% of
 the action space (145 TAKE_TOKENS lines, 25 USE_PRIVILEGE cells, 25
@@ -27,19 +41,19 @@ duplicating magic numbers.
 Layout (always from the current player's perspective):
   [0..199]    Board:          25 cells x 8 one-hot (7 token colours + empty)
   [200..206]  Bag:            7 token counts / token scale
-  [207..494]  Pyramid:        12 card slots x 24 features (level1: 5, level2: 4, level3: 3)
-  [495..497]  Deck sizes:     3 values / deck scale
-  [498..505]  Royal deck:     4 card slots x 2 features (prestige, has_ability)
-  [506]       Table privs:    count / table priv scale
-  [507..605]  Current player: 99 features
-  [606..704]  Opponent:       99 features
-  [705..711]  Phase:          7 one-hot
-  [712]       extraTurns:     / extra turns scale
-  [713..718]  pendingAbility: 6 one-hot (all-zero = none)
+  [207..542]  Pyramid:        12 card slots x 28 features (level1: 5, level2: 4, level3: 3)
+  [543..545]  Deck sizes:     3 values / deck scale
+  [546..553]  Royal deck:     4 card slots x 2 features (prestige, has_ability)
+  [554]       Table privs:    count / table priv scale
+  [555..665]  Current player: 111 features
+  [666..776]  Opponent:       111 features (reserved card slots always empty)
+  [777..783]  Phase:          7 one-hot
+  [784]       extraTurns:     / extra turns scale
+  [785..790]  pendingAbility: 6 one-hot (all-zero = none)
 
-  TOTAL: 719
+  TOTAL: 791
 
-Per-card features (24):
+Per-card features (28):
   [0]      present (1.0 when slot has a card, 0.0 when empty)
   [1..7]   colour one-hot (CARD_COLORS: white, blue, green, red, black, wild, null)
   [8]      points / points scale
@@ -47,12 +61,23 @@ Per-card features (24):
   [10..15] ability one-hot (ABILITIES); all-zero = no ability
   [16]     crowns / card crowns scale
   [17..23] cost per token colour / cost scale (TOKEN_COLORS order)
+  [24]     affordable by the current player (1.0 / 0.0)
+  [25]     current player's shortfall after gold / shortfall scale
+  [26]     affordable by the opponent (1.0 / 0.0)
+  [27]     opponent's shortfall after gold / shortfall scale
+
+Affordability is derived, not new information: it is a function of the card
+and the players' tokens and bonuses, all of which are already in the
+observation.  But computing "cost minus bonuses minus tokens, with gold
+covering the rest" from raw numbers is a lot to ask of the network for every
+card on every step, and it is the single most decision-relevant fact about a
+card.  Shortfall is how many more tokens (of any colour) the player would need.
 
 Per-royal-card features (2):
   [0]      prestige / points scale
   [1]      has_ability (1.0 if card has an ability, else 0.0)
 
-Per-player features (99):
+Per-player features (111):
   [0..6]   tokens (7 colours) / token scale
   [7..11]  bonuses per gem colour (5) / bonus colour scale
   [12..16] prestige per gem colour (5) / prestige colour scale
@@ -60,8 +85,8 @@ Per-player features (99):
   [18]     crowns / player crowns scale
   [19]     privileges / privileges scale
   [20]     reserved card count / reserved scale
-  [21..92] reserved cards: 3 x 24
-  [93..98] royal cards: 3 x 2 scalar features (prestige, has_ability)
+  [21..104]  reserved cards: 3 x 28 (always empty for the opponent)
+  [105..110] royal cards: 3 x 2 scalar features (prestige, has_ability)
 
 Vocabulary note: the JSON card data uses a null color and an ability of
 "wild" / "wild and turn" for wild jewel cards (not the color="wild" /
@@ -101,7 +126,7 @@ PHASES = [
 
 N_BOARD_CELLS = 25
 BOARD_CELL_FEATURES = len(TOKEN_COLORS) + 1  # 7 colours + "empty" = 8
-CARD_FEATURES = 1 + len(CARD_COLORS) + 2 + len(ABILITIES) + 1 + len(TOKEN_COLORS)  # 24
+CARD_FEATURES = 1 + len(CARD_COLORS) + 2 + len(ABILITIES) + 1 + len(TOKEN_COLORS) + 4  # 28
 ROYAL_FEATURES = 2
 N_PYRAMID = 12
 N_L1, N_L2, N_L3 = 5, 4, 3
@@ -114,10 +139,10 @@ N_ABILITIES = len(ABILITIES)
 # Slot order used by encode_card_ids() and by the model's card pointer head:
 #   [0..11]  pyramid  (L1 x5, L2 x4, L3 x3)
 #   [12..14] current player's reserved cards
-#   [15..17] opponent's reserved cards
+#   [15..17] opponent's reserved cards -- always id 0: they are hidden
 # Purchase is legal from pyramid or the player's OWN reserved cards, so slots
 # [0..14] can carry a purchase logit; reserve-from-pyramid only applies to
-# [0..11].  Opponent reserved slots are features only.
+# [0..11].
 N_PYRAMID_SLOTS = N_PYRAMID  # 12
 N_CARD_SLOTS = N_PYRAMID_SLOTS + 2 * N_RESERVED  # 18
 N_PURCHASABLE_SLOTS = N_PYRAMID_SLOTS + N_RESERVED  # 15
@@ -132,6 +157,10 @@ C_BONUS = C_POINTS + 1  # 9
 C_ABILITY = C_BONUS + 1  # 10..15
 C_CROWNS = C_ABILITY + len(ABILITIES)  # 16
 C_COST = C_CROWNS + 1  # 17..23
+C_AFFORD_ME = C_COST + len(TOKEN_COLORS)  # 24
+C_SHORT_ME = C_AFFORD_ME + 1  # 25
+C_AFFORD_OPP = C_SHORT_ME + 1  # 26
+C_SHORT_OPP = C_AFFORD_OPP + 1  # 27
 
 # -- Per-player sub-layout -----------------------------------------------------
 
@@ -144,9 +173,9 @@ P_PRIVILEGES = 19
 P_RESERVED_COUNT = 20
 P_SCALAR_END = 21  # end of scalar block
 P_RESERVED_START = P_SCALAR_END  # 21
-P_RESERVED_END = P_RESERVED_START + N_RESERVED * CARD_FEATURES  # 93
-P_ROYAL_START = P_RESERVED_END  # 93
-PLAYER_FEATURES = P_ROYAL_START + N_PLAYER_ROYALS * ROYAL_FEATURES  # 99
+P_RESERVED_END = P_RESERVED_START + N_RESERVED * CARD_FEATURES  # 105
+P_ROYAL_START = P_RESERVED_END  # 105
+PLAYER_FEATURES = P_ROYAL_START + N_PLAYER_ROYALS * ROYAL_FEATURES  # 111
 
 # -- Top-level layout ----------------------------------------------------------
 
@@ -155,23 +184,23 @@ BOARD_END = BOARD_START + N_BOARD_CELLS * BOARD_CELL_FEATURES  # 200
 BAG_START = BOARD_END  # 200
 BAG_END = BAG_START + len(TOKEN_COLORS)  # 207
 PYRAMID_START = BAG_END  # 207
-PYRAMID_END = PYRAMID_START + N_PYRAMID * CARD_FEATURES  # 495
-DECK_START = PYRAMID_END  # 495
-DECK_END = DECK_START + 3  # 498
-ROYAL_START = DECK_END  # 498
-ROYAL_END = ROYAL_START + 4 * ROYAL_FEATURES  # 506
-TABLE_PRIV = ROYAL_END  # 506
-CUR_START = TABLE_PRIV + 1  # 507
-CUR_END = CUR_START + PLAYER_FEATURES  # 606
-OPP_START = CUR_END  # 606
-OPP_END = OPP_START + PLAYER_FEATURES  # 705
-PHASE_START = OPP_END  # 705
-PHASE_END = PHASE_START + N_PHASES  # 712
-EXTRA_TURNS = PHASE_END  # 712
-PENDING_START = EXTRA_TURNS + 1  # 713
-PENDING_END = PENDING_START + N_ABILITIES  # 719
+PYRAMID_END = PYRAMID_START + N_PYRAMID * CARD_FEATURES  # 543
+DECK_START = PYRAMID_END  # 543
+DECK_END = DECK_START + 3  # 546
+ROYAL_START = DECK_END  # 546
+ROYAL_END = ROYAL_START + 4 * ROYAL_FEATURES  # 554
+TABLE_PRIV = ROYAL_END  # 554
+CUR_START = TABLE_PRIV + 1  # 555
+CUR_END = CUR_START + PLAYER_FEATURES  # 666
+OPP_START = CUR_END  # 666
+OPP_END = OPP_START + PLAYER_FEATURES  # 777
+PHASE_START = OPP_END  # 777
+PHASE_END = PHASE_START + N_PHASES  # 784
+EXTRA_TURNS = PHASE_END  # 784
+PENDING_START = EXTRA_TURNS + 1  # 785
+PENDING_END = PENDING_START + N_ABILITIES  # 791
 
-STATE_DIM = PENDING_END  # 719
+STATE_DIM = PENDING_END  # 791
 
 # Precomputed index lookups for O(1) categorical encoding.
 _CARD_COLOR_IDX: dict[str, int] = {c: i for i, c in enumerate(CARD_COLORS)}
@@ -208,6 +237,7 @@ class EncoderScales:
     reserved: float = 3.0  # reserved card count (max 3)
     extra_turns: float = 3.0  # extraTurns counter (reserved field)
     table_priv: float = 3.0  # table-level privilege count (max 3)
+    shortfall: float = 10.0  # tokens still missing for a card after gold (clipped at 1.0)
 
 
 DEFAULT_SCALES = EncoderScales()
@@ -216,7 +246,64 @@ DEFAULT_SCALES = EncoderScales()
 # -- Per-card encoding ---------------------------------------------------------
 
 
-def _encode_card(card: dict | None, out: np.ndarray, offset: int, scales: EncoderScales) -> None:
+@dataclass(frozen=True)
+class _Purse:
+    """What one player can spend: tokens, card bonuses, and the colours they own."""
+
+    tokens: dict[str, int]
+    bonuses: dict[str, int]
+    owns_colored_card: bool
+
+    @classmethod
+    def of(cls, player: dict) -> _Purse:
+        tokens = player.get("tokens", {})
+        bonuses = {c: 0 for c in GEM_COLORS}
+        for card in player.get("purchasedCards", []):
+            color = card.get("assignedColor") or card.get("color")
+            if color in bonuses:
+                bonuses[color] += card.get("bonus", 0)
+        owns = any(
+            (card.get("assignedColor") or card.get("color")) in _GEM_IDX
+            for card in player.get("purchasedCards", [])
+        )
+        return cls(
+            tokens={c: tokens.get(c, 0) for c in TOKEN_COLORS},
+            bonuses=bonuses,
+            owns_colored_card=owns,
+        )
+
+    def shortfall(self, card: dict) -> int:
+        """
+        Tokens still missing to buy `card` after bonuses, tokens and gold.
+
+        Bonuses reduce only their own gem colour (pearl has no bonus); gold
+        covers any remaining gem or pearl.  Mirrors the engine's netCost /
+        canAfford.
+        """
+        missing = 0
+        for color, amount in card.get("cost", {}).items():
+            if color == "gold":
+                continue
+            net = max(0, amount - self.bonuses.get(color, 0))
+            missing += max(0, net - self.tokens.get(color, 0))
+        return max(0, missing - self.tokens.get("gold", 0))
+
+    def can_buy(self, card: dict) -> bool:
+        # A wild card can only be bought once you own a card with a colour for
+        # it to copy (engine: unlockedColors must be non-empty).
+        if card.get("ability") in _WILD_ABILITIES and not self.owns_colored_card:
+            return False
+        return self.shortfall(card) == 0
+
+
+def _encode_card(
+    card: dict | None,
+    out: np.ndarray,
+    offset: int,
+    scales: EncoderScales,
+    me: _Purse,
+    opp: _Purse,
+) -> None:
     """Write CARD_FEATURES floats for one card slot at out[offset]. Empty slot stays all-zero."""
     if card is None:
         return  # present=0 signals absence; all other fields zero by default
@@ -247,12 +334,44 @@ def _encode_card(card: dict | None, out: np.ndarray, offset: int, scales: Encode
     for ci, color_name in enumerate(TOKEN_COLORS):
         out[offset + C_COST + ci] = cost.get(color_name, 0) / scales.cost
 
+    out[offset + C_AFFORD_ME] = 1.0 if me.can_buy(card) else 0.0
+    out[offset + C_SHORT_ME] = min(me.shortfall(card) / scales.shortfall, 1.0)
+    out[offset + C_AFFORD_OPP] = 1.0 if opp.can_buy(card) else 0.0
+    out[offset + C_SHORT_OPP] = min(opp.shortfall(card) / scales.shortfall, 1.0)
+
 
 # -- Per-player encoding -------------------------------------------------------
 
 
-def _encode_player(player: dict, out: np.ndarray, offset: int, scales: EncoderScales) -> None:
-    """Write PLAYER_FEATURES floats for one player starting at out[offset]."""
+def reserved_count(player: dict) -> int:
+    """
+    How many cards a player has reserved.
+
+    A client state from the multiplayer server sends the opponent's reserved
+    cards as an empty list plus `reservedCardCount`; the sim sends the cards
+    themselves.  Either way the count is public.
+    """
+    count = player.get("reservedCardCount")
+    return int(count) if count is not None else len(player.get("reservedCards", []))
+
+
+def _encode_player(
+    player: dict,
+    out: np.ndarray,
+    offset: int,
+    scales: EncoderScales,
+    me: _Purse,
+    opp: _Purse,
+    reserved_visible: bool,
+) -> None:
+    """
+    Write PLAYER_FEATURES floats for one player starting at out[offset].
+
+    `me` / `opp` are the purses of the player to move and their opponent -- the
+    card affordability features are always from those two perspectives,
+    whichever player's reserved cards are being encoded.  `reserved_visible`
+    is False for the opponent, whose reserved cards are secret.
+    """
     tokens = player.get("tokens", {})
     for color, ci in _TOKEN_IDX.items():
         out[offset + P_TOKENS + ci] = tokens.get(color, 0) / scales.token
@@ -276,11 +395,12 @@ def _encode_player(player: dict, out: np.ndarray, offset: int, scales: EncoderSc
     out[offset + P_CROWNS] = player.get("crowns", 0) / scales.player_crowns
     out[offset + P_PRIVILEGES] = player.get("privileges", 0) / scales.privileges
 
-    reserved = player.get("reservedCards", [])
-    out[offset + P_RESERVED_COUNT] = len(reserved) / scales.reserved
-    for i in range(N_RESERVED):
-        card = reserved[i] if i < len(reserved) else None
-        _encode_card(card, out, offset + P_RESERVED_START + i * CARD_FEATURES, scales)
+    out[offset + P_RESERVED_COUNT] = reserved_count(player) / scales.reserved
+    if reserved_visible:
+        reserved = player.get("reservedCards", [])
+        for i in range(N_RESERVED):
+            card = reserved[i] if i < len(reserved) else None
+            _encode_card(card, out, offset + P_RESERVED_START + i * CARD_FEATURES, scales, me, opp)
 
     royal_base = offset + P_ROYAL_START
     royals = player.get("royalCards", [])
@@ -303,8 +423,12 @@ def encode(state: dict, scales: EncoderScales | None = None) -> np.ndarray:
         scales = DEFAULT_SCALES
     out = np.zeros(STATE_DIM, dtype=np.float32)
     current_player_idx: int = state.get("currentPlayer", 0)
+    players = state.get("players", [{}, {}])
+    opponent_idx = 1 - current_player_idx
+    me = _Purse.of(players[current_player_idx])
+    opp = _Purse.of(players[opponent_idx])
 
-    # Board [0:200] -- 25 cells x 8 one-hot.  A cell holding no token (null) sets
+    # Board -- 25 cells x 8 one-hot.  A cell holding no token (null) sets
     # the trailing "empty" slot, so every cell contributes exactly one 1.0.
     board = state.get("board", [])
     for cell_idx in range(N_BOARD_CELLS):
@@ -312,20 +436,20 @@ def encode(state: dict, scales: EncoderScales | None = None) -> np.ndarray:
         slot = _BOARD_CELL_IDX.get(cell, _BOARD_EMPTY_IDX)
         out[BOARD_START + cell_idx * BOARD_CELL_FEATURES + slot] = 1.0
 
-    # Bag [200:207]
+    # Bag
     bag = state.get("bag", {})
     for ci, color in enumerate(TOKEN_COLORS):
         out[BAG_START + ci] = bag.get(color, 0) / scales.token
 
-    # Pyramid [207:495] -- 12 card slots x CARD_FEATURES
+    # Pyramid -- 12 card slots x CARD_FEATURES
     pyramid = state.get("pyramid", {})
     slot = 0
     for level_key in ("level1", "level2", "level3"):
         for card in pyramid.get(level_key, []):
-            _encode_card(card, out, PYRAMID_START + slot * CARD_FEATURES, scales)
+            _encode_card(card, out, PYRAMID_START + slot * CARD_FEATURES, scales, me, opp)
             slot += 1
 
-    # Deck sizes [495:498].  The compact wire format from the sim server sends
+    # Deck sizes.  The compact wire format from the sim server sends
     # deckCounts instead of the full card arrays -- the encoder only ever needed
     # the counts, and the arrays were 72% of every response payload.
     counts = state.get("deckCounts")
@@ -336,30 +460,31 @@ def encode(state: dict, scales: EncoderScales | None = None) -> np.ndarray:
     out[DECK_START + 1] = counts.get("level2", 0) / scales.deck
     out[DECK_START + 2] = counts.get("level3", 0) / scales.deck
 
-    # Royal deck [498:506] -- 4 slots x 2 features
+    # Royal deck -- 4 slots x 2 features
     royal_deck = state.get("royalDeck", [])
     for i, card in enumerate(royal_deck[:4]):
         base = ROYAL_START + i * ROYAL_FEATURES
         out[base] = card.get("points", 0) / scales.points
         out[base + 1] = 1.0 if card.get("ability") is not None else 0.0
 
-    # Table privileges [506]
+    # Table privileges
     out[TABLE_PRIV] = state.get("privileges", 0) / scales.table_priv
 
-    # Players [507:705] -- always encode current player first
-    players = state.get("players", [{}, {}])
-    opponent_idx = 1 - current_player_idx
-    _encode_player(players[current_player_idx], out, CUR_START, scales)
-    _encode_player(players[opponent_idx], out, OPP_START, scales)
+    # Players -- always encode current player first.  The opponent's reserved
+    # cards are hidden: see "Hidden information" above.
+    _encode_player(
+        players[current_player_idx], out, CUR_START, scales, me, opp, reserved_visible=True
+    )
+    _encode_player(players[opponent_idx], out, OPP_START, scales, me, opp, reserved_visible=False)
 
-    # Phase [705:712] -- one-hot; unknown / game_over stays all-zero
+    # Phase -- one-hot; unknown / game_over stays all-zero
     phase_idx = _PHASE_IDX.get(state.get("phase", "mandatory"))
     if phase_idx is not None:
         out[PHASE_START + phase_idx] = 1.0
 
     out[EXTRA_TURNS] = state.get("extraTurns", 0) / scales.extra_turns
 
-    # Pending ability [713:719] -- one-hot; all-zero = none
+    # Pending ability -- one-hot; all-zero = none
     pending_idx = _ABILITY_IDX.get(state.get("pendingAbility"))
     if pending_idx is not None:
         out[PENDING_START + pending_idx] = 1.0
@@ -408,16 +533,13 @@ def encode_card_ids(state: dict) -> np.ndarray:
                 ids[slot] = card.get("id", 0)
             slot += 1
 
+    # Only the current player's reserved cards; the opponent's are hidden, so
+    # their slots stay 0 (see N_CARD_SLOTS).
     current_player_idx: int = state.get("currentPlayer", 0)
-    players = state.get("players", [{}, {}])
-    for offset, player_idx in (
-        (N_PYRAMID_SLOTS, current_player_idx),
-        (N_PYRAMID_SLOTS + N_RESERVED, 1 - current_player_idx),
-    ):
-        reserved = players[player_idx].get("reservedCards", [])
-        for i in range(N_RESERVED):
-            if i < len(reserved) and reserved[i] is not None:
-                ids[offset + i] = reserved[i].get("id", 0)
+    reserved = state.get("players", [{}, {}])[current_player_idx].get("reservedCards", [])
+    for i in range(N_RESERVED):
+        if i < len(reserved) and reserved[i] is not None:
+            ids[N_PYRAMID_SLOTS + i] = reserved[i].get("id", 0)
 
     return ids
 
@@ -438,7 +560,14 @@ def _describe_card_field(field: int) -> str:
         return f"ability[{ABILITIES[field - C_ABILITY]}]"
     if field == C_CROWNS:
         return "crowns"
-    return f"cost[{TOKEN_COLORS[field - C_COST]}]"
+    if field < C_AFFORD_ME:
+        return f"cost[{TOKEN_COLORS[field - C_COST]}]"
+    return {
+        C_AFFORD_ME: "affordable_by_me",
+        C_SHORT_ME: "shortfall_me",
+        C_AFFORD_OPP: "affordable_by_opp",
+        C_SHORT_OPP: "shortfall_opp",
+    }[field]
 
 
 def _describe_player_field(field: int) -> str:

@@ -5,11 +5,12 @@ Architecture
 ------------
   cell_encoder:          8 -> 32           (shared across all 25 board cells)
   board_summary:         25*32 -> 128      (board context for the trunk)
-  card_encoder:          24 -> 64 -> 64    (shared: pyramid and reserved cards)
+  card_encoder:          28 -> 64 -> 64    (shared: pyramid and reserved cards)
     pyramid per level:   L1(5) / L2(4) / L3(3) -> sum-pool -> 64 each
   player_encoder:        applied symmetrically to current player and opponent
     scalar branch:       27 non-card features -> 64
     reserved branch:     3 reserved cards via card_encoder -> max-pool -> 64
+                         (the opponent's are always empty: they are hidden)
     combiner:            cat(64, 64) -> 64
   global_encoder:        33 -> 64
 

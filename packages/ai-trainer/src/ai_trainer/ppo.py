@@ -7,6 +7,7 @@ Hyperparameters:
   value_coef   = 0.5
   gamma        = 1.0
   lam          = 0.97   (GAE lambda)
+  target_kl    = 0.03   (stop the update at 1.5x this)
 
 On gamma
 --------
@@ -17,6 +18,19 @@ opening attenuated by 0.99^350 ~ 0.03, and GAE's effective lookahead was
 essentially no gradient.  Episodes here are finite and bounded, so undiscounted
 returns are well defined and correct; gamma=1.0 lets the outcome propagate to
 every decision that produced it.
+
+On the value loss
+-----------------
+The clipped value loss takes the elementwise max of the clipped and unclipped
+squared errors and then averages.  Taking the max of the two *batch means*
+(as an earlier revision did) lets one term win for the whole batch, which is
+not the pessimistic per-sample bound the clip is meant to be.
+
+On early stopping
+-----------------
+With target_kl set, the update stops at the first minibatch whose approximate
+KL from the rollout policy passes 1.5 x target_kl, before applying its step
+(never before the first step, which is on-policy by construction).
 
 On trainable transitions
 ------------------------
@@ -38,6 +52,7 @@ import torch
 from torch import nn, optim
 
 from .action_space import ACTION_SPACE_SIZE
+from .gae import compute_gae
 from .model import ActorCriticNet
 from .self_play import Episode
 from .state_encoder import N_CARD_SLOTS, STATE_DIM
@@ -58,57 +73,11 @@ class PPOConfig:
     # cost 7.3s at 256 and 3.7s at 1024 -- same work, half the per-step overhead.
     batch_size: int = 1024
     max_grad_norm: float = 0.5
-
-
-def _compute_gae(
-    rewards: list[float],
-    values: list[float],
-    dones: list[bool],
-    player_ids: list[int],
-    gamma: float,
-    lam: float,
-    out_advantages: np.ndarray,
-    out_returns: np.ndarray,
-    terminal_value: float = 0.0,
-    terminal_player_id: int = 0,
-) -> None:
-    """
-    Compute GAE advantages and discounted returns for a two-player zero-sum game,
-    writing results directly into caller-provided arrays (no intermediate allocation).
-
-    Observations are always encoded from the current player's perspective, so
-    consecutive steps from different players have values in opposite frames:
-    V_opponent(s) ~ -V_current(s).  When the next step belongs to the opponent,
-    both the bootstrap value and the accumulated GAE term must be negated to
-    convert them to the current player's perspective before computing the TD error.
-
-    terminal_value: value estimate of the state after the last transition,
-    encoded from terminal_player_id's perspective.  Non-zero only for episodes
-    truncated by a step cap (not naturally terminal).  When terminal_player_id
-    differs from the last acting player, terminal_value must be negated to
-    convert it to that player's frame before bootstrapping GAE.
-    """
-    n = len(rewards)
-    gae = 0.0
-    # Flip terminal_value if it's in the opponent's frame relative to the last actor.
-    last_player = player_ids[n - 1] if n else 0
-    next_value = -terminal_value if terminal_player_id != last_player else terminal_value
-
-    for t in reversed(range(n)):
-        mask = 0.0 if dones[t] else 1.0
-        # If the next step was taken by the opponent, its value estimate is from
-        # the opponent's frame.  Negate to convert to current player's frame.
-        if t + 1 < n and player_ids[t + 1] != player_ids[t]:
-            nv = -next_value
-            ng = -gae
-        else:
-            nv = next_value
-            ng = gae
-        delta = rewards[t] + gamma * nv * mask - values[t]
-        gae = delta + gamma * lam * mask * ng
-        out_advantages[t] = gae
-        out_returns[t] = gae + values[t]
-        next_value = values[t]
+    # Stop the update early once a minibatch's approximate KL from the rollout
+    # policy exceeds 1.5x this.  The clip bounds each sample's ratio, not how far
+    # four epochs of steps can walk the policy as a whole; this does.  None
+    # disables the check.
+    target_kl: float | None = 0.03
 
 
 def update(
@@ -151,7 +120,7 @@ def update(
         dones = [t.done for t in ep.transitions]
         player_ids = [t.player_id for t in ep.transitions]
 
-        _compute_gae(
+        compute_gae(
             rewards,
             values,
             dones,
@@ -214,9 +183,14 @@ def update(
     total_kl = torch.zeros((), device=device)
     total_grad_norm = 0.0
     n_updates = 0
+    early_stopped = False
+    epochs_run = 0
 
     model.train()
     for _ in range(config.n_epochs):
+        if early_stopped:
+            break
+        epochs_run += 1
         perm = torch.randperm(n, device=device)
         for start in range(0, n, config.batch_size):
             idx = perm[start : start + config.batch_size]
@@ -245,22 +219,30 @@ def update(
             )
             policy_loss = (per_sample_policy * weight).sum() / denom
 
-            # Clipped value loss: prevents value function from moving too far from
-            # the rollout estimate, mirroring the policy clip for stability.
-            # Applied to every transition -- opponent-played states are still
-            # valid samples of the value function.
+            # Approximate KL from the rollout policy, over the trainable rows.
+            kl = ((log_probs_old_t[idx] - log_probs) * weight).sum() / denom
+            # Never before the first step: that minibatch is on-policy by
+            # construction, so its KL is rounding noise.
+            if (
+                config.target_kl is not None
+                and n_updates > 0
+                and float(kl.detach()) > 1.5 * config.target_kl
+            ):
+                early_stopped = True
+                break
+
+            # Clipped value loss, per sample: the pessimistic max of the clipped
+            # and unclipped errors, then the mean.  Applied to every transition
+            # -- opponent-played states are still valid value targets.
             values_sq = values.squeeze(-1)
             values_old_b = values_old_t[idx]
+            returns_b = returns_t[idx]
             values_clipped = values_old_b + torch.clamp(
                 values_sq - values_old_b, -config.clip_eps, config.clip_eps
             )
             value_loss = torch.max(
-                nn.functional.mse_loss(values_sq, returns_t[idx]),
-                nn.functional.mse_loss(values_clipped, returns_t[idx]),
-            )
-
-            # Approximate KL divergence for monitoring policy change per update.
-            kl = ((log_probs_old_t[idx] - log_probs) * weight).sum() / denom
+                (values_sq - returns_b).pow(2), (values_clipped - returns_b).pow(2)
+            ).mean()
 
             loss = policy_loss + config.value_coef * value_loss - config.entropy_coef * entropy
 
@@ -301,4 +283,7 @@ def update(
         "grad_norm": gn,
         "adv_clip_frac": adv_clip_hits / max(n_trainable, 1),
         "trainable_frac": n_trainable / n,
+        "updates": n_updates,
+        "epochs": epochs_run,
+        "early_stopped": early_stopped,
     }

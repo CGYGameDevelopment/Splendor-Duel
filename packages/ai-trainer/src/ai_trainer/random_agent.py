@@ -5,9 +5,13 @@ from __future__ import annotations
 import numpy as np
 
 from .action_space import action_to_index
-
-_GEM_COLORS = ["white", "blue", "green", "red", "black"]
-_SPENDABLE_COLORS = ["white", "blue", "green", "red", "black", "pearl"]
+from .tactics import (
+    SPENDABLE_COLORS,
+    build_card_maps,
+    can_afford,
+    player_resources,
+    would_win,
+)
 
 
 class RandomAgent:
@@ -22,86 +26,6 @@ class RandomAgent:
         if len(legal_indices) == 0:
             raise ValueError("No legal actions available")
         return int(self.rng.choice(legal_indices))
-
-
-def _build_card_maps(state: dict) -> tuple[dict[int, dict], dict[int, int]]:
-    """
-    Single-pass build of two lookups from the current state:
-      card_lookup: cardId -> card dict  (pyramid + reserved cards)
-      card_level:  cardId -> level 1/2/3  (pyramid cards only)
-    """
-    card_lookup: dict[int, dict] = {}
-    card_level: dict[int, int] = {}
-    pyramid = state.get("pyramid", {})
-    for level_num, key in enumerate(("level1", "level2", "level3"), start=1):
-        for card in pyramid.get(key, []):
-            if card is not None:
-                cid = card.get("id")
-                if cid is not None:
-                    card_lookup[cid] = card
-                    card_level[cid] = level_num
-    for player in state.get("players", []):
-        for card in player.get("reservedCards", []):
-            if card is not None and card.get("id") is not None:
-                card_lookup[card["id"]] = card
-    return card_lookup, card_level
-
-
-def _prestige_per_color(player: dict) -> dict[str, float]:
-    """Return current prestige points per gem color for a player."""
-    by_color: dict[str, float] = {c: 0.0 for c in _GEM_COLORS}
-    for card in player.get("purchasedCards", []):
-        color = card.get("assignedColor") or card.get("color")
-        if color in _GEM_COLORS:
-            by_color[color] += card.get("points", 0)
-    return by_color
-
-
-def _would_win(player: dict, card: dict) -> bool:
-    """Return True if purchasing card would trigger a victory condition for player."""
-    card_points = card.get("points", 0)
-    card_color = card.get("assignedColor") or card.get("color")
-    card_crowns = card.get("crowns", 0)
-
-    if player.get("prestige", 0) + card_points >= 20:
-        return True
-    if player.get("crowns", 0) + card_crowns >= 10:
-        return True
-    if card_color in _GEM_COLORS:
-        ppc = _prestige_per_color(player)
-        if ppc.get(card_color, 0) + card_points >= 10:
-            return True
-    return False
-
-
-def _can_afford(player: dict, card: dict) -> bool:
-    """Return True if player has enough tokens (using gold as wild) to purchase card."""
-    tokens = player.get("tokens", {})
-    bonuses: dict[str, int] = {c: 0 for c in _GEM_COLORS}
-    for purchased in player.get("purchasedCards", []):
-        color = purchased.get("assignedColor") or purchased.get("color")
-        if color in _GEM_COLORS:
-            bonuses[color] += purchased.get("bonus", 0)
-
-    cost = card.get("cost", {})
-    gold_available = tokens.get("gold", 0)
-    gold_needed = 0
-    for color in _SPENDABLE_COLORS:
-        shortfall = max(0, cost.get(color, 0) - bonuses.get(color, 0) - tokens.get(color, 0))
-        gold_needed += shortfall
-
-    return gold_needed <= gold_available
-
-
-def _player_resources(player: dict) -> dict[str, int]:
-    """Count tokens + bonuses per spendable color to gauge gem supply."""
-    tokens = player.get("tokens", {})
-    bonuses: dict[str, int] = {c: 0 for c in _GEM_COLORS}
-    for card in player.get("purchasedCards", []):
-        color = card.get("assignedColor") or card.get("color")
-        if color in _GEM_COLORS:
-            bonuses[color] += card.get("bonus", 0)
-    return {c: tokens.get(c, 0) + bonuses.get(c, 0) for c in _SPENDABLE_COLORS}
 
 
 class GreedyPurchaseAgent:
@@ -124,7 +48,7 @@ class GreedyPurchaseAgent:
         me = players[current_player_idx]
         opponent = players[1 - current_player_idx]
 
-        card_lookup, card_level = _build_card_maps(state)
+        card_lookup, card_level = build_card_maps(state)
 
         purchase_moves: list[tuple[dict, int]] = []
         reserve_pyramid_moves: list[tuple[dict, int]] = []
@@ -155,7 +79,7 @@ class GreedyPurchaseAgent:
         winning = [
             (m, i)
             for m, i in purchase_moves
-            if (card := card_lookup.get(m.get("cardId"))) and _would_win(me, card)
+            if (card := card_lookup.get(m.get("cardId"))) and would_win(me, card)
         ]
         if winning:
             best_level = max(card_level.get(m.get("cardId", 0), 0) for m, _ in winning)
@@ -171,7 +95,7 @@ class GreedyPurchaseAgent:
             for card in pyramid.get(key, []):
                 if card is None:
                     continue
-                if _would_win(opponent, card) and _can_afford(opponent, card):
+                if would_win(opponent, card) and can_afford(opponent, card):
                     threat_ids.add(card.get("id"))
 
         if threat_ids:
@@ -202,14 +126,14 @@ class GreedyPurchaseAgent:
 
         # Rule 4: Take tokens, preferring colours we're shortest on.
         if take_token_moves:
-            resources = _player_resources(me)
+            resources = player_resources(me)
             board = state.get("board", [])
 
             def _score_take(move: dict) -> float:
                 colors = [
                     board[i]
                     for i in move.get("indices", [])
-                    if isinstance(i, int) and i < len(board) and board[i] in _SPENDABLE_COLORS
+                    if isinstance(i, int) and i < len(board) and board[i] in SPENDABLE_COLORS
                 ]
                 return sum(1.0 / (resources.get(c, 0) + 1) for c in colors)
 
