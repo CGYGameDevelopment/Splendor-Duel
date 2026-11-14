@@ -51,7 +51,7 @@ export function totalTokens(pool: TokenPool): number {
  * Returns the total gem bonuses a player has by color.
  * Wild cards contribute as their assignedColor.
  */
-export function playerBonuses(player: PlayerState): Record<GemColor, number> {
+export function playerBonuses(player: Pick<PlayerState, 'purchasedCards'>): Record<GemColor, number> {
   const bonuses: Record<GemColor, number> = { white: 0, blue: 0, green: 0, red: 0, black: 0 };
 
   for (const card of player.purchasedCards) {
@@ -226,19 +226,26 @@ export function grantPrivileges(
 
 // ─── Victory helpers ──────────────────────────────────────────────────────────
 
+/**
+ * Prestige a player holds per gem color, from the Jewel Cards in front of them.
+ * Royal cards have no gem color and so never contribute.
+ */
+export function prestigeByColor(
+  player: Pick<PlayerState, 'purchasedCards'>,
+): Record<GemColor, number> {
+  const byColor: Record<GemColor, number> = { white: 0, blue: 0, green: 0, red: 0, black: 0 };
+  for (const card of player.purchasedCards) {
+    const color = effectiveCardColor(card);
+    if (color) byColor[color] += card.points;
+  }
+  return byColor;
+}
+
 export function checkVictory(player: PlayerState): 'prestige' | 'crowns' | 'color_prestige' | null {
   if (player.prestige >= PRESTIGE_WIN) return 'prestige';
   if (player.crowns >= CROWNS_WIN) return 'crowns';
 
-  // Check prestige by color (purchasedCards only — royal cards have no gem color).
-  const byColor: Partial<Record<GemColor, number>> = {};
-  for (const card of player.purchasedCards) {
-    const color = effectiveCardColor(card);
-    if (color) {
-      byColor[color] = (byColor[color] ?? 0) + card.points;
-    }
-  }
-  for (const points of Object.values(byColor)) {
+  for (const points of Object.values(prestigeByColor(player))) {
     if (points >= COLOR_PRESTIGE_WIN) return 'color_prestige';
   }
 

@@ -1,80 +1,35 @@
 /*
- * The card pyramid.
+ * The card pyramid: level 3 on top, each row centred, so the 3 / 4 / 5 widths
+ * form the pyramid on their own.
  *
- * Rows are laid out highest-level first and indented slightly as they descend,
- * so the three tiers read as a pyramid rather than three equal shelves. Each row
- * gets its own tier colour on the label and rail.
+ * --card-w is the single size knob. It is the largest width at which the
+ * widest row (deck + 5 cards) fits the column AND three rows fit the viewport
+ * height, so the pyramid never wraps and never pushes the page into scrolling.
+ * --pyramid-avail is the width the layout leaves for this panel.
  */
 
 .pyramid {
+  --gap: 8px;
+  --card-w: clamp(
+    46px,
+    min(
+      calc((var(--pyramid-avail, 100vw) - 30px - 5 * var(--gap)) / 6),
+      calc((100vh - 150px) / 3 * 5 / 7)
+    ),
+    132px
+  );
+
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 14px 16px;
-  width: fit-content;
-  max-width: 100%;
-  margin: 0 auto;
-  background:
-    radial-gradient(ellipse 90% 60% at 50% 0%, rgba(255, 255, 255, 0.05), transparent 70%),
-    linear-gradient(180deg, var(--panel-raised) 0%, var(--panel) 100%);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: inset 0 1px 0 var(--edge-light), var(--shadow-3);
+  align-items: center;
+  gap: var(--gap);
+  padding: 14px;
 }
 
 .row {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  gap: var(--gap);
 }
 
-/* Indent the lower tiers so the stack narrows towards level 1. */
-.row[data-level='2'] { padding-left: 14px; }
-.row[data-level='1'] { padding-left: 28px; }
-
-.rowLabel {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  width: 34px;
-  flex-shrink: 0;
-}
-
-.tierBadge {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  font-family: var(--font-display);
-  font-size: 14px;
-  font-weight: 700;
-  color: #120d06;
-  background: linear-gradient(180deg, var(--tier-light), var(--tier));
-  border: 1px solid var(--tier-light);
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.5);
-}
-
-/* Tier colours run cool to warm as the cards get more valuable. */
-.row[data-level='1'] { --tier: #6f8fae; --tier-light: #a8c4dc; }
-.row[data-level='2'] { --tier: #b99a4e; --tier-light: #e3cd8d; }
-.row[data-level='3'] { --tier: #b5693c; --tier-light: #e8a173; }
-
-.cards {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  /* Hovered cards lift and scale; without room they clip against the row above. */
-  padding: 4px 0;
-}
-
-@media (max-width: 1100px) {
-  .pyramid { padding: 10px; gap: 8px; }
-  .row { gap: 8px; }
-  .row[data-level='2'] { padding-left: 8px; }
-  .row[data-level='1'] { padding-left: 16px; }
-  .cards { gap: 6px; }
-}
+/* The deck sits a little apart from the face-up cards it feeds. */
+.row > :first-child { margin-right: var(--gap); }

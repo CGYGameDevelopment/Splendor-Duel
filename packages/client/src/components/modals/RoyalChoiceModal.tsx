@@ -1,6 +1,6 @@
 import type { ClientGameState } from '@splendor-duel/protocol';
 import { Modal, modalStyles } from './Modal';
-import { Card } from '../Card/Card';
+import { RoyalCard } from '../RoyalCards/RoyalCards';
 
 export interface RoyalChoiceModalProps {
   state: ClientGameState;
@@ -13,9 +13,7 @@ export function RoyalChoiceModal({ state, onChoose }: RoyalChoiceModalProps) {
       <p>You hit a crown milestone — pick a royal card.</p>
       <div className={modalStyles.options}>
         {state.royalDeck.map(card => (
-          <div key={card.id} className={modalStyles.cardChoice} onClick={() => onChoose(card.id)}>
-            <Card card={card} size="md" />
-          </div>
+          <RoyalCard key={card.id} card={card} onClick={() => onChoose(card.id)} />
         ))}
       </div>
     </Modal>

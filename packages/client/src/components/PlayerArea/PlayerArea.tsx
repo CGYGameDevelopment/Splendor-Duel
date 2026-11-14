@@ -1,6 +1,16 @@
-import type { Card as CardType, GemColor, TokenColor } from '@splendor-duel/game-engine';
+import type { TokenColor } from '@splendor-duel/game-engine';
 import type { ClientGameState } from '@splendor-duel/protocol';
-import { TOKEN_COLORS } from '@splendor-duel/game-engine';
+import {
+  GEM_COLORS,
+  TOKEN_COLORS,
+  MAX_TOKENS,
+  PRESTIGE_WIN,
+  CROWNS_WIN,
+  COLOR_PRESTIGE_WIN,
+  playerBonuses,
+  prestigeByColor,
+  totalTokens,
+} from '@splendor-duel/game-engine';
 import { Token } from '../Token/Token';
 import { Card } from '../Card/Card';
 import { RoyalCard } from '../RoyalCards/RoyalCards';
@@ -19,6 +29,9 @@ export interface PlayerAreaProps {
   onTakeOpponentToken?: (color: TokenColor) => void;  // active during resolve_ability/Take
 }
 
+const isGemColor = (c: TokenColor): c is (typeof GEM_COLORS)[number] =>
+  (GEM_COLORS as TokenColor[]).includes(c);
+
 export function PlayerArea({
   state,
   legal,
@@ -31,12 +44,9 @@ export function PlayerArea({
   onTakeOpponentToken,
 }: PlayerAreaProps) {
   const player = state.players[playerIndex];
-
-  const bonusByColor: Partial<Record<GemColor, number>> = {};
-  for (const card of player.purchasedCards) {
-    const c = card.assignedColor ?? card.color;
-    if (c !== null) bonusByColor[c] = (bonusByColor[c] ?? 0) + card.bonus;
-  }
+  const bonuses = playerBonuses(player);
+  const colorPrestige = prestigeByColor(player);
+  const tokenTotal = totalTokens(player.tokens);
 
   const takeMode =
     !isViewer &&
@@ -45,103 +55,87 @@ export function PlayerArea({
     state.pendingAbility === 'Take';
 
   return (
-    <div className={`${styles.player} ${isActive ? styles.active : ''}`}>
+    <div className={`surface ${styles.player} ${isActive ? styles.active : ''}`}>
       <div className={styles.header}>
-        <div className={styles.name}>
-          {name}
-          {isViewer && <span className={styles.youBadge}>YOU</span>}
-        </div>
-        {isActive && <span className={styles.turnTag}>TURN</span>}
+        <span className={styles.name}>{name}</span>
+        {isViewer && <span className={styles.youBadge}>You</span>}
+        {isActive && <span className={styles.turnTag}>To move</span>}
       </div>
+
       <div className={styles.stats}>
-        <span className={`${styles.stat} ${styles.statPrimary} ${player.prestige >= 16 ? styles.statClose : ''}`}>
-          <span className={styles.statValue}>{player.prestige}</span>
-          <span className={styles.statLabel}>Prestige</span>
-        </span>
-        <span className={`${styles.stat} ${styles.statPrimary} ${player.crowns >= 8 ? styles.statClose : ''}`}>
-          <span className={styles.statValue}>{player.crowns}</span>
-          <span className={styles.statLabel}>Crowns</span>
-        </span>
-        <span className={styles.stat}>
-          <span className={styles.statValue}>{player.privileges}</span>
-          <span className={styles.statLabel}>Scrolls</span>
-        </span>
-        <span className={styles.stat}>
-          <span className={styles.statValue}>{player.purchasedCards.length}</span>
-          <span className={styles.statLabel}>Cards</span>
-        </span>
+        <Stat label="Prestige" value={player.prestige} goal={PRESTIGE_WIN} />
+        <Stat label="Crowns" value={player.crowns} goal={CROWNS_WIN} />
+        <Stat label="Tokens" value={tokenTotal} goal={MAX_TOKENS} />
+        <Stat label="Privileges" value={player.privileges} />
       </div>
 
-      <div className={styles.section}>
-        <div className={styles.sectionLabel}>Tokens</div>
-        <div className={styles.tokens}>
-          {TOKEN_COLORS.map(c => {
-            const n = player.tokens[c] ?? 0;
-            if (n === 0) return null;
-            const clickable =
-              takeMode &&
-              !!onTakeOpponentToken &&
-              c !== 'gold' &&
-              legal.takeOpponentByColor.has(c);
-            return (
-              <span key={c} className={styles.tokenWrap}>
-                <Token
-                  color={c}
-                  size="md"
-                  onClick={clickable ? () => onTakeOpponentToken(c) : undefined}
-                  title={clickable ? `Take ${c} from opponent` : undefined}
-                />
-                <span className={styles.tokenCount}>{n}</span>
-              </span>
-            );
-          })}
-          {TOKEN_COLORS.every(c => (player.tokens[c] ?? 0) === 0) && (
-            <span className={styles.hidden}>(none)</span>
-          )}
-        </div>
-      </div>
+      {/*
+        One column per colour, so tokens, card bonuses and colour prestige for
+        the same gem line up and the columns never shift as counts change.
+      */}
+      <div className={styles.gemGrid}>
+        <span className={styles.rowLabel}>Tokens</span>
+        {TOKEN_COLORS.map(c => {
+          const n = player.tokens[c];
+          const clickable =
+            takeMode && !!onTakeOpponentToken && n > 0 && legal.takeOpponentByColor.has(c);
+          return (
+            <span key={c} className={`${styles.cell} ${n === 0 ? styles.zero : ''}`}>
+              <Token
+                color={c}
+                size="sm"
+                onClick={clickable ? () => onTakeOpponentToken(c) : undefined}
+                title={clickable ? `Take ${c} from opponent` : undefined}
+              />
+              <span className={styles.count}>{n}</span>
+            </span>
+          );
+        })}
 
-      {Object.keys(bonusByColor).length > 0 && (
-        <div className={styles.section}>
-          <div className={styles.sectionLabel}>Gem bonuses</div>
-          <div className={styles.gemSummary}>
-            {(Object.entries(bonusByColor) as [GemColor, number][]).map(([c, n]) => (
-              <span key={c} className={styles.tokenWrap}>
-                <Token color={c as TokenColor} size="md" />
-                <span className={styles.tokenCount}>{n}</span>
+        <span className={styles.rowLabel}>Bonus</span>
+        {TOKEN_COLORS.map(c => (
+          <span key={c} className={styles.cell}>
+            {isGemColor(c) && (
+              <span className={`${styles.bonus} ${styles[`bonus-${c}`]} ${bonuses[c] === 0 ? styles.zero : ''}`}>
+                {bonuses[c]}
               </span>
-            ))}
-          </div>
-        </div>
-      )}
+            )}
+          </span>
+        ))}
+
+        <span className={styles.rowLabel} title={`${COLOR_PRESTIGE_WIN} prestige in one colour wins`}>
+          Points
+        </span>
+        {TOKEN_COLORS.map(c => (
+          <span key={c} className={styles.cell}>
+            {isGemColor(c) && (
+              <span className={`${styles.colorPoints} ${colorPrestige[c] === 0 ? styles.zero : ''}`}>
+                {colorPrestige[c]}
+              </span>
+            )}
+          </span>
+        ))}
+      </div>
 
       <div className={styles.section}>
         <div className={styles.sectionLabel}>Reserved</div>
         <div className={styles.reserved}>
-          {isViewer ? (
-            player.reservedCards.length === 0
-              ? <span className={styles.hidden}>(none)</span>
-              : player.reservedCards.map((card: CardType) => {
-                  const canBuy = isMyTurn && (legal.purchaseByCard.get(card.id)?.length ?? 0) > 0;
-                  return (
-                    <Card
-                      key={card.id}
-                      card={card}
-                      size="sm"
-                      canBuy={canBuy}
-                      onBuy={canBuy ? () => onBuyReserved(card.id) : undefined}
-                    />
-                  );
-                })
-          ) : player.reservedCardCount === 0 ? (
-            <span className={styles.hidden}>(none)</span>
-          ) : (
-            <span className={styles.hiddenCards} title={`${player.reservedCardCount} face-down`}>
-              {Array.from({ length: player.reservedCardCount }).map((_, i) => (
-                <span key={i} className={styles.hiddenCard} />
+          {player.reservedCardCount === 0 && <span className={styles.none}>None</span>}
+          {isViewer
+            ? player.reservedCards.map(card => {
+                const canBuy = isMyTurn && (legal.purchaseByCard.get(card.id)?.length ?? 0) > 0;
+                return (
+                  <Card
+                    key={card.id}
+                    card={card}
+                    canBuy={canBuy}
+                    onBuy={canBuy ? () => onBuyReserved(card.id) : undefined}
+                  />
+                );
+              })
+            : Array.from({ length: player.reservedCardCount }).map((_, i) => (
+                <span key={i} className={styles.hiddenCard} title="Face-down reserved card" />
               ))}
-            </span>
-          )}
         </div>
       </div>
 
@@ -156,5 +150,17 @@ export function PlayerArea({
         </div>
       )}
     </div>
+  );
+}
+
+function Stat({ label, value, goal }: { label: string; value: number; goal?: number }) {
+  return (
+    <span className={styles.stat}>
+      <span className={styles.statValue}>
+        {value}
+        {goal !== undefined && <span className={styles.statGoal}>/{goal}</span>}
+      </span>
+      <span className={styles.statLabel}>{label}</span>
+    </span>
   );
 }

@@ -27,11 +27,7 @@ export function Pyramid({
     const canReserveDeck = isMyTurn && legal.reserveDeckBySource.has(deckKey);
 
     return (
-      <div className={styles.row} data-level={level} key={level}>
-        <span className={styles.rowLabel}>
-          <span className={styles.tierBadge}>{level}</span>
-        </span>
-        <div className={styles.cards}>
+      <div className={styles.row} key={level}>
           {deckRemaining > 0 ? (
             <CardBack
               level={level}
@@ -42,9 +38,7 @@ export function Pyramid({
           ) : (
             <EmptyCardSlot />
           )}
-          {cards.length === 0
-            ? <EmptyCardSlot />
-            : cards.map(card => {
+          {cards.map(card => {
                 const canBuy = isMyTurn && (legal.purchaseByCard.get(card.id)?.length ?? 0) > 0;
                 const canReserve = isMyTurn && legal.reservePyramidByCard.has(card.id);
                 return (
@@ -58,13 +52,12 @@ export function Pyramid({
                   />
                 );
               })}
-        </div>
       </div>
     );
   };
 
   return (
-    <div className={styles.pyramid}>
+    <div className={`surface ${styles.pyramid}`}>
       {renderRow(3, state.pyramid.level3)}
       {renderRow(2, state.pyramid.level2)}
       {renderRow(1, state.pyramid.level1)}

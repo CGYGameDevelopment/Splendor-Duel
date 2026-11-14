@@ -75,9 +75,9 @@
 
 /* ─── Pearl ──────────────────────────────────────────────────────────────── */
 
-.pearlBody { fill: #f4eee1; }
+.pearlBody { fill: var(--gem-pearl); }
 .pearlWashA { fill: #cfd9ff; opacity: 0.45; }
-.pearlWashB { fill: #ffd9ec; opacity: 0.38; }
+.pearlWashB { fill: #ffe3f0; opacity: 0.38; }
 .pearlRim {
   fill: none;
   stroke: #9b917f;

@@ -1,83 +1,55 @@
-/*
- * A player's side of the table.
- *
- * The viewer's own panel and the opponent's share this styling; the active
- * player's panel is lit from the edge so whose turn it is reads from the
- * periphery, without having to find the banner in the header.
- */
-
 .player {
-  position: relative;
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding: 12px 14px;
-  background: linear-gradient(180deg, var(--panel-raised) 0%, var(--panel) 100%);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: inset 0 1px 0 var(--edge-light), var(--shadow-3);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.player.active {
+/* The player to move gets the accent border; nothing else on the panel moves. */
+.active {
   border-color: var(--accent);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    0 0 0 1px rgba(224, 165, 68, 0.45),
-    0 0 26px -6px rgba(224, 165, 68, 0.55),
-    var(--shadow-3);
+  box-shadow: 0 0 0 1px var(--accent), var(--shadow-3);
 }
-
-/* ─── Header ─────────────────────────────────────────────────────────────── */
 
 .header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
-  padding-bottom: 9px;
-  border-bottom: 1px solid var(--border);
 }
 
 .name {
-  display: flex;
-  align-items: center;
-  gap: 7px;
   font-family: var(--font-display);
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 700;
-  letter-spacing: 0.3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.youBadge,
+.turnTag {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
 .youBadge {
-  font-family: var(--font-ui);
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.8px;
-  background: linear-gradient(180deg, var(--accent-strong), var(--accent));
-  color: #241607;
-  padding: 2px 7px;
-  border-radius: 999px;
-  border: 1px solid #f0c272;
+  color: var(--text-dim);
+  border: 1px solid var(--border-strong);
 }
 
 .turnTag {
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.8px;
-  background: linear-gradient(180deg, #8ad99d, var(--success));
-  color: #16300f;
-  padding: 2px 8px;
-  border-radius: 999px;
-  border: 1px solid #a7e6b6;
+  margin-left: auto;
+  color: #241607;
+  background: var(--accent);
 }
 
-/* ─── Score strip ────────────────────────────────────────────────────────── */
+/* ─── Headline numbers ───────────────────────────────────────────────────── */
 
-/*
- * Prestige and crowns are the two victory tracks, so they are the loudest
- * things in the panel; privileges and card count are secondary.
- */
 .stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -89,118 +61,130 @@
   flex-direction: column;
   align-items: center;
   gap: 1px;
-  padding: 6px 2px 5px;
+  padding: 5px 2px;
   border-radius: var(--radius-sm);
   background: var(--panel-sunken);
-  border: 1px solid var(--border);
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
 .statValue {
-  font-family: var(--font-display);
   font-size: 18px;
   font-weight: 700;
-  line-height: 1;
-  color: var(--text);
+  line-height: 1.1;
   font-variant-numeric: tabular-nums;
 }
 
-.statLabel {
-  font-size: 8px;
-  font-weight: 600;
-  letter-spacing: 0.7px;
-  text-transform: uppercase;
+.statGoal {
+  font-size: 11px;
+  font-weight: 500;
   color: var(--text-faint);
 }
 
-/* The two victory tracks get gold numerals; the rest stay neutral. */
-.statPrimary .statValue {
-  background: linear-gradient(180deg, #ffeab4 0%, var(--accent) 75%, #9c6c1d 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+.statLabel {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
 }
 
-/* Close to winning: 20 prestige, 10 crowns, or 10 in one colour. */
-.statPrimary.statClose {
-  border-color: var(--accent);
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4), 0 0 14px -3px rgba(224, 165, 68, 0.6);
+/* ─── Per-colour grid ────────────────────────────────────────────────────── */
+
+.gemGrid {
+  display: grid;
+  grid-template-columns: auto repeat(7, 1fr);
+  align-items: center;
+  row-gap: 5px;
+  column-gap: 2px;
 }
 
-/* ─── Sections ───────────────────────────────────────────────────────────── */
+.rowLabel,
+.sectionLabel {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.rowLabel { padding-right: 6px; }
+
+.cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-height: 20px;
+  justify-content: center;
+}
+
+.count {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A colour the player has none of stays in place but steps back. */
+.zero { opacity: 0.3; }
+
+/* Card bonuses are squares so they never read as tokens. */
+.bonus {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.bonus-white { background: var(--gem-white); color: #1b1a17; }
+.bonus-blue  { background: var(--gem-blue); }
+.bonus-green { background: var(--gem-green); }
+.bonus-red   { background: var(--gem-red); }
+.bonus-black { background: #17161b; border-color: var(--gem-black-light); }
+
+.colorPoints {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-strong);
+}
+
+/* ─── Reserved and royals ────────────────────────────────────────────────── */
 
 .section {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-}
-
-.sectionLabel {
-  font-size: 9px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.9px;
-  color: var(--text-faint);
-}
-
-.tokens, .gemSummary {
-  display: flex;
-  gap: 9px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-.reserved, .royals {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.hidden {
-  font-size: 11px;
-  color: var(--text-faint);
-  font-style: italic;
-}
-
-/* Face-down placeholders for the opponent's reserved cards: the count matters
-   tactically, so show it as objects rather than a number in prose. */
-.hiddenCards {
-  display: flex;
   gap: 5px;
 }
 
+.reserved {
+  --card-w: 82px;
+  display: flex;
+  gap: 8px;
+  min-height: 24px;
+  align-items: center;
+}
+
 .hiddenCard {
-  width: 30px;
-  height: 42px;
-  border-radius: var(--radius-sm);
-  background:
-    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.04) 0 4px, transparent 4px 8px),
-    linear-gradient(160deg, #2c3a46 0%, #141c24 100%);
+  width: 26px;
+  aspect-ratio: 5 / 7;
+  border-radius: 3px;
+  background: var(--panel-sunken);
   border: 1px solid var(--border-strong);
-  box-shadow: var(--shadow-1);
 }
 
-.tokenWrap {
-  position: relative;
-  display: inline-flex;
+.none {
+  font-size: 12px;
+  color: var(--text-faint);
 }
 
-.tokenCount {
-  position: absolute;
-  bottom: -5px;
-  right: -6px;
-  min-width: 17px;
-  height: 17px;
-  padding: 0 4px;
-  border-radius: 999px;
-  background: linear-gradient(180deg, var(--accent-strong) 0%, var(--accent) 100%);
-  color: #22160a;
-  font-size: 11px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  line-height: 17px;
-  text-align: center;
-  border: 1.5px solid #1b1109;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
-  pointer-events: none;
+.royals {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
 }
